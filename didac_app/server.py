@@ -4,9 +4,10 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, render_template_string, request, send_file
+from flask import Flask, Response, jsonify, redirect, render_template_string, request, send_file
 from twilio.twiml.messaging_response import MessagingResponse
 
+from didac_app import blobstore
 from didac_app.config import brochure_catalog, load_config
 from didac_app.intake import continue_intake, is_start_message, start_intake
 from didac_app.media import extract_media_text, save_twilio_media
@@ -76,10 +77,9 @@ def media_file(media_id: int):
     row = store.get_media(media_id)
     if not row:
         return {"error": "Media not found"}, 404
-    path = Path(row["local_path"] or "")
-    if not path.exists():
-        return {"error": "Local file not found"}, 404
-    return send_file(path)
+    if not row["local_path"]:
+        return {"error": "No file stored"}, 404
+    return redirect(blobstore.signed_url(config, row["local_path"]))
 
 
 @app.get("/media-library")
@@ -138,8 +138,11 @@ def twilio_whatsapp():
             content_type = form.get(f"MediaContentType{index}", "")
             if not media_url:
                 continue
-            local_path = download_media(media_url, content_type, from_number)
-            extracted = extract_media_text(local_path, content_type)
+            local_path, temp_path = download_media(media_url, content_type, from_number)
+            try:
+                extracted = extract_media_text(temp_path, content_type)
+            finally:
+                Path(temp_path).unlink(missing_ok=True)
             media_lead_texts = split_lead_texts(extracted) if extracted else []
             should_create_media_leads = bool(
                 media_lead_texts and (content_type.startswith("image/") or len(media_lead_texts) > 1) and (not is_feedback_media or len(media_lead_texts) > 1)
@@ -303,11 +306,11 @@ def twilio_whatsapp():
     return twiml(response)
 
 
-def download_media(media_url: str, content_type: str, from_number: str = "") -> str:
+def download_media(media_url: str, content_type: str, from_number: str = "") -> tuple[str, str]:
     sid = os.getenv("TWILIO_ACCOUNT_SID", "")
     token = os.getenv("TWILIO_AUTH_TOKEN", "")
     auth = (sid, token) if sid and token else None
-    return save_twilio_media(media_url, content_type, config.media_dir, auth, sender=from_number)
+    return save_twilio_media(media_url, content_type, config, auth, sender=from_number)
 
 
 def unique_ids(values):
@@ -414,14 +417,9 @@ def dashboard_context():
 def media_library_groups():
     groups = {}
     for row in store.list_media():
-        path = Path(row["local_path"] or "")
-        try:
-            relative = path.relative_to(config.media_dir)
-            parts = relative.parts
-        except ValueError:
-            parts = path.parts
-        date = parts[0] if len(parts) >= 3 else "legacy"
-        sender = parts[1] if len(parts) >= 3 else "unknown_sender"
+        parts = (row["local_path"] or "").split("/")
+        date = parts[0] if len(parts) == 3 else "legacy"
+        sender = parts[1] if len(parts) == 3 else "unknown_sender"
         groups.setdefault(date, {}).setdefault(sender, []).append(row)
     return groups
 

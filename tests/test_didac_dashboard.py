@@ -1,5 +1,6 @@
 import pytest
 
+from didac_app.models import Lead
 from didac_app.server import app
 
 
@@ -33,7 +34,7 @@ def test_dashboard_routes_load():
 def test_media_message_is_processed_inside_feedback_flow(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-card.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-card.jpg", "/tmp/fake-card.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -66,7 +67,7 @@ def test_media_message_cap(monkeypatch):
     import didac_app.server as server
 
     monkeypatch.setattr(server, "config", replace(server.config, max_media_per_message=1))
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-card.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-card.jpg", "/tmp/fake-card.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -93,7 +94,7 @@ def test_media_message_cap(monkeypatch):
 def test_single_image_with_two_cards_creates_two_leads(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-two-cards.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-two-cards.jpg", "/tmp/fake-two-cards.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -127,7 +128,7 @@ def test_single_image_with_two_cards_creates_two_leads(monkeypatch):
 def test_image_caption_is_saved_to_created_lead(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-card.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-card.jpg", "/tmp/fake-card.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -160,7 +161,7 @@ def test_image_caption_is_saved_to_created_lead(monkeypatch):
 def test_team_caption_metadata_is_saved(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-team-card.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-team-card.jpg", "/tmp/fake-team-card.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -188,7 +189,7 @@ def test_team_caption_metadata_is_saved(monkeypatch):
 def test_event_badge_qr_fields_are_saved(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-badge.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-badge.jpg", "/tmp/fake-badge.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -234,7 +235,7 @@ def test_report_downloads_xlsx_and_csv():
 def test_two_cards_create_two_leads_even_with_existing_context(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-two-cards.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-two-cards.jpg", "/tmp/fake-two-cards.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -279,7 +280,7 @@ def test_two_cards_create_two_leads_even_with_existing_context(monkeypatch):
 def test_audio_note_updates_intake_lead(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-audio.ogg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-audio.ogg", "/tmp/fake-audio.ogg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -314,7 +315,7 @@ def test_audio_note_updates_intake_lead(monkeypatch):
 def test_audio_feedback_is_saved_on_lead(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-feedback.ogg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-feedback.ogg", "/tmp/fake-feedback.ogg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -361,3 +362,13 @@ def test_distributor_note_routes_to_channel_owner(monkeypatch):
     assert lead.lead_type == "Distributor"
     assert lead.owner == "Channel sales"
 
+
+def test_media_file_redirects_to_signed_url(store, monkeypatch):
+    import didac_app.server as server
+
+    lead = store.create_lead(Lead())
+    media_id = store.add_media(lead.id, "https://example.com/m", "image/jpeg", "2026-10-18/91/card.jpg", "")
+    monkeypatch.setattr(server.blobstore, "signed_url", lambda config, key: f"https://signed.example/{key}")
+    response = app.test_client().get(f"/media/{media_id}")
+    assert response.status_code == 302
+    assert response.headers["Location"] == "https://signed.example/2026-10-18/91/card.jpg"

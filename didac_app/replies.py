@@ -76,8 +76,7 @@ def command_reply(body: str, store: LeadStore, config: DidacConfig) -> str:
         leads = store.list_leads("status != %s", ("Closed",))[:10]
         return format_lead_list("Pending follow-ups", leads)
     if command.startswith("/export"):
-        path = store.export_report_excel(config.export_dir / "didac_report.xlsx")
-        return f"Excel exported: {Path(path).resolve()}"
+        return f"Download the report: {config.public_base_url.rstrip('/')}/export/report.xlsx"
     if command.startswith("/send brochure"):
         return asset_links(config) or "Brochure links are not configured yet. Set BROCHURE_URL/CASE_STUDY_URL/CALENDAR_URL in .env."
     if command.startswith("/tts"):
