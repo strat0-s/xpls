@@ -91,6 +91,8 @@ class LeadStore:
                 )
                 """
             )
+            conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS inbound_events_message_id_key ON inbound_events (message_id)")
 
     def clear(self) -> None:
         with self.connect() as conn:
@@ -191,13 +193,16 @@ class LeadStore:
         media_urls: list[str],
         raw_payload: dict,
         status: str = "received",
-    ) -> int:
+        message_id: str = "",
+    ) -> int | None:
+        """Returns the new event id, or None if this message_id was already recorded (a webhook retry)."""
         with self.connect() as conn:
-            return conn.execute(
+            row = conn.execute(
                 """
                 INSERT INTO inbound_events
-                (from_number, body, num_media, media_urls, status, lead_ids, error, raw_payload)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                (from_number, body, num_media, media_urls, status, lead_ids, error, raw_payload, message_id)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (message_id) DO NOTHING
                 RETURNING id
                 """,
                 (
@@ -209,8 +214,10 @@ class LeadStore:
                     "",
                     "",
                     json.dumps(raw_payload, ensure_ascii=False),
+                    message_id or None,
                 ),
-            ).fetchone()["id"]
+            ).fetchone()
+            return row["id"] if row else None
 
     def update_inbound_event(self, event_id: int | None, status: str, lead_ids: list[int] | None = None, error: str = "") -> None:
         if not event_id:

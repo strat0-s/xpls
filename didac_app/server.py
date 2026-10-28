@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+import hmac
 import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, redirect, render_template_string, request, send_file
-from twilio.twiml.messaging_response import MessagingResponse
+from flask import Flask, jsonify, redirect, render_template_string, request, send_file
 
-from didac_app import blobstore
+from didac_app import bird, blobstore
 from didac_app.config import brochure_catalog, load_config
 from didac_app.intake import continue_intake, is_start_message, start_intake
-from didac_app.media import extract_media_text, save_twilio_media
+from didac_app.media import extract_media_text, save_media
 from didac_app.openai_services import split_lead_texts
 from didac_app.parser import parse_message, update_lead_from_note, update_lead_from_text
 from didac_app.replies import command_reply, lead_created_reply, media_reply
@@ -105,21 +105,29 @@ def export_report_csv():
     return send_file(Path(path).resolve(), as_attachment=True, mimetype="text/csv")
 
 
-@app.post("/twilio/whatsapp")
-def twilio_whatsapp():
-    form = request.form
-    from_number = form.get("From", "")
-    body = form.get("Body", "").strip()
-    num_media = int(form.get("NumMedia", "0") or 0)
-    media_urls_for_event = [form.get(f"MediaUrl{index}", "") for index in range(num_media) if form.get(f"MediaUrl{index}", "")]
-    event_id = store.add_inbound_event(from_number, body, num_media, media_urls_for_event, form.to_dict(flat=True))
+@app.post("/bird/webhook")
+def bird_webhook():
+    # Fail closed: Bird is told to call /bird/webhook?token=<BIRD_WEBHOOK_TOKEN>.
+    if not config.bird_webhook_token or not hmac.compare_digest(request.args.get("token", ""), config.bird_webhook_token):
+        return {"error": "unauthorized"}, 401
+    event = request.get_json(silent=True) or {}
+    message = bird.parse_inbound(event)
+    if not message:
+        return "ignored", 200
+    from_number = message["from_number"]
+    body = message["body"]
+    media = message["media"]
+    num_media = len(media)
+    event_id = store.add_inbound_event(from_number, body, num_media, [url for url, _ in media], event, message_id=message["message_id"])
+    if event_id is None:
+        return "duplicate", 200
     touched_lead_ids = []
-    response = MessagingResponse()
+    response = []
 
     if body.startswith("/"):
-        response.message(command_reply(body, store, config))
+        response.append(command_reply(body, store, config))
         store.update_inbound_event(event_id, "processed_command")
-        return twiml(response)
+        return send_replies(event_id, from_number, response, touched_lead_ids)
 
     latest = store.latest_lead_for_number(from_number)
     if num_media:
@@ -134,10 +142,7 @@ def twilio_whatsapp():
         local_paths = []
         applied_extracted_to_lead = False
         for index in range(process_count):
-            media_url = form.get(f"MediaUrl{index}", "")
-            content_type = form.get(f"MediaContentType{index}", "")
-            if not media_url:
-                continue
+            media_url, content_type = media[index]
             local_path, temp_path = download_media(media_url, content_type, from_number)
             try:
                 extracted = extract_media_text(temp_path, content_type)
@@ -238,7 +243,7 @@ def twilio_whatsapp():
             if extracted:
                 extracted_texts.append(extracted)
         if created_leads:
-            response.message(multi_card_media_reply(created_leads, process_count, skipped_count))
+            response.append(multi_card_media_reply(created_leads, process_count, skipped_count))
         else:
             lead = context_lead
             if not lead:
@@ -263,23 +268,23 @@ def twilio_whatsapp():
             store.update_lead(lead)
             if lead.id:
                 touched_lead_ids.append(lead.id)
-            response.message(media_reply(lead, "\n".join(extracted_texts), process_count, skipped_count))
+            response.append(media_reply(lead, "\n".join(extracted_texts), process_count, skipped_count))
         store.update_inbound_event(event_id, "processed", unique_ids(touched_lead_ids))
     elif latest and latest.status.startswith(("Menu:", "Brochure:", "Feedback:", "Intake:", "Badge:")):
         _, reply = continue_intake(latest, body, store, config)
-        response.message(reply)
+        response.append(reply)
         if latest.id:
             touched_lead_ids.append(latest.id)
         store.update_inbound_event(event_id, "processed", unique_ids(touched_lead_ids))
-        return twiml(response)
+        return send_replies(event_id, from_number, response, touched_lead_ids)
 
     elif is_start_message(body):
-        response.message(start_intake(from_number, store))
+        response.append(start_intake(from_number, store))
         latest = store.latest_lead_for_number(from_number)
         if latest and latest.id:
             touched_lead_ids.append(latest.id)
         store.update_inbound_event(event_id, "processed", unique_ids(touched_lead_ids))
-        return twiml(response)
+        return send_replies(event_id, from_number, response, touched_lead_ids)
 
     else:
         kind, lead = parse_message(body, from_number)
@@ -287,7 +292,7 @@ def twilio_whatsapp():
             lead = enrich_lead(lead, config)
             lead = store.create_lead(lead)
             touched_lead_ids.append(lead.id)
-            response.message(lead_created_reply(lead, config))
+            response.append(lead_created_reply(lead, config))
         elif body:
             lead = store.latest_lead_for_number(from_number)
             if lead:
@@ -297,20 +302,17 @@ def twilio_whatsapp():
                 store.update_lead(lead)
                 if lead.id:
                     touched_lead_ids.append(lead.id)
-                response.message(lead_created_reply(lead, config))
+                response.append(lead_created_reply(lead, config))
             else:
-                response.message("Send lead details starting with 'New lead', or send /help for the format.")
+                response.append("Send lead details starting with 'New lead', or send /help for the format.")
         else:
-            response.message("Message received. Send /help for DIDAC lead commands.")
+            response.append("Message received. Send /help for DIDAC lead commands.")
         store.update_inbound_event(event_id, "processed", unique_ids(touched_lead_ids))
-    return twiml(response)
+    return send_replies(event_id, from_number, response, touched_lead_ids)
 
 
 def download_media(media_url: str, content_type: str, from_number: str = "") -> tuple[str, str]:
-    sid = os.getenv("TWILIO_ACCOUNT_SID", "")
-    token = os.getenv("TWILIO_AUTH_TOKEN", "")
-    auth = (sid, token) if sid and token else None
-    return save_twilio_media(media_url, content_type, config, auth, sender=from_number)
+    return save_media(media_url, content_type, config, bird.media_headers(config), sender=from_number)
 
 
 def unique_ids(values):
@@ -376,8 +378,14 @@ def apply_capture_metadata(lead, text: str):
             lead.tags = merge_semicolon(lead.tags, value)
 
 
-def twiml(response: MessagingResponse) -> Response:
-    return Response(str(response), mimetype="application/xml")
+def send_replies(event_id: int, to_number: str, replies: list[str], lead_ids: list[int]) -> tuple[str, int]:
+    # Answer 200 even if sending fails: Bird would retry and the retry is dropped as a duplicate anyway.
+    try:
+        for text in replies:
+            bird.send_message(config, to_number, text)
+    except Exception as exc:
+        store.update_inbound_event(event_id, "reply_failed", unique_ids(lead_ids), str(exc))
+    return "OK", 200
 
 
 def multi_card_media_reply(leads, processed_count: int, skipped_count: int) -> str:

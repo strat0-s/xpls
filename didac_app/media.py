@@ -14,11 +14,11 @@ from didac_app.config import DidacConfig
 from didac_app.openai_services import split_lead_texts, transcribe_audio, vision_ocr_to_lead_text
 
 
-def save_twilio_media(
+def save_media(
     url: str,
     content_type: str,
     config: DidacConfig,
-    auth: tuple[str, str] | None = None,
+    headers: dict[str, str] | None = None,
     sender: str = "",
     received_at: datetime | None = None,
 ) -> tuple[str, str]:
@@ -26,7 +26,10 @@ def save_twilio_media(
     suffix = suffix_for(content_type, url)
     name = Path(urlparse(url).path).name or "media"
     key = f"{media_storage_prefix(sender, received_at)}/{name}{suffix if not name.endswith(suffix) else ''}"
-    response = requests.get(url, auth=auth, timeout=20)
+    # Bird answers with a redirect to a presigned URL; follow it without forwarding the auth header.
+    response = requests.get(url, headers=headers, timeout=20, allow_redirects=False)
+    if response.is_redirect:
+        response = requests.get(response.headers["Location"], timeout=20)
     response.raise_for_status()
     blobstore.upload(config, key, response.content, content_type)
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:

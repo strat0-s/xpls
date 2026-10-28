@@ -83,18 +83,20 @@ Later runs: `docker start didac-test-pg` (stop with `docker stop didac-test-pg`,
 
 ### Run the app
 
-Run the Twilio WhatsApp webhook locally:
+Run the Bird WhatsApp webhook locally:
 
 ```bash
 cp .env.example .env
 venv/bin/python -m didac_app.server
 ```
 
-Expose it with ngrok and configure Twilio Sandbox `When a message comes in` to:
+Fill in `BIRD_WORKSPACE_ID`, `BIRD_CHANNEL_ID`, `BIRD_ACCESS_KEY` and a long random `BIRD_WEBHOOK_TOKEN` in `.env`. Point the Bird webhook subscription (event `whatsapp.inbound`) at:
 
 ```text
-https://your-ngrok-url.ngrok-free.app/twilio/whatsapp
+https://<your-public-url>/bird/webhook?token=<BIRD_WEBHOOK_TOKEN>
 ```
+
+Requests without the right token get 401. Bird retries are ignored by message id, and replies are sent through the Bird API.
 
 Staff can send:
 
