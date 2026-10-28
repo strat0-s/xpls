@@ -1,14 +1,13 @@
 import pytest
 
 from didac_app.server import app
-from didac_app.storage import LeadStore
 
 
 @pytest.fixture(autouse=True)
-def isolated_store(tmp_path, monkeypatch):
+def isolated_store(store, monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "store", LeadStore(tmp_path / "didac_leads.sqlite3"))
+    monkeypatch.setattr(server, "store", store)
 
 
 def test_dashboard_routes_load():
@@ -120,7 +119,7 @@ def test_single_image_with_two_cards_creates_two_leads(monkeypatch):
     text = response.data.decode()
     assert response.status_code == 200
     assert "Saved 2 lead record" in text
-    leads = server.store.list_leads("from_number=?", (number,))
+    leads = server.store.list_leads("from_number=%s", (number,))
     orgs = {lead.org for lead in leads}
     assert {"ABC Foundation", "XYZ School"}.issubset(orgs)
 
@@ -272,7 +271,7 @@ def test_two_cards_create_two_leads_even_with_existing_context(monkeypatch):
     text = response.data.decode()
     assert response.status_code == 200
     assert "Saved 2 lead record" in text
-    leads = server.store.list_leads("from_number=?", (number,))
+    leads = server.store.list_leads("from_number=%s", (number,))
     orgs = {lead.org for lead in leads}
     assert {"BIOCRAFT SCIENTIFIC SYSTEMS PVT. LTD.", "xperimentor"}.issubset(orgs)
 
@@ -361,3 +360,4 @@ def test_distributor_note_routes_to_channel_owner(monkeypatch):
     lead = server.store.latest_lead_for_number(number)
     assert lead.lead_type == "Distributor"
     assert lead.owner == "Channel sales"
+

@@ -70,10 +70,10 @@ def command_reply(body: str, store: LeadStore, config: DidacConfig) -> str:
             f"Low priority: {counts.get('Low priority', 0)}"
         )
     if command.startswith("/hot"):
-        leads = store.list_leads("priority=?", ("Hot",))[:10]
+        leads = store.list_leads("priority=%s", ("Hot",))[:10]
         return format_lead_list("Hot leads", leads)
     if command.startswith("/followups"):
-        leads = store.list_leads("status != ?", ("Closed",))[:10]
+        leads = store.list_leads("status != %s", ("Closed",))[:10]
         return format_lead_list("Pending follow-ups", leads)
     if command.startswith("/export"):
         path = store.export_report_excel(config.export_dir / "didac_report.xlsx")

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import csv
 import json
-import sqlite3
 from dataclasses import asdict, fields
 from pathlib import Path
 
+import psycopg
+from psycopg.rows import dict_row
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -14,70 +15,71 @@ from didac_app.models import Lead
 
 
 LEAD_FIELDS = [field.name for field in fields(Lead)]
+INTEGER_FIELDS = {"score"}
 
 
 class LeadStore:
-    def __init__(self, path: Path):
-        self.path = path
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+    def __init__(self, dsn: str):
+        if not dsn:
+            raise RuntimeError("DATABASE_URL is not set")
+        self.dsn = dsn
         self.init_db()
 
     def connect(self):
-        return sqlite3.connect(self.path)
+        # prepare_threshold=None: Supabase's transaction pooler (pgbouncer) rejects prepared statements.
+        return psycopg.connect(self.dsn, row_factory=dict_row, prepare_threshold=None)
 
     def init_db(self) -> None:
-        columns = ", ".join(f"{field} TEXT" for field in LEAD_FIELDS if field != "id")
+        columns = ", ".join(
+            f"{field} {'INTEGER' if field in INTEGER_FIELDS else 'TEXT'}" for field in LEAD_FIELDS if field != "id"
+        )
+        now = "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')"
         with self.connect() as conn:
             conn.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS leads (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                     {columns}
                 )
                 """
             )
-            existing_columns = {
-                row[1] for row in conn.execute("PRAGMA table_info(leads)").fetchall()
-            }
             for field in LEAD_FIELDS:
-                if field != "id" and field not in existing_columns:
-                    conn.execute(f"ALTER TABLE leads ADD COLUMN {field} TEXT")
+                if field != "id":
+                    column_type = "INTEGER" if field in INTEGER_FIELDS else "TEXT"
+                    conn.execute(f"ALTER TABLE leads ADD COLUMN IF NOT EXISTS {field} {column_type}")
             conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS media (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    lead_id INTEGER,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    lead_id BIGINT REFERENCES leads(id),
+                    created_at TEXT DEFAULT {now},
                     url TEXT,
                     content_type TEXT,
                     local_path TEXT,
-                    extracted_text TEXT,
-                    FOREIGN KEY(lead_id) REFERENCES leads(id)
+                    extracted_text TEXT
                 )
                 """
             )
             conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS feedback (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    created_at TEXT DEFAULT {now},
                     from_number TEXT,
-                    lead_id INTEGER,
+                    lead_id BIGINT REFERENCES leads(id),
                     feedback_type TEXT,
                     body TEXT,
-                    media_id INTEGER,
+                    media_id BIGINT REFERENCES media(id),
                     sentiment TEXT,
-                    action_required TEXT,
-                    FOREIGN KEY(lead_id) REFERENCES leads(id),
-                    FOREIGN KEY(media_id) REFERENCES media(id)
+                    action_required TEXT
                 )
                 """
             )
             conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS inbound_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    created_at TEXT DEFAULT {now},
                     from_number TEXT,
                     body TEXT,
                     num_media INTEGER,
@@ -90,17 +92,20 @@ class LeadStore:
                 """
             )
 
+    def clear(self) -> None:
+        with self.connect() as conn:
+            conn.execute("TRUNCATE inbound_events, feedback, media, leads RESTART IDENTITY")
+
     def create_lead(self, lead: Lead) -> Lead:
         data = asdict(lead)
         data.pop("id", None)
         columns = list(data.keys())
-        placeholders = ", ".join("?" for _ in columns)
+        placeholders = ", ".join("%s" for _ in columns)
         with self.connect() as conn:
-            cursor = conn.execute(
-                f"INSERT INTO leads ({', '.join(columns)}) VALUES ({placeholders})",
+            lead.id = conn.execute(
+                f"INSERT INTO leads ({', '.join(columns)}) VALUES ({placeholders}) RETURNING id",
                 [data[column] for column in columns],
-            )
-            lead.id = cursor.lastrowid
+            ).fetchone()["id"]
         return lead
 
     def update_lead(self, lead: Lead) -> Lead:
@@ -108,19 +113,18 @@ class LeadStore:
             return self.create_lead(lead)
         data = asdict(lead)
         data.pop("id", None)
-        assignments = ", ".join(f"{column}=?" for column in data)
+        assignments = ", ".join(f"{column}=%s" for column in data)
         with self.connect() as conn:
             conn.execute(
-                f"UPDATE leads SET {assignments} WHERE id=?",
+                f"UPDATE leads SET {assignments} WHERE id=%s",
                 [*data.values(), lead.id],
             )
         return lead
 
     def latest_lead_for_number(self, from_number: str) -> Lead | None:
         with self.connect() as conn:
-            conn.row_factory = sqlite3.Row
             row = conn.execute(
-                "SELECT * FROM leads WHERE from_number=? ORDER BY id DESC LIMIT 1",
+                "SELECT * FROM leads WHERE from_number=%s ORDER BY id DESC LIMIT 1",
                 (from_number,),
             ).fetchone()
         return row_to_lead(row) if row else None
@@ -131,22 +135,20 @@ class LeadStore:
             query += f" WHERE {where}"
         query += " ORDER BY id DESC"
         with self.connect() as conn:
-            conn.row_factory = sqlite3.Row
             rows = conn.execute(query, params).fetchall()
         return [row_to_lead(row) for row in rows]
 
     def count_by_priority(self) -> dict[str, int]:
         with self.connect() as conn:
-            rows = conn.execute("SELECT priority, COUNT(*) FROM leads GROUP BY priority").fetchall()
-        return {priority or "Unknown": count for priority, count in rows}
+            rows = conn.execute("SELECT priority, COUNT(*) AS count FROM leads GROUP BY priority").fetchall()
+        return {row["priority"] or "Unknown": row["count"] for row in rows}
 
     def add_media(self, lead_id: int, url: str, content_type: str = "", local_path: str = "", extracted_text: str = "") -> None:
         with self.connect() as conn:
-            cursor = conn.execute(
-                "INSERT INTO media (lead_id, url, content_type, local_path, extracted_text) VALUES (?, ?, ?, ?, ?)",
+            return conn.execute(
+                "INSERT INTO media (lead_id, url, content_type, local_path, extracted_text) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                 (lead_id, url, content_type, local_path, extracted_text),
-            )
-            return cursor.lastrowid
+            ).fetchone()["id"]
 
     def add_feedback(
         self,
@@ -159,30 +161,27 @@ class LeadStore:
         action_required: str = "",
     ) -> int:
         with self.connect() as conn:
-            cursor = conn.execute(
+            return conn.execute(
                 """
                 INSERT INTO feedback
                 (from_number, lead_id, feedback_type, body, media_id, sentiment, action_required)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (from_number, lead_id, feedback_type, body, media_id, sentiment, action_required),
-            )
-            return cursor.lastrowid
+            ).fetchone()["id"]
 
-    def list_feedback(self) -> list[sqlite3.Row]:
+    def list_feedback(self) -> list[dict]:
         with self.connect() as conn:
-            conn.row_factory = sqlite3.Row
             return conn.execute("SELECT * FROM feedback ORDER BY id DESC").fetchall()
 
-    def list_media(self) -> list[sqlite3.Row]:
+    def list_media(self) -> list[dict]:
         with self.connect() as conn:
-            conn.row_factory = sqlite3.Row
             return conn.execute("SELECT * FROM media ORDER BY id DESC").fetchall()
 
-    def get_media(self, media_id: int) -> sqlite3.Row | None:
+    def get_media(self, media_id: int) -> dict | None:
         with self.connect() as conn:
-            conn.row_factory = sqlite3.Row
-            return conn.execute("SELECT * FROM media WHERE id=?", (media_id,)).fetchone()
+            return conn.execute("SELECT * FROM media WHERE id=%s", (media_id,)).fetchone()
 
     def add_inbound_event(
         self,
@@ -194,11 +193,12 @@ class LeadStore:
         status: str = "received",
     ) -> int:
         with self.connect() as conn:
-            cursor = conn.execute(
+            return conn.execute(
                 """
                 INSERT INTO inbound_events
                 (from_number, body, num_media, media_urls, status, lead_ids, error, raw_payload)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (
                     from_number,
@@ -210,21 +210,19 @@ class LeadStore:
                     "",
                     json.dumps(raw_payload, ensure_ascii=False),
                 ),
-            )
-            return cursor.lastrowid
+            ).fetchone()["id"]
 
     def update_inbound_event(self, event_id: int | None, status: str, lead_ids: list[int] | None = None, error: str = "") -> None:
         if not event_id:
             return
         with self.connect() as conn:
             conn.execute(
-                "UPDATE inbound_events SET status=?, lead_ids=?, error=? WHERE id=?",
+                "UPDATE inbound_events SET status=%s, lead_ids=%s, error=%s WHERE id=%s",
                 (status, ",".join(str(item) for item in lead_ids or []), error, event_id),
             )
 
-    def list_inbound_events(self) -> list[sqlite3.Row]:
+    def list_inbound_events(self) -> list[dict]:
         with self.connect() as conn:
-            conn.row_factory = sqlite3.Row
             return conn.execute("SELECT * FROM inbound_events ORDER BY id DESC").fetchall()
 
     def export_excel(self, output_path: Path) -> Path:

@@ -18,7 +18,7 @@ from didac_app.storage import LeadStore
 
 app = Flask(__name__)
 config = load_config()
-store = LeadStore(config.database_path)
+store = LeadStore(config.database_url)
 
 
 @app.get("/")

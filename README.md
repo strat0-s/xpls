@@ -61,11 +61,33 @@ This adds lead fit score, priority, segment, recommended channel, outreach readi
 
 ## DIDAC WhatsApp lead app
 
+The app stores data in Postgres. Set `DATABASE_URL` in `.env` (Supabase for real use).
+
+### Run the tests (local Postgres in Docker)
+
+The didac tests need a throwaway Postgres. Start one once:
+
+```bash
+docker run -d --name didac-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=didac_test -p 54329:5432 postgres:16-alpine
+```
+
+Then run the tests:
+
+```bash
+venv/bin/python -m pytest tests/test_didac_*.py
+```
+
+The tests ignore `DATABASE_URL` from `.env` and use `postgresql://postgres:postgres@localhost:54329/didac_test`, so they never touch Supabase. Each test starts with empty tables. To use another database, set `TEST_DATABASE_URL`; it is wiped by every test run, so never point it at real data.
+
+Later runs: `docker start didac-test-pg` (stop with `docker stop didac-test-pg`, remove with `docker rm -f didac-test-pg`).
+
+### Run the app
+
 Run the Twilio WhatsApp webhook locally:
 
 ```bash
 cp .env.example .env
-.venv/bin/python -m didac_app.server
+venv/bin/python -m didac_app.server
 ```
 
 Expose it with ngrok and configure Twilio Sandbox `When a message comes in` to:
@@ -133,13 +155,13 @@ http://127.0.0.1:5001/export/report
 Export manually:
 
 ```bash
-.venv/bin/python -m didac_app.cli export --output outputs/didac/didac_leads.xlsx
+venv/bin/python -m didac_app.cli export --output outputs/didac/didac_leads.xlsx
 ```
 
 Clear local test leads before the live event:
 
 ```bash
-.venv/bin/python -m didac_app.cli reset-sample
+venv/bin/python -m didac_app.cli reset-sample
 ```
 
 Optional OpenAI intelligence:

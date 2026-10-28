@@ -13,7 +13,7 @@ load_dotenv()
 
 @dataclass(frozen=True)
 class DidacConfig:
-    database_path: Path = Path(os.getenv("DIDAC_DB_PATH", "data/didac_leads.sqlite3"))
+    database_url: str = os.getenv("DATABASE_URL", "")
     export_dir: Path = Path(os.getenv("DIDAC_EXPORT_DIR", "outputs/didac"))
     media_dir: Path = Path(os.getenv("DIDAC_MEDIA_DIR", "data/didac_media"))
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "")
