@@ -440,7 +440,7 @@ DASHBOARD_HTML = """
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Xperimentor DIDAC Dashboard</title>
   <style>
-    :root { --ink: #17202a; --muted: #667085; --line: #d8dee6; --soft: #f5f7fa; --brand: #12343b; --blue: #0b6bcb; }
+    :root { --ink: #17202a; --muted: #667085; --line: #d8dee6; --soft: #f5f7fa; --brand: #3b2a6b; --blue: #0b6bcb; }
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: var(--soft); color: var(--ink); }
     header { background: var(--brand); color: white; padding: 18px 28px; display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
