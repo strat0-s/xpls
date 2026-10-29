@@ -16,6 +16,9 @@ from didac_app.models import Lead
 
 LEAD_FIELDS = [field.name for field in fields(Lead)]
 INTEGER_FIELDS = {"score"}
+NOT_DELETED = "(deleted_at IS NULL OR deleted_at = '')"
+# For media/feedback joined to their lead; rows without a lead stay visible (LEFT JOIN gives NULL).
+LEAD_NOT_DELETED = "(l.deleted_at IS NULL OR l.deleted_at = '')"
 
 
 class LeadStore:
@@ -91,6 +94,29 @@ class LeadStore:
                 )
                 """
             )
+            conn.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS users (
+                    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    created_at TEXT DEFAULT {now},
+                    name TEXT NOT NULL,
+                    phone TEXT,
+                    email TEXT,
+                    password_hash TEXT NOT NULL,
+                    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    session_version INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+            conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE users DROP COLUMN IF EXISTS role")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS login_attempts (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, "
+                "at TIMESTAMPTZ NOT NULL DEFAULT now(), login TEXT NOT NULL, ip TEXT NOT NULL)"
+            )
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_phone_key ON users (phone) WHERE phone IS NOT NULL")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (email) WHERE email IS NOT NULL")
             conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS inbound_events_message_id_key ON inbound_events (message_id)")
 
@@ -123,18 +149,75 @@ class LeadStore:
             )
         return lead
 
+    def update_lead_fields(self, lead_id: int, **values) -> None:
+        """UPDATE only the given columns so a UI save cannot overwrite what the bot wrote meanwhile. Keys are code-owned, never request data."""
+        assignments = ", ".join(f"{column}=%s" for column in values)
+        with self.connect() as conn:
+            conn.execute(f"UPDATE leads SET {assignments} WHERE id=%s", [*values.values(), lead_id])
+
     def latest_lead_for_number(self, from_number: str) -> Lead | None:
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT * FROM leads WHERE from_number=%s ORDER BY id DESC LIMIT 1",
+                f"SELECT * FROM leads WHERE from_number=%s AND {NOT_DELETED} ORDER BY id DESC LIMIT 1",
                 (from_number,),
             ).fetchone()
         return row_to_lead(row) if row else None
 
+    def get_lead(self, lead_id: int) -> Lead | None:
+        with self.connect() as conn:
+            row = conn.execute(f"SELECT * FROM leads WHERE id=%s AND {NOT_DELETED}", (lead_id,)).fetchone()
+        return row_to_lead(row) if row else None
+
+    def create_user(self, name: str, phone: str, email: str, password_hash: str, is_admin: bool = False) -> int:
+        """phone/email are normalised by the caller; empty values are stored as NULL so they can stay unique."""
+        with self.connect() as conn:
+            return conn.execute(
+                "INSERT INTO users (name, phone, email, password_hash, is_admin) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (name, phone or None, email or None, password_hash, is_admin),
+            ).fetchone()["id"]
+
+    def get_user(self, user_id: int) -> dict | None:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM users WHERE id=%s", (user_id,)).fetchone()
+
+    def find_user(self, phone: str = "", email: str = "") -> dict | None:
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT * FROM users WHERE (phone IS NOT NULL AND phone=%s) OR (email IS NOT NULL AND email=%s) LIMIT 1",
+                (phone, email),
+            ).fetchone()
+
+    def list_users(self) -> list[dict]:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM users ORDER BY id").fetchall()
+
+    def set_user_active(self, user_id: int, active: bool) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE users SET is_active=%s WHERE id=%s", (active, user_id))
+
+    def set_user_password(self, user_id: int, password_hash: str) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE users SET password_hash=%s, session_version=session_version+1 WHERE id=%s", (password_hash, user_id))
+
+    def record_failed_login(self, login: str, ip: str) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM login_attempts WHERE at < now() - interval '1 day'")
+            conn.execute("INSERT INTO login_attempts (login, ip) VALUES (%s, %s)", (login, ip))
+
+    def count_failed_logins(self, login: str, ip: str, minutes: int) -> tuple[int, int]:
+        """(failures for this login, failures from this ip) in the last `minutes`."""
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FILTER (WHERE login=%s) AS by_login, COUNT(*) FILTER (WHERE ip=%s) AS by_ip FROM login_attempts "
+                "WHERE at >= now() - make_interval(mins => %s)",
+                (login, ip, minutes),
+            ).fetchone()
+        return row["by_login"], row["by_ip"]
+
     def list_leads(self, where: str = "", params: tuple = ()) -> list[Lead]:
-        query = "SELECT * FROM leads"
+        query = f"SELECT * FROM leads WHERE {NOT_DELETED}"
         if where:
-            query += f" WHERE {where}"
+            query += f" AND ({where})"
         query += " ORDER BY id DESC"
         with self.connect() as conn:
             rows = conn.execute(query, params).fetchall()
@@ -173,17 +256,24 @@ class LeadStore:
                 (from_number, lead_id, feedback_type, body, media_id, sentiment, action_required),
             ).fetchone()["id"]
 
-    def list_feedback(self) -> list[dict]:
-        with self.connect() as conn:
-            return conn.execute("SELECT * FROM feedback ORDER BY id DESC").fetchall()
+    def list_feedback(self, lead_id: int | None = None) -> list[dict]:
+        return self._of_live_leads("feedback", lead_id)
 
-    def list_media(self) -> list[dict]:
-        with self.connect() as conn:
-            return conn.execute("SELECT * FROM media ORDER BY id DESC").fetchall()
+    def list_media(self, lead_id: int | None = None) -> list[dict]:
+        return self._of_live_leads("media", lead_id)
 
     def get_media(self, media_id: int) -> dict | None:
         with self.connect() as conn:
-            return conn.execute("SELECT * FROM media WHERE id=%s", (media_id,)).fetchone()
+            return conn.execute(
+                f"SELECT m.* FROM media m LEFT JOIN leads l ON l.id = m.lead_id WHERE m.id=%s AND {LEAD_NOT_DELETED}", (media_id,)
+            ).fetchone()
+
+    def _of_live_leads(self, table: str, lead_id: int | None) -> list[dict]:
+        query = f"SELECT t.* FROM {table} t LEFT JOIN leads l ON l.id = t.lead_id WHERE {LEAD_NOT_DELETED}"
+        with self.connect() as conn:
+            if lead_id is None:
+                return conn.execute(f"{query} ORDER BY t.id DESC").fetchall()
+            return conn.execute(f"{query} AND t.lead_id=%s ORDER BY t.id DESC", (lead_id,)).fetchall()
 
     def add_inbound_event(
         self,

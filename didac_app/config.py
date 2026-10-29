@@ -24,6 +24,7 @@ class DidacConfig:
     bird_access_key: str = os.getenv("BIRD_ACCESS_KEY", "")
     bird_webhook_token: str = os.getenv("BIRD_WEBHOOK_TOKEN", "")
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "")
+    secret_key: str = os.getenv("SECRET_KEY", "")
     brochure_url: str = os.getenv("BROCHURE_URL", "")
     sia_brochure_url: str = os.getenv("SIA_BROCHURE_URL", "")
     tiqer_brochure_url: str = os.getenv("TIQER_BROCHURE_URL", "")
