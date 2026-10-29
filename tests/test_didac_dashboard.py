@@ -1,14 +1,8 @@
 import pytest
 
+from bird_helpers import post_bird
+from didac_app.models import Lead
 from didac_app.server import app
-from didac_app.storage import LeadStore
-
-
-@pytest.fixture(autouse=True)
-def isolated_store(tmp_path, monkeypatch):
-    import didac_app.server as server
-
-    monkeypatch.setattr(server, "store", LeadStore(tmp_path / "didac_leads.sqlite3"))
 
 
 def test_dashboard_routes_load():
@@ -34,7 +28,7 @@ def test_dashboard_routes_load():
 def test_media_message_is_processed_inside_feedback_flow(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-card.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-card.jpg", "/tmp/fake-card.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -42,18 +36,9 @@ def test_media_message_is_processed_inside_feedback_flow(monkeypatch):
     )
     client = app.test_client()
     number = "whatsapp:+910000000123"
-    client.post("/twilio/whatsapp", data={"From": number, "Body": "hi", "NumMedia": "0"})
-    client.post("/twilio/whatsapp", data={"From": number, "Body": "3", "NumMedia": "0"})
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "",
-            "NumMedia": "1",
-            "MediaUrl0": "https://api.twilio.com/fake-media",
-            "MediaContentType0": "image/jpeg",
-        },
-    )
+    post_bird(client, number, 'hi')
+    post_bird(client, number, '3')
+    response = post_bird(client, number, '', [('https://media.bird.com/fake-media', 'image/jpeg')])
     assert response.status_code == 200
     lead = server.store.latest_lead_for_number(number)
     assert lead.first_name == "Priya"
@@ -61,13 +46,13 @@ def test_media_message_is_processed_inside_feedback_flow(monkeypatch):
     assert lead.org == "ABC Foundation"
 
 
-def test_media_message_cap(monkeypatch):
+def test_media_message_cap(monkeypatch, sent):
     from dataclasses import replace
 
     import didac_app.server as server
 
     monkeypatch.setattr(server, "config", replace(server.config, max_media_per_message=1))
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-card.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-card.jpg", "/tmp/fake-card.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -75,26 +60,15 @@ def test_media_message_cap(monkeypatch):
     )
     client = app.test_client()
     number = "whatsapp:+910000000124"
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "",
-            "NumMedia": "2",
-            "MediaUrl0": "https://api.twilio.com/fake-media-1",
-            "MediaContentType0": "image/jpeg",
-            "MediaUrl1": "https://api.twilio.com/fake-media-2",
-            "MediaContentType1": "image/jpeg",
-        },
-    )
+    response = post_bird(client, number, '', [('https://media.bird.com/fake-media-1', 'image/jpeg'), ('https://media.bird.com/fake-media-2', 'image/jpeg')])
     assert response.status_code == 200
-    assert "Skipped 1 extra file" in response.data.decode()
+    assert "Skipped 1 extra file" in sent[-1][1]
 
 
-def test_single_image_with_two_cards_creates_two_leads(monkeypatch):
+def test_single_image_with_two_cards_creates_two_leads(monkeypatch, sent):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-two-cards.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-two-cards.jpg", "/tmp/fake-two-cards.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -107,20 +81,11 @@ def test_single_image_with_two_cards_creates_two_leads(monkeypatch):
     )
     client = app.test_client()
     number = "whatsapp:+910000000125"
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "",
-            "NumMedia": "1",
-            "MediaUrl0": "https://api.twilio.com/fake-two-cards",
-            "MediaContentType0": "image/jpeg",
-        },
-    )
-    text = response.data.decode()
+    response = post_bird(client, number, '', [('https://media.bird.com/fake-two-cards', 'image/jpeg')])
+    text = sent[-1][1]
     assert response.status_code == 200
     assert "Saved 2 lead record" in text
-    leads = server.store.list_leads("from_number=?", (number,))
+    leads = server.store.list_leads("from_number=%s", (number,))
     orgs = {lead.org for lead in leads}
     assert {"ABC Foundation", "XYZ School"}.issubset(orgs)
 
@@ -128,7 +93,7 @@ def test_single_image_with_two_cards_creates_two_leads(monkeypatch):
 def test_image_caption_is_saved_to_created_lead(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-card.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-card.jpg", "/tmp/fake-card.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -136,16 +101,7 @@ def test_image_caption_is_saved_to_created_lead(monkeypatch):
     )
     client = app.test_client()
     number = "whatsapp:+910000000129"
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "School management interested in TiQer assessment for 15 schools",
-            "NumMedia": "1",
-            "MediaUrl0": "https://api.twilio.com/fake-card-caption",
-            "MediaContentType0": "image/jpeg",
-        },
-    )
+    response = post_bird(client, number, 'School management interested in TiQer assessment for 15 schools', [('https://media.bird.com/fake-card-caption', 'image/jpeg')])
     assert response.status_code == 200
     lead = server.store.latest_lead_for_number(number)
     assert lead.org == "Bright School"
@@ -161,7 +117,7 @@ def test_image_caption_is_saved_to_created_lead(monkeypatch):
 def test_team_caption_metadata_is_saved(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-team-card.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-team-card.jpg", "/tmp/fake-team-card.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -169,16 +125,7 @@ def test_team_caption_metadata_is_saved(monkeypatch):
     )
     client = app.test_client()
     number = "whatsapp:+910000000132"
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "By: Magesh\nContext: DIDAC Day 1 - Stall A12\nTags: hot, principal",
-            "NumMedia": "1",
-            "MediaUrl0": "https://api.twilio.com/fake-team-card",
-            "MediaContentType0": "image/jpeg",
-        },
-    )
+    response = post_bird(client, number, 'By: Magesh\nContext: DIDAC Day 1 - Stall A12\nTags: hot, principal', [('https://media.bird.com/fake-team-card', 'image/jpeg')])
     assert response.status_code == 200
     lead = server.store.latest_lead_for_number(number)
     assert lead.captured_by == "Magesh"
@@ -189,7 +136,7 @@ def test_team_caption_metadata_is_saved(monkeypatch):
 def test_event_badge_qr_fields_are_saved(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-badge.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-badge.jpg", "/tmp/fake-badge.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -203,16 +150,7 @@ def test_event_badge_qr_fields_are_saved(monkeypatch):
     )
     client = app.test_client()
     number = "whatsapp:+910000000131"
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "",
-            "NumMedia": "1",
-            "MediaUrl0": "https://api.twilio.com/fake-badge",
-            "MediaContentType0": "image/jpeg",
-        },
-    )
+    response = post_bird(client, number, '', [('https://media.bird.com/fake-badge', 'image/jpeg')])
     assert response.status_code == 200
     lead = server.store.latest_lead_for_number(number)
     assert lead.name == "Nisha Rao"
@@ -232,10 +170,10 @@ def test_report_downloads_xlsx_and_csv():
     assert b"first_name" in csv_response.data
 
 
-def test_two_cards_create_two_leads_even_with_existing_context(monkeypatch):
+def test_two_cards_create_two_leads_even_with_existing_context(monkeypatch, sent):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-two-cards.jpg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-two-cards.jpg", "/tmp/fake-two-cards.jpg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -251,28 +189,12 @@ def test_two_cards_create_two_leads_even_with_existing_context(monkeypatch):
     )
     client = app.test_client()
     number = "whatsapp:+910000000126"
-    client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "New lead\nName: Existing Context\nOrg: Existing Org",
-            "NumMedia": "0",
-        },
-    )
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "",
-            "NumMedia": "1",
-            "MediaUrl0": "https://api.twilio.com/fake-two-cards-context",
-            "MediaContentType0": "image/jpeg",
-        },
-    )
-    text = response.data.decode()
+    post_bird(client, number, 'New lead\nName: Existing Context\nOrg: Existing Org')
+    response = post_bird(client, number, '', [('https://media.bird.com/fake-two-cards-context', 'image/jpeg')])
+    text = sent[-1][1]
     assert response.status_code == 200
     assert "Saved 2 lead record" in text
-    leads = server.store.list_leads("from_number=?", (number,))
+    leads = server.store.list_leads("from_number=%s", (number,))
     orgs = {lead.org for lead in leads}
     assert {"BIOCRAFT SCIENTIFIC SYSTEMS PVT. LTD.", "xperimentor"}.issubset(orgs)
 
@@ -280,7 +202,7 @@ def test_two_cards_create_two_leads_even_with_existing_context(monkeypatch):
 def test_audio_note_updates_intake_lead(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-audio.ogg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-audio.ogg", "/tmp/fake-audio.ogg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -288,19 +210,10 @@ def test_audio_note_updates_intake_lead(monkeypatch):
     )
     client = app.test_client()
     number = "whatsapp:+910000000127"
-    client.post("/twilio/whatsapp", data={"From": number, "Body": "hi", "NumMedia": "0"})
+    post_bird(client, number, 'hi')
     lead = server.store.latest_lead_for_number(number)
-    client.post("/twilio/whatsapp", data={"From": number, "Body": "2", "NumMedia": "0"})
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "",
-            "NumMedia": "1",
-            "MediaUrl0": "https://api.twilio.com/fake-audio",
-            "MediaContentType0": "audio/ogg",
-        },
-    )
+    post_bird(client, number, '2')
+    response = post_bird(client, number, '', [('https://media.bird.com/fake-audio', 'audio/ogg')])
     assert response.status_code == 200
     lead = server.store.latest_lead_for_number(number)
     assert lead.id
@@ -315,7 +228,7 @@ def test_audio_note_updates_intake_lead(monkeypatch):
 def test_audio_feedback_is_saved_on_lead(monkeypatch):
     import didac_app.server as server
 
-    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": "/tmp/fake-feedback.ogg")
+    monkeypatch.setattr(server, "download_media", lambda media_url, content_type, from_number="": ("2026-10-18/910000000123/fake-feedback.ogg", "/tmp/fake-feedback.ogg"))
     monkeypatch.setattr(
         server,
         "extract_media_text",
@@ -323,18 +236,9 @@ def test_audio_feedback_is_saved_on_lead(monkeypatch):
     )
     client = app.test_client()
     number = "whatsapp:+910000000130"
-    client.post("/twilio/whatsapp", data={"From": number, "Body": "hi", "NumMedia": "0"})
-    client.post("/twilio/whatsapp", data={"From": number, "Body": "3", "NumMedia": "0"})
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "Please call tomorrow",
-            "NumMedia": "1",
-            "MediaUrl0": "https://api.twilio.com/fake-feedback-audio",
-            "MediaContentType0": "audio/ogg",
-        },
-    )
+    post_bird(client, number, 'hi')
+    post_bird(client, number, '3')
+    response = post_bird(client, number, 'Please call tomorrow', [('https://media.bird.com/fake-feedback-audio', 'audio/ogg')])
     assert response.status_code == 200
     lead = server.store.latest_lead_for_number(number)
     assert "Please call tomorrow" in lead.feedback_notes
@@ -347,17 +251,21 @@ def test_distributor_note_routes_to_channel_owner(monkeypatch):
 
     client = app.test_client()
     number = "whatsapp:+910000000128"
-    client.post("/twilio/whatsapp", data={"From": number, "Body": "hi", "NumMedia": "0"})
-    client.post("/twilio/whatsapp", data={"From": number, "Body": "2", "NumMedia": "0"})
-    response = client.post(
-        "/twilio/whatsapp",
-        data={
-            "From": number,
-            "Body": "I am a distributor interested in STREAM for 25 schools",
-            "NumMedia": "0",
-        },
-    )
+    post_bird(client, number, 'hi')
+    post_bird(client, number, '2')
+    response = post_bird(client, number, 'I am a distributor interested in STREAM for 25 schools')
     assert response.status_code == 200
     lead = server.store.latest_lead_for_number(number)
     assert lead.lead_type == "Distributor"
     assert lead.owner == "Channel sales"
+
+
+def test_media_file_redirects_to_signed_url(store, monkeypatch):
+    import didac_app.server as server
+
+    lead = store.create_lead(Lead())
+    media_id = store.add_media(lead.id, "https://example.com/m", "image/jpeg", "2026-10-18/91/card.jpg", "")
+    monkeypatch.setattr(server.blobstore, "signed_url", lambda config, key: f"https://signed.example/{key}")
+    response = app.test_client().get(f"/media/{media_id}")
+    assert response.status_code == 302
+    assert response.headers["Location"] == "https://signed.example/2026-10-18/91/card.jpg"

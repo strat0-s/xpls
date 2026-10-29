@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import sqlite3
 from pathlib import Path
 
 from didac_app.config import load_config
@@ -15,7 +14,7 @@ def main() -> None:
     args = parser.parse_args()
 
     config = load_config()
-    store = LeadStore(config.database_path)
+    store = LeadStore(config.database_url)
     if args.command == "export":
         path = store.export_report_excel(Path(args.output))
         print(path)
@@ -25,11 +24,8 @@ def main() -> None:
         for priority, count in store.count_by_priority().items():
             print(f"{priority}: {count}")
     elif args.command == "reset-sample":
-        with sqlite3.connect(config.database_path) as conn:
-            conn.execute("DELETE FROM feedback")
-            conn.execute("DELETE FROM media")
-            conn.execute("DELETE FROM leads")
-        print(f"Cleared leads from {config.database_path}")
+        store.clear()
+        print("Cleared leads, media, feedback and inbound events")
 
 
 if __name__ == "__main__":
