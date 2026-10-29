@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -12,6 +14,11 @@ from bs4 import BeautifulSoup
 from didac_app import blobstore
 from didac_app.config import DidacConfig
 from didac_app.openai_services import split_lead_texts, transcribe_audio, vision_ocr_to_lead_text
+
+logger = logging.getLogger(__name__)
+
+QR_MAX_SIDE = 1600
+QR_TIME_BUDGET_SECONDS = 8
 
 
 def save_media(
@@ -54,11 +61,21 @@ def sender_folder(sender: str) -> str:
 def extract_media_text(local_path: str, content_type: str) -> str:
     if not local_path:
         return ""
+    # An OpenAI failure must not lose the media: fall back to the *_PENDING placeholders the callers already handle.
     if content_type.startswith("image/"):
-        extracted = vision_ocr_to_lead_text(local_path, content_type) or optional_ocr(local_path)
-        return append_qr_details(local_path, extracted)
+        try:
+            extracted = vision_ocr_to_lead_text(local_path, content_type)
+        except Exception:
+            logger.exception("Vision OCR failed")
+            extracted = ""
+        return append_qr_details(local_path, extracted or optional_ocr(local_path))
     if content_type.startswith("audio/"):
-        return transcribe_audio(local_path) or "VOICE_NOTE_SAVED_TRANSCRIPTION_PENDING"
+        try:
+            transcript = transcribe_audio(local_path)
+        except Exception:
+            logger.exception("Transcription failed")
+            transcript = ""
+        return transcript or "VOICE_NOTE_SAVED_TRANSCRIPTION_PENDING"
     return ""
 
 
@@ -87,11 +104,17 @@ def decode_qr_values(local_path: str) -> list[str]:
     image = cv2.imread(local_path)
     if image is None:
         return []
+    # Phone photos are huge and the candidates are upscaled copies: cap the size and the time spent.
+    longest = max(image.shape[:2])
+    if longest > QR_MAX_SIDE:
+        scale = QR_MAX_SIDE / longest
+        image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
     detector = cv2.QRCodeDetector()
     values = []
+    deadline = time.monotonic() + QR_TIME_BUDGET_SECONDS
     for candidate in qr_candidates(image, cv2, np):
         values.extend(decode_with_detector(detector, candidate))
-        if values:
+        if values or time.monotonic() > deadline:
             break
     return [value for value in dict.fromkeys(values) if value]
 
@@ -118,7 +141,6 @@ def decode_with_detector(detector, image) -> list[str]:
 
 
 def qr_candidates(image, cv2, np):
-    candidates = []
     height, width = image.shape[:2]
     crops = [image]
     # Badges often have QR codes near the upper half; try coarse regions too.
@@ -135,17 +157,16 @@ def qr_candidates(image, cv2, np):
     for crop in crops:
         for scale in (1, 2, 3, 4):
             resized = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC) if scale > 1 else crop
-            candidates.append(resized)
+            yield resized
             gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-            candidates.append(gray)
-            candidates.append(cv2.equalizeHist(gray))
+            yield gray
+            yield cv2.equalizeHist(gray)
             blur = cv2.GaussianBlur(gray, (3, 3), 0)
-            candidates.append(cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 2))
+            yield cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 2)
             _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-            candidates.append(otsu)
+            yield otsu
             sharpen_kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-            candidates.append(cv2.filter2D(resized, -1, sharpen_kernel))
-    return candidates
+            yield cv2.filter2D(resized, -1, sharpen_kernel)
 
 
 def is_safe_http_url(value: str) -> bool:

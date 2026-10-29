@@ -42,3 +42,28 @@ def test_blobstore_uploads_and_signs_with_secret_key(monkeypatch):
     assert calls[0][0] == "https://x.supabase.co/storage/v1/object/b/2026-10-18/91/a%20b.jpg"
     assert calls[0][1]["headers"]["Authorization"] == "Bearer secret"
     assert blobstore.signed_url(config, "a b.jpg") == "https://x.supabase.co/storage/v1/object/sign/b/a%20b.jpg?token=t"
+
+
+def test_openai_failure_keeps_media_with_pending_placeholder(monkeypatch):
+    from didac_app import media
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("openai down")
+
+    monkeypatch.setattr(media, "vision_ocr_to_lead_text", boom)
+    monkeypatch.setattr(media, "transcribe_audio", boom)
+    monkeypatch.setattr(media, "optional_ocr", lambda path: "IMAGE_SAVED_OCR_PENDING")
+    monkeypatch.setattr(media, "decode_qr_values", lambda path: [])
+    assert media.extract_media_text("/tmp/x.jpg", "image/jpeg") == "IMAGE_SAVED_OCR_PENDING"
+    assert media.extract_media_text("/tmp/x.ogg", "audio/ogg") == "VOICE_NOTE_SAVED_TRANSCRIPTION_PENDING"
+
+
+def test_qr_candidates_are_built_lazily():
+    import inspect
+
+    import cv2
+    import numpy as np
+
+    from didac_app import media
+
+    assert inspect.isgenerator(media.qr_candidates(np.zeros((10, 10, 3), dtype="uint8"), cv2, np))
