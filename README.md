@@ -61,7 +61,31 @@ This adds lead fit score, priority, segment, recommended channel, outreach readi
 
 ## DIDAC WhatsApp lead app
 
-The app stores data in Postgres. Set `DATABASE_URL` in `.env` (Supabase for real use).
+Visitors and staff talk to a WhatsApp number on Bird. Bird posts each message to the Flask app, which saves leads in Postgres and photos/voice notes in a private storage bucket.
+
+```text
+WhatsApp -> Bird -> /bird/webhook (Flask on Vercel) -> Supabase Postgres (leads, media, feedback, events)
+                                                    -> Supabase Storage bucket (photos, voice notes)
+                                                    -> OpenAI (card OCR, voice transcription)
+                                    <- reply sent back through the Bird API
+```
+
+| Piece | Where it runs |
+| --- | --- |
+| App | Vercel (Python 3.12, region `bom1`) |
+| Database | Supabase Postgres, transaction pooler (port 6543) |
+| Media | Supabase Storage, private bucket `didac-media` |
+| WhatsApp | Bird (Channels API) |
+| OCR / transcription | OpenAI |
+
+### Supabase setup
+
+1. Create a project (region Mumbai to match Vercel). The Data API can stay off, the app talks to Postgres directly.
+2. Project settings > Database > Connection string > **Transaction pooler**. Use it as `DATABASE_URL` (port 6543). Tables are created automatically on the first start.
+3. Storage > New bucket named `didac-media`, **private**.
+4. Project settings > API keys: copy the project URL into `SUPABASE_URL` and the secret key into `SUPABASE_SECRET_KEY`. Set `SUPABASE_BUCKET=didac-media`. The secret key bypasses all access rules, so keep it server-side only.
+
+Media rows store the bucket key (`<date>/<sender>/<file>`) in `media.local_path`. `/media/<id>` redirects to a signed link that expires after 1 hour.
 
 ### Run the tests (local Postgres in Docker)
 
@@ -97,6 +121,50 @@ https://<your-public-url>/bird/webhook?token=<BIRD_WEBHOOK_TOKEN>
 ```
 
 Requests without the right token get 401. Bird retries are ignored by message id, and replies are sent through the Bird API.
+
+### Deploy on Vercel
+
+`index.py` in the repo root exposes the Flask app (`app`), which Vercel detects and serves for every URL. `vercel.json` sets region `bom1` (next to Supabase in Mumbai) and a 60s function limit. Do not add a rewrite to `/api/index`, it breaks the paths.
+
+First deploy from this folder with the Vercel CLI:
+
+```bash
+npm i -g vercel
+vercel login
+vercel link          # creates the project; it may add .vercel and .env.local, both are gitignored
+```
+
+Add each variable (same names as `.env.example`) to the **Production** environment, with `vercel env add NAME production` or in the dashboard under Settings > Environment Variables:
+
+`DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_BUCKET`, `SUPABASE_SECRET_KEY`, `BIRD_WORKSPACE_ID`, `BIRD_CHANNEL_ID`, `BIRD_ACCESS_KEY`, `BIRD_WEBHOOK_TOKEN`, `OPENAI_API_KEY`, `PUBLIC_BASE_URL` (the production URL, no trailing slash), plus `DIDAC_EXPORT_DIR=/tmp/didac` and `DIDAC_MEDIA_DIR=/tmp/didac_media` (Vercel's disk is read-only except `/tmp`).
+
+Then deploy and check:
+
+```bash
+vercel deploy --prod
+curl https://<your-app>.vercel.app/health
+```
+
+Env var changes only apply to new deployments, so redeploy after changing one. Finally set the Bird webhook subscription (event `whatsapp.inbound`) to `https://<your-app>.vercel.app/bird/webhook?token=<BIRD_WEBHOOK_TOKEN>` and send "hi" to the WhatsApp number.
+
+Auth: the dashboard, exports and media are open to anyone with the URL. Only `/bird/webhook` is protected, by its `?token=` (the app refuses webhook calls if `BIRD_WEBHOOK_TOKEN` is unset).
+
+Debugging a deploy:
+
+```bash
+vercel logs --since 30m --query 'level:error' --limit 20
+```
+
+Also check the Inbound Events sheet in the report export: each message has a status (`received`, `processed`, or an error) and the error text.
+
+Known limits on Vercel:
+
+- Hobby plan is non-commercial use only; use Pro or a team account for real commercial use.
+- The 60s limit covers the whole webhook call (download, OCR, reply). QR decoding is capped (1600px, 8s) to stay inside it.
+- A cold start re-runs the table-creation SQL (about a second extra).
+- `/tts` writes its MP3 to `/tmp`, so the file is not reachable afterwards. Treat it as unsupported on Vercel.
+- Free-form WhatsApp replies only work within 24 hours of the person's last message (Bird/WhatsApp rule).
+- To change the app URL (project rename or custom domain), then also update the Bird webhook, `PUBLIC_BASE_URL`, and redeploy.
 
 Staff can send:
 
@@ -146,13 +214,16 @@ Visitor: science lab for 20 schools
 Bot: saves and scores the lead
 ```
 
-Dashboard:
+Dashboard (locally `http://127.0.0.1:5001`, deployed `https://<your-app>.vercel.app`):
 
 ```text
-http://127.0.0.1:5001/dashboard
-http://127.0.0.1:5001/brochures
-http://127.0.0.1:5001/export/report
+/dashboard
+/brochures
+/export/report
+/export/report.xlsx
 ```
+
+The CLI uses `DATABASE_URL` from `.env`, so these commands act on whatever database it points to (Supabase for real use).
 
 Export manually:
 
@@ -160,7 +231,7 @@ Export manually:
 venv/bin/python -m didac_app.cli export --output outputs/didac/didac_leads.xlsx
 ```
 
-Clear local test leads before the live event:
+Clear all test leads, media rows, feedback and events before the live event (this wipes the whole database, the bucket files stay):
 
 ```bash
 venv/bin/python -m didac_app.cli reset-sample
@@ -176,7 +247,7 @@ OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=alloy
 ```
 
-With `OPENAI_API_KEY` set, WhatsApp images are processed with vision OCR into lead fields, voice notes are transcribed into notes/lead fields, and `/tts your text` creates an MP3 file.
+With `OPENAI_API_KEY` set, WhatsApp images are processed with vision OCR into lead fields, voice notes are transcribed into notes/lead fields, and `/tts your text` creates an MP3 file (local runs only). Badge QR codes in photos are decoded with OpenCV. The file is copied to a temp file for processing and deleted right after; the original stays in the bucket. If OpenAI fails, the message is still saved with a "pending" placeholder instead of being lost.
 
 Media cap:
 
