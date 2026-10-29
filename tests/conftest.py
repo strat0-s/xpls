@@ -20,7 +20,7 @@ def store():
     store = LeadStore(os.environ["DATABASE_URL"])
     store.clear()
     with store.connect() as conn:
-        conn.execute("TRUNCATE users RESTART IDENTITY")  # clear() leaves users alone so reset-sample can't lock everyone out
+        conn.execute("TRUNCATE users, login_attempts RESTART IDENTITY")  # clear() leaves users alone so reset-sample can't lock everyone out
     return store
 
 
@@ -67,6 +67,7 @@ def signed_in(store, admin, monkeypatch):
             super().__init__(*args, **kwargs)
             with self.session_transaction() as sess:
                 sess["uid"] = admin["id"]
+                sess["sv"] = admin["session_version"]
 
     monkeypatch.setattr(server.app, "test_client_class", SignedIn)
 

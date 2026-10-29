@@ -14,7 +14,7 @@ def main() -> None:
     parser.add_argument("command", choices=["export", "summary", "reset-sample", "create-admin"])
     parser.add_argument("--output", default="outputs/didac/didac_leads.xlsx")
     parser.add_argument("--name", help="create-admin: full name")
-    parser.add_argument("--phone", help="create-admin: phone number, also used for the WhatsApp internal menu")
+    parser.add_argument("--phone", help="create-admin: phone number (used to sign in)")
     parser.add_argument("--email", default="", help="create-admin: optional email")
     args = parser.parse_args()
 

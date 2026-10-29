@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hmac
 import secrets
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
@@ -33,11 +32,12 @@ def register(app, get_store, get_config) -> None:
             return None
         if not app.secret_key:
             return "Dashboard login is not configured: set SECRET_KEY.", 503
-        if request.method == "POST" and not hmac.compare_digest(request.form.get("csrf", ""), csrf_token()):
+        if request.method == "POST" and not auth.same(request.form.get("csrf", ""), csrf_token()):
             abort(400)
         user_id = session.get("uid")
         user = get_store().get_user(user_id) if user_id else None
-        g.user = user if user and user["is_active"] else None
+        # session_version changes when an admin resets the password, which signs out older sessions.
+        g.user = user if user and user["is_active"] and user["session_version"] == session.get("sv") else None
         if g.user or request.path == "/login":
             return None
         if request.path.startswith("/api/"):
@@ -62,12 +62,19 @@ def register(app, get_store, get_config) -> None:
         if g.user:
             return redirect(safe_next(request.args.get("next")))
         if request.method == "POST":
-            found = auth.authenticate(get_store(), request.form.get("login", ""), request.form.get("password", ""))
+            store, login_name = get_store(), request.form.get("login", "")
+            ip = request.headers.get("x-vercel-forwarded-for") or request.remote_addr or ""
+            if auth.login_throttled(store, login_name, ip):
+                flash("Too many failed attempts. Try again in a few minutes.")
+                return render_template("login.html"), 429
+            found = auth.authenticate(store, login_name, request.form.get("password", ""))
             if found:
                 session.clear()
                 session["uid"] = found["id"]
+                session["sv"] = found["session_version"]
                 session.permanent = True
                 return redirect(safe_next(request.args.get("next")))
+            store.record_failed_login(auth.login_key(login_name), ip)
             flash("That phone, email or password is not right.")
             return render_template("login.html"), 401
         return render_template("login.html")
@@ -101,14 +108,16 @@ def register(app, get_store, get_config) -> None:
         if not lead:
             abort(404)
         if request.method == "POST":
-            for field, _label in EDITABLE_FIELDS:
-                setattr(lead, field, request.form.get(field, "").strip())
-            lead.interest = request.form.get("interest", "").strip()
-            lead.doc_type = "form" if request.form.get("doc_type") == "form" else "other"
-            lead.updated_by = g.user["name"]
-            lead.updated_at = datetime.now(UTC).isoformat(timespec="seconds")
-            lead.review_reason = ""
-            store.update_lead(lead)
+            values = {field: request.form.get(field, "").strip() for field, _label in EDITABLE_FIELDS}
+            store.update_lead_fields(
+                lead_id,
+                **values,
+                interest=request.form.get("interest", "").strip(),
+                doc_type="form" if request.form.get("doc_type") == "form" else "other",
+                updated_by=g.user["name"],
+                updated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+                review_reason="",
+            )
             flash("Saved.")
             return redirect(url_for("lead_detail", lead_id=lead_id))
         items = lead_items(lead, store, members_by_phone(store))
@@ -121,9 +130,7 @@ def register(app, get_store, get_config) -> None:
         lead = store.get_lead(lead_id)
         if not lead:
             abort(404)
-        lead.deleted_at = datetime.now(UTC).isoformat(timespec="seconds")
-        lead.updated_by = g.user["name"]
-        store.update_lead(lead)
+        store.update_lead_fields(lead_id, deleted_at=datetime.now(UTC).isoformat(timespec="seconds"), updated_by=g.user["name"])
         flash("Lead deleted.")
         return redirect(url_for("gallery"))
 
@@ -176,7 +183,10 @@ def csrf_token() -> str:
 
 
 def safe_next(target: str | None) -> str:
-    return target if target and target.startswith("/") and not target.startswith("//") else url_for("gallery")
+    # Browsers read "\\" as "/" and drop tabs, so "/\\evil.example" or "/<tab>/evil.example" would leave the site.
+    if target and target.startswith("/") and not target.startswith("//") and "\\" not in target and target.isprintable():
+        return target
+    return url_for("gallery")
 
 
 def require_admin() -> None:
@@ -230,14 +240,12 @@ def lead_items(lead, store, members: dict[str, str]) -> list[dict]:
     """Everything received for the lead (photos, voice notes, texts), oldest first."""
     by, _initials, is_team = author(lead, members)
     items = []
-    for row in store.list_media():
-        if row["lead_id"] != lead.id:
-            continue
+    for row in store.list_media(lead.id):
         content_type = row["content_type"] or ""
         kind = "image" if content_type.startswith("image/") else "audio" if content_type.startswith("audio/") else "file"
         items.append({"kind": kind, "id": row["id"], "text": row["extracted_text"], "by": by, "is_team": is_team, "created_at": row["created_at"]})
-    for row in store.list_feedback():
-        if row["lead_id"] != lead.id or row["feedback_type"] in DERIVED_FEEDBACK:
+    for row in store.list_feedback(lead.id):
+        if row["feedback_type"] in DERIVED_FEEDBACK:
             continue
         name = members.get(auth.normalize_phone(row["from_number"]))
         items.append({"kind": "text", "text": row["body"], "by": name or "Visitor via WhatsApp", "is_team": bool(name), "created_at": row["created_at"]})

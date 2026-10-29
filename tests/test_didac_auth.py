@@ -59,6 +59,67 @@ def test_login_next_cannot_leave_the_site(anon_client, admin):
 ADMIN_EMAIL = "admin@example.com"
 
 
+def test_login_next_rejects_backslash_and_control_characters(anon_client, admin):
+    for target in ("/\\evil.example", "/%5Cevil.example", "/\t/evil.example", "https://evil.example", "evil.example"):
+        client = app.test_client_class(app, app.response_class)
+        response = client.post(
+            "/login", query_string={"next": target}, data={"login": ADMIN_EMAIL, "password": "correct-horse-battery", "csrf": csrf(client)}
+        )
+        location = response.headers["Location"]
+        assert response.status_code == 302 and "\\" not in location and not location.startswith("//"), target
+        assert target == "/%5Cevil.example" or location == "/", target
+
+
+def test_non_ascii_csrf_and_webhook_token_are_refused_not_500(anon_client):
+    assert anon_client.post("/login", data={"login": "x", "password": "y", "csrf": "é"}).status_code == 400
+    assert anon_client.post("/bird/webhook?token=é", json={}).status_code == 401
+
+
+def test_login_is_throttled_after_repeated_failures(anon_client, admin):
+    for _ in range(auth.MAX_FAILURES_PER_LOGIN):
+        assert sign_in(anon_client, "98 0000 0001", "wrong-password").status_code == 401
+    # Even the right password is refused, whichever way the phone is written.
+    assert sign_in(anon_client, "+919800000001", "correct-horse-battery").status_code == 429
+    assert anon_client.get("/").status_code == 302
+    assert sign_in(anon_client, "someone-else@example.com", "x").status_code == 401
+
+
+def test_password_reset_signs_out_existing_sessions(store, anon_client):
+    user = get_or_create_user(store, **STAFF)
+    assert sign_in(anon_client, STAFF["email"], STAFF["password"]).status_code == 302
+    assert anon_client.get("/").status_code == 200
+    auth.change_password(store, user["id"], "a-brand-new-password")
+    assert anon_client.get("/").status_code == 302
+    assert sign_in(anon_client, STAFF["email"], "a-brand-new-password").status_code == 302
+
+
+def test_ui_save_keeps_what_the_bot_wrote_meanwhile(store):
+    lead = store.create_lead(Lead(name="Old", text_notes="first"))
+    client = app.test_client()
+    client.get(f"/leads/{lead.id}")  # staff opens the page...
+    bot = store.get_lead(lead.id)
+    bot.text_notes = "first | second note from the bot"
+    store.update_lead(bot)  # ...the bot appends a note...
+    client.post(f"/leads/{lead.id}", data={"name": "New", "doc_type": "other", "csrf": csrf(client)})  # ...then staff saves
+    saved = store.get_lead(lead.id)
+    assert saved.name == "New" and saved.text_notes == "first | second note from the bot"
+
+
+def test_deleted_leads_hide_their_media_and_feedback(store, monkeypatch):
+    monkeypatch.setattr("didac_app.blobstore.signed_url", lambda config, path: "https://signed.example/" + path)
+    lead = store.create_lead(Lead(name="Gone", from_number="whatsapp:+919811111114"))
+    media_id = store.add_media(lead.id, "u", "image/jpeg", "k/gone.jpg", "text")
+    store.add_feedback("whatsapp:+919811111114", "typed", lead.id, feedback_type="text_message")
+    orphan_id = store.add_media(None, "u2", "image/jpeg", "k/orphan.jpg", "")
+    client = app.test_client()
+    assert client.get(f"/media/{media_id}").status_code == 302
+    client.post(f"/leads/{lead.id}/delete", data={"csrf": csrf(client)})
+    assert client.get(f"/media/{media_id}").status_code == 404
+    assert media_id not in [row["id"] for row in client.get("/api/media").json]
+    assert client.get("/api/feedback").json == []
+    assert client.get(f"/media/{orphan_id}").status_code == 302
+
+
 def test_post_without_csrf_token_is_refused():
     client = app.test_client()
     assert client.post("/logout").status_code == 400

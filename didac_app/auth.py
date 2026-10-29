@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hmac
+
 import phonenumbers
 import psycopg
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -7,6 +9,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from didac_app.storage import LeadStore
 
 MIN_PASSWORD_LENGTH = 8
+# Failed logins allowed per window before /login answers 429; kept in Postgres because serverless instances share no memory.
+LOGIN_WINDOW_MINUTES = 15
+MAX_FAILURES_PER_LOGIN = 5
+MAX_FAILURES_PER_IP = 20
 # Checked against when the login is unknown so a wrong user and a wrong password take the same time.
 _DUMMY_HASH = generate_password_hash("not-a-real-password")
 
@@ -26,6 +32,22 @@ def normalize_email(value: str) -> str:
     email = value.strip().lower()
     local, _, domain = email.partition("@")
     return email if local and "." in domain else ""
+
+
+def same(a: str, b: str) -> bool:
+    """Constant-time compare that, unlike hmac.compare_digest on str, accepts non-ASCII input."""
+    return hmac.compare_digest(a.encode(), b.encode())
+
+
+def login_key(login: str) -> str:
+    """One key per account however the login is typed (+91 98.., 98.., EMAIL@..)."""
+    login = login.strip()
+    return (normalize_email(login) if "@" in login else normalize_phone(login)) or login.lower()
+
+
+def login_throttled(store: LeadStore, login: str, ip: str) -> bool:
+    by_login, by_ip = store.count_failed_logins(login_key(login), ip, LOGIN_WINDOW_MINUTES)
+    return by_login >= MAX_FAILURES_PER_LOGIN or by_ip >= MAX_FAILURES_PER_IP
 
 
 def authenticate(store: LeadStore, login: str, password: str) -> dict | None:

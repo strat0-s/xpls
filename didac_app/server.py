@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import hmac
 import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, redirect, render_template_string, request, send_file
 
-from didac_app import bird, blobstore, ui
+from didac_app import auth, bird, blobstore, ui
 from didac_app.config import brochure_catalog, load_config
 from didac_app.intake import continue_intake, is_start_message, start_intake
 from didac_app.media import extract_media_text, save_media
@@ -105,7 +104,7 @@ def export_report_csv():
 @app.post("/bird/webhook")
 def bird_webhook():
     # Fail closed: Bird is told to call /bird/webhook?token=<BIRD_WEBHOOK_TOKEN>.
-    if not config.bird_webhook_token or not hmac.compare_digest(request.args.get("token", ""), config.bird_webhook_token):
+    if not config.bird_webhook_token or not auth.same(request.args.get("token", ""), config.bird_webhook_token):
         return {"error": "unauthorized"}, 401
     event = request.get_json(silent=True) or {}
     message = bird.parse_inbound(event)
