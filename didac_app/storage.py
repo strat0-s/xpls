@@ -16,6 +16,7 @@ from didac_app.models import Lead
 
 LEAD_FIELDS = [field.name for field in fields(Lead)]
 INTEGER_FIELDS = {"score"}
+NOT_DELETED = "(deleted_at IS NULL OR deleted_at = '')"
 
 
 class LeadStore:
@@ -91,6 +92,23 @@ class LeadStore:
                 )
                 """
             )
+            conn.execute(
+                f"""
+                CREATE TABLE IF NOT EXISTS users (
+                    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    created_at TEXT DEFAULT {now},
+                    name TEXT NOT NULL,
+                    phone TEXT,
+                    email TEXT,
+                    password_hash TEXT NOT NULL,
+                    is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    role TEXT NOT NULL DEFAULT ''
+                )
+                """
+            )
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_phone_key ON users (phone) WHERE phone IS NOT NULL")
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (email) WHERE email IS NOT NULL")
             conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS inbound_events_message_id_key ON inbound_events (message_id)")
 
@@ -126,15 +144,51 @@ class LeadStore:
     def latest_lead_for_number(self, from_number: str) -> Lead | None:
         with self.connect() as conn:
             row = conn.execute(
-                "SELECT * FROM leads WHERE from_number=%s ORDER BY id DESC LIMIT 1",
+                f"SELECT * FROM leads WHERE from_number=%s AND {NOT_DELETED} ORDER BY id DESC LIMIT 1",
                 (from_number,),
             ).fetchone()
         return row_to_lead(row) if row else None
 
+    def get_lead(self, lead_id: int) -> Lead | None:
+        with self.connect() as conn:
+            row = conn.execute(f"SELECT * FROM leads WHERE id=%s AND {NOT_DELETED}", (lead_id,)).fetchone()
+        return row_to_lead(row) if row else None
+
+    def create_user(self, name: str, phone: str, email: str, password_hash: str, is_admin: bool = False) -> int:
+        """phone/email are normalised by the caller; empty values are stored as NULL so they can stay unique."""
+        with self.connect() as conn:
+            return conn.execute(
+                "INSERT INTO users (name, phone, email, password_hash, is_admin) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                (name, phone or None, email or None, password_hash, is_admin),
+            ).fetchone()["id"]
+
+    def get_user(self, user_id: int) -> dict | None:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM users WHERE id=%s", (user_id,)).fetchone()
+
+    def find_user(self, phone: str = "", email: str = "") -> dict | None:
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT * FROM users WHERE (phone IS NOT NULL AND phone=%s) OR (email IS NOT NULL AND email=%s) LIMIT 1",
+                (phone, email),
+            ).fetchone()
+
+    def list_users(self) -> list[dict]:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM users ORDER BY id").fetchall()
+
+    def set_user_active(self, user_id: int, active: bool) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE users SET is_active=%s WHERE id=%s", (active, user_id))
+
+    def set_user_password(self, user_id: int, password_hash: str) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE users SET password_hash=%s WHERE id=%s", (password_hash, user_id))
+
     def list_leads(self, where: str = "", params: tuple = ()) -> list[Lead]:
-        query = "SELECT * FROM leads"
+        query = f"SELECT * FROM leads WHERE {NOT_DELETED}"
         if where:
-            query += f" WHERE {where}"
+            query += f" AND ({where})"
         query += " ORDER BY id DESC"
         with self.connect() as conn:
             rows = conn.execute(query, params).fetchall()

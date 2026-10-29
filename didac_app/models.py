@@ -58,6 +58,10 @@ class Lead:
     media_urls: str = ""
     media_local_paths: str = ""
     raw_message: str = ""
+    doc_type: str = ""
+    review_reason: str = ""
+    updated_by: str = ""
+    deleted_at: str = ""
 
 
 @dataclass(frozen=True)

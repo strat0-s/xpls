@@ -136,7 +136,7 @@ vercel link          # creates the project; it may add .vercel and .env.local, b
 
 Add each variable (same names as `.env.example`) to the **Production** environment, with `vercel env add NAME production` or in the dashboard under Settings > Environment Variables:
 
-`DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_BUCKET`, `SUPABASE_SECRET_KEY`, `BIRD_WORKSPACE_ID`, `BIRD_CHANNEL_ID`, `BIRD_ACCESS_KEY`, `BIRD_WEBHOOK_TOKEN`, `OPENAI_API_KEY`, `PUBLIC_BASE_URL` (the production URL, no trailing slash), plus `DIDAC_EXPORT_DIR=/tmp/didac` and `DIDAC_MEDIA_DIR=/tmp/didac_media` (Vercel's disk is read-only except `/tmp`).
+`SECRET_KEY` (a long random string that signs login sessions), `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_BUCKET`, `SUPABASE_SECRET_KEY`, `BIRD_WORKSPACE_ID`, `BIRD_CHANNEL_ID`, `BIRD_ACCESS_KEY`, `BIRD_WEBHOOK_TOKEN`, `OPENAI_API_KEY`, `PUBLIC_BASE_URL` (the production URL, no trailing slash), plus `DIDAC_EXPORT_DIR=/tmp/didac` and `DIDAC_MEDIA_DIR=/tmp/didac_media` (Vercel's disk is read-only except `/tmp`).
 
 Then deploy and check:
 
@@ -147,7 +147,13 @@ curl https://<your-app>.vercel.app/health
 
 Env var changes only apply to new deployments, so redeploy after changing one. Finally set the Bird webhook subscription (event `whatsapp.inbound`) to `https://<your-app>.vercel.app/bird/webhook?token=<BIRD_WEBHOOK_TOKEN>` and send "hi" to the WhatsApp number.
 
-Auth: the dashboard, exports and media are open to anyone with the URL. Only `/bird/webhook` is protected, by its `?token=` (the app refuses webhook calls if `BIRD_WEBHOOK_TOKEN` is unset).
+Auth: everything except `/health` and `/bird/webhook` needs a login (phone number or email + password). Accounts live in the `users` table; admins add, deactivate and reset passwords on the Team page. `/bird/webhook` is protected by its `?token=`. If `SECRET_KEY` is unset the dashboard answers 503 and the webhook keeps working.
+
+Create the first admin once, against the production database (`DATABASE_URL` in your `.env`):
+
+```bash
+venv/bin/python -m didac_app.cli create-admin --name "Your Name" --phone "+91XXXXXXXXXX" --email you@example.com
+```
 
 Debugging a deploy:
 

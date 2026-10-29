@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import hmac
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, jsonify, redirect, render_template_string, request, send_file
 
-from didac_app import bird, blobstore
+from didac_app import bird, blobstore, ui
 from didac_app.config import brochure_catalog, load_config
 from didac_app.intake import continue_intake, is_start_message, start_intake
 from didac_app.media import extract_media_text, save_media
@@ -20,21 +20,18 @@ from didac_app.storage import LeadStore
 app = Flask(__name__)
 config = load_config()
 store = LeadStore(config.database_url)
-
-
-@app.get("/")
-def home():
-    return render_template_string(DASHBOARD_HTML, **dashboard_context())
+app.secret_key = config.secret_key
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=14),
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(os.getenv("VERCEL")),
+)
+ui.register(app, lambda: store, lambda: config)
 
 
 @app.get("/health")
 def health():
     return {"status": "ok", "time": datetime.now(UTC).isoformat(timespec="seconds")}
-
-
-@app.get("/dashboard")
-def dashboard():
-    return render_template_string(DASHBOARD_HTML, **dashboard_context())
 
 
 @app.get("/api/leads")
@@ -398,30 +395,6 @@ def multi_card_media_reply(leads, processed_count: int, skipped_count: int) -> s
     return "\n".join(lines)
 
 
-def dashboard_context():
-    leads = store.list_leads()
-    feedback = store.list_feedback()
-    media = store.list_media()
-    inbound = store.list_inbound_events()
-    counts = store.count_by_priority()
-    staff_counts = {}
-    for lead in leads:
-        name = lead.captured_by or lead.staff_number or lead.from_number or "Unknown"
-        staff_counts[name] = staff_counts.get(name, 0) + 1
-    return {
-        "leads": leads[:50],
-        "feedback": feedback[:30],
-        "media": media[:30],
-        "inbound": inbound[:50],
-        "counts": counts,
-        "inbound_total": len(inbound),
-        "unprocessed_total": len([row for row in inbound if row["status"] == "received"]),
-        "staff_counts": staff_counts,
-        "total": len(leads),
-        "brochures": brochure_catalog(config),
-    }
-
-
 def media_library_groups():
     groups = {}
     for row in store.list_media():
@@ -430,188 +403,6 @@ def media_library_groups():
         sender = parts[1] if len(parts) == 3 else "unknown_sender"
         groups.setdefault(date, {}).setdefault(sender, []).append(row)
     return groups
-
-
-DASHBOARD_HTML = """
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Xperimentor DIDAC Dashboard</title>
-  <style>
-    :root { --ink: #17202a; --muted: #667085; --line: #d8dee6; --soft: #f5f7fa; --brand: #3b2a6b; --blue: #0b6bcb; }
-    * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; background: var(--soft); color: var(--ink); }
-    header { background: var(--brand); color: white; padding: 18px 28px; display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
-    h1 { margin: 0; font-size: 22px; }
-    h2 { margin: 0 0 14px; font-size: 18px; }
-    main { padding: 18px 28px 42px; }
-    .muted { color: #a9b7c3; font-size: 13px; }
-    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .button { display: inline-block; background: var(--blue); color: white; padding: 8px 11px; border-radius: 6px; text-decoration: none; font-size: 13px; }
-    .tabs { display: flex; gap: 6px; margin: 18px 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
-    .tab { border: 0; background: transparent; padding: 10px 13px; font-weight: 700; color: #475467; cursor: pointer; border-bottom: 3px solid transparent; white-space: nowrap; }
-    .tab.active { color: var(--blue); border-color: var(--blue); }
-    .panel { display: none; }
-    .panel.active { display: block; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-    .stat, .card { background: white; border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
-    .stat span { color: var(--muted); font-size: 13px; }
-    .stat strong { display: block; font-size: 28px; margin-top: 4px; }
-    .lead-cards { display: grid; gap: 10px; }
-    .lead-card { background: white; border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 10px; }
-    .lead-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
-    .lead-title { font-weight: 800; font-size: 15px; }
-    .pill { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #eef3f5; color: #344054; }
-    .pill.hot { background: #ffe8e1; color: #ad3307; }
-    .pill.warm { background: #fff2cc; color: #8a6100; }
-    .pill.nurture { background: #e8f4ff; color: #0b589c; }
-    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px 14px; font-size: 13px; }
-    .label { color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
-    .note { color: #344054; font-size: 13px; line-height: 1.4; white-space: pre-wrap; }
-    .wrap { max-width: 100%; overflow-x: auto; background: white; border: 1px solid var(--line); border-radius: 8px; }
-    table { width: 100%; border-collapse: collapse; min-width: 760px; }
-    th, td { padding: 10px 11px; border-bottom: 1px solid #edf0f3; text-align: left; vertical-align: top; font-size: 13px; }
-    th { background: #eef3f5; font-weight: 800; position: sticky; top: 0; }
-    .team-list { display: grid; gap: 8px; }
-    .team-row { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #edf0f3; padding: 8px 0; }
-    .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 10px; }
-    .media-tile { border: 1px solid var(--line); border-radius: 8px; padding: 8px; background: white; min-height: 120px; }
-    .media-tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 6px; border: 1px solid #edf0f3; }
-    @media (max-width: 720px) { header, main { padding-left: 16px; padding-right: 16px; } .meta { grid-template-columns: 1fr; } }
-  </style>
-</head>
-<body>
-  <header>
-    <div>
-      <h1>Xperimentor DIDAC Dashboard</h1>
-      <div class="muted">WhatsApp lead capture, badge scan, feedback, and media review</div>
-    </div>
-    <div class="actions">
-      <a class="button" href="/export/report.xlsx">Download XLSX</a>
-      <a class="button" href="/export/report.csv">Download CSV</a>
-      <a class="button" href="/brochures">Brochures</a>
-      <a class="button" href="/health">Health</a>
-    </div>
-  </header>
-  <main>
-    <nav class="tabs" aria-label="Dashboard tabs">
-      <button class="tab active" data-tab="summary">Summary</button>
-      <button class="tab" data-tab="leads">Leads</button>
-      <button class="tab" data-tab="feedback">Feedback</button>
-      <button class="tab" data-tab="media">Media</button>
-      <button class="tab" data-tab="library">Media Library</button>
-    </nav>
-
-    <section id="summary" class="panel active">
-      <h2>Summary</h2>
-      <div class="grid">
-        <div class="stat"><span>Total leads</span><strong>{{ total }}</strong></div>
-        <div class="stat"><span>Hot</span><strong>{{ counts.get('Hot', 0) }}</strong></div>
-        <div class="stat"><span>Warm</span><strong>{{ counts.get('Warm', 0) }}</strong></div>
-        <div class="stat"><span>Nurture</span><strong>{{ counts.get('Nurture', 0) }}</strong></div>
-        <div class="stat"><span>Inbound messages</span><strong>{{ inbound_total }}</strong></div>
-        <div class="stat"><span>Needs review</span><strong>{{ unprocessed_total }}</strong></div>
-      </div>
-      <div class="grid" style="margin-top: 12px;">
-        <div class="card">
-          <h2>Team Capture</h2>
-          <div class="team-list">
-            {% for name, count in staff_counts.items() %}
-            <div class="team-row"><span>{{ name }}</span><strong>{{ count }}</strong></div>
-            {% endfor %}
-          </div>
-        </div>
-        <div class="card">
-          <h2>Team Caption Format</h2>
-          <div class="note">By: Magesh
-Context: DIDAC Day 1 - Stall A12
-Tags: hot, distributor
-
-Then attach photo, badge, visiting card, form, or voice note.
-
-Media is stored as: data/didac_media/YYYY-MM-DD/whatsapp-number/...</div>
-        </div>
-      </div>
-    </section>
-
-    <section id="leads" class="panel">
-      <h2>Leads</h2>
-      <div class="lead-cards">
-        {% for lead in leads %}
-        <article class="lead-card">
-          <div class="lead-head">
-            <div>
-              <div class="lead-title">#{{ lead.id }} {{ lead.org or lead.name or lead.phone or 'Unnamed lead' }}</div>
-              <div class="note">{{ lead.designation or lead.role }}{% if lead.city or lead.state %} · {{ lead.city or lead.state }}{% endif %}</div>
-            </div>
-            <span class="pill {{ lead.priority|lower|replace(' ', '-') }}">{{ lead.priority }}</span>
-          </div>
-          <div class="meta">
-            <div><span class="label">Contact</span>{{ lead.name or (lead.first_name ~ ' ' ~ lead.last_name) }}<br>{{ lead.phone }} {{ lead.email }}</div>
-            <div><span class="label">Interest</span>{{ lead.interest or '-' }}</div>
-            <div><span class="label">Owner / Next</span>{{ lead.owner }}<br>{{ lead.next_action }}</div>
-            <div><span class="label">Captured By</span>{{ lead.captured_by or lead.staff_number or lead.from_number }}<br>{{ lead.capture_context }}</div>
-            <div><span class="label">Tags</span>{{ lead.tags or '-' }}</div>
-            <div><span class="label">QR</span>{{ lead.qr_url or '-' }}</div>
-          </div>
-          {% if lead.text_notes or lead.audio_transcript or lead.feedback_notes %}
-          <div class="note">{{ lead.text_notes or lead.audio_transcript or lead.feedback_notes }}</div>
-          {% endif %}
-        </article>
-        {% endfor %}
-      </div>
-    </section>
-
-    <section id="feedback" class="panel">
-      <h2>Feedback</h2>
-      <div class="wrap"><table>
-        <tr><th>ID</th><th>When</th><th>From</th><th>Type</th><th>Feedback</th><th>Action</th></tr>
-        {% for item in feedback %}
-        <tr><td>{{ item['id'] }}</td><td>{{ item['created_at'] }}</td><td>{{ item['from_number'] }}</td><td>{{ item['feedback_type'] }}</td><td>{{ item['body'] }}</td><td>{{ item['action_required'] }}</td></tr>
-        {% endfor %}
-      </table></div>
-    </section>
-
-    <section id="media" class="panel">
-      <h2>Media</h2>
-      <div class="wrap"><table>
-        <tr><th>ID</th><th>Lead</th><th>Type</th><th>File</th><th>Extracted text</th></tr>
-        {% for item in media %}
-        <tr><td>{{ item['id'] }}</td><td>{{ item['lead_id'] }}</td><td>{{ item['content_type'] }}</td><td><a href="/media/{{ item['id'] }}">open</a></td><td>{{ item['extracted_text'] }}</td></tr>
-        {% endfor %}
-      </table></div>
-      <h2 style="margin-top: 18px;">Inbound Audit</h2>
-      <div class="wrap"><table>
-        <tr><th>ID</th><th>When</th><th>From</th><th>Media</th><th>Status</th><th>Leads</th><th>Body</th><th>Error</th></tr>
-        {% for item in inbound %}
-        <tr><td>{{ item['id'] }}</td><td>{{ item['created_at'] }}</td><td>{{ item['from_number'] }}</td><td>{{ item['num_media'] }}</td><td>{{ item['status'] }}</td><td>{{ item['lead_ids'] }}</td><td>{{ item['body'] }}</td><td>{{ item['error'] }}</td></tr>
-        {% endfor %}
-      </table></div>
-    </section>
-
-    <section id="library" class="panel">
-      <h2>Media Library</h2>
-      <div class="note">Browse saved media by event date and WhatsApp sender. Full page: <a href="/media-library">open media library</a></div>
-      <iframe src="/media-library" style="width:100%; min-height:680px; border:1px solid var(--line); border-radius:8px; background:white; margin-top:12px;"></iframe>
-    </section>
-  </main>
-  <script>
-    const tabs = document.querySelectorAll('.tab');
-    const panels = document.querySelectorAll('.panel');
-    function showTab(id) {
-      tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.tab === id));
-      panels.forEach(panel => panel.classList.toggle('active', panel.id === id));
-      history.replaceState(null, '', '#' + id);
-    }
-    tabs.forEach(tab => tab.addEventListener('click', () => showTab(tab.dataset.tab)));
-    const initial = location.hash.replace('#', '');
-    if (initial && document.getElementById(initial)) showTab(initial);
-  </script>
-</body>
-</html>
-"""
 
 
 MEDIA_LIBRARY_HTML = """
