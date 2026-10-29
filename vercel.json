@@ -1,4 +1,5 @@
 {
   "regions": ["bom1"],
+  "ignoreCommand": "[ \"$VERCEL_GIT_COMMIT_REF\" != \"prod\" ]",
   "functions": { "index.py": { "maxDuration": 60 } }
 }
