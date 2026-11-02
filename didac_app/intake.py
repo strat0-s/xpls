@@ -173,8 +173,7 @@ def qualification_saved_reply(lead: Lead) -> str:
     return (
         "Thanks. We saved your profile and requirement.\n"
         f"Role: {lead.lead_type or lead.organisation_type or 'Not specified'}\n"
-        f"Interest: {lead.interest or 'Not specified'}\n"
-        "\n"
+        f"Interest: {lead.interest or 'Not specified'}\n\n"
         "You can send a visiting card photo also, or type menu for brochures/demo."
     )
 
