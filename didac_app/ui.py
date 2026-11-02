@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
-from flask import abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from didac_app import auth
+from didac_app import auth, orbit
 
 IST = ZoneInfo("Asia/Kolkata")
 OPEN_PATHS = {"/health", "/bird/webhook"}
@@ -112,6 +112,7 @@ def register(app, get_store, get_config) -> None:
             store.update_lead_fields(
                 lead_id,
                 **values,
+                organisation_type=org_type if (org_type := request.form.get("organisation_type", "")) in orbit.ORG_TYPES else "",
                 interest=request.form.get("interest", "").strip(),
                 doc_type="form" if request.form.get("doc_type") == "form" else "other",
                 updated_by=g.user["name"],
@@ -121,7 +122,10 @@ def register(app, get_store, get_config) -> None:
             flash("Saved.")
             return redirect(url_for("lead_detail", lead_id=lead_id))
         items = lead_items(lead, store, members_by_phone(store))
-        return render_template("lead.html", lead=lead, items=items, fields=EDITABLE_FIELDS, title=display_name(lead))
+        return render_template(
+            "lead.html", lead=lead, items=items, fields=EDITABLE_FIELDS, title=display_name(lead),
+            org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
+        )
 
     @app.post("/leads/<int:lead_id>/delete")
     def lead_delete(lead_id: int):
@@ -154,6 +158,27 @@ def register(app, get_store, get_config) -> None:
             return redirect(url_for("team"))
         return render_template("team.html", members=store.list_users())
 
+    @app.get("/export")
+    def export_page():
+        rows, left_out, people = export_selection(get_store(), request.args)
+        query = {key: value for key, value in request.args.items() if value and key in EXPORT_FILTERS}
+        return render_template(
+            "export.html", rows=rows, left_out=left_out, people=people, org_types=orbit.ORG_TYPES, query=query,
+            orgs=orbit.org_count(rows), max_orgs=orbit.MAX_ORGS, args=request.args,
+        )
+
+    @app.get("/export/orbit.<fmt>")
+    def export_orbit(fmt: str):
+        if fmt not in ("csv", "xlsx"):
+            abort(404)
+        rows, _left_out, _people = export_selection(get_store(), request.args)
+        if not rows or orbit.org_count(rows) > orbit.MAX_ORGS:
+            abort(400)
+        body, mimetype = (orbit.to_csv(rows), "text/csv") if fmt == "csv" else (
+            orbit.to_xlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        filename = f"orbit-import-{datetime.now(IST).date().isoformat()}.{fmt}"
+        return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
     @app.post("/team/<int:user_id>/active")
     def team_active(user_id: int):
         require_admin()
@@ -174,6 +199,44 @@ def register(app, get_store, get_config) -> None:
         except ValueError as exc:
             flash(str(exc))
         return redirect(url_for("team"))
+
+
+EXPORT_FILTERS = ("from", "to", "by", "type")
+
+
+def export_selection(store, args) -> tuple[list[dict], list[tuple], list[str]]:
+    """Leads matching the export filters (capture date in IST, who captured it, organisation type) as Orbit rows,
+    the leads left out with the reason, and the capture names to offer in the filter."""
+    start, end = parse_day(args.get("from")), parse_day(args.get("to"))
+    by, kind = args.get("by", ""), args.get("type", "")
+    members = members_by_phone(store)
+    leads, people = [], set()
+    for lead in store.list_leads():
+        name = author(lead, members)[0]
+        people.add(name)
+        day = created_day(lead)
+        if day and ((start and day < start) or (end and day > end)):
+            continue
+        if (by and name != by) or (kind and orbit.lead_org_type(lead) != kind):
+            continue
+        leads.append(lead)
+    rows, left_out = orbit.build_export(leads)
+    return rows, left_out, sorted(people)
+
+
+def parse_day(value: str | None) -> date | None:
+    try:
+        return date.fromisoformat(value or "")
+    except ValueError:
+        return None
+
+
+def created_day(lead) -> date | None:
+    try:
+        moment = datetime.fromisoformat(lead.created_at)
+    except ValueError:
+        return None
+    return moment.replace(tzinfo=moment.tzinfo or UTC).astimezone(IST).date()
 
 
 def csrf_token() -> str:

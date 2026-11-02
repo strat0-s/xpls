@@ -82,6 +82,8 @@
       {% endfor %}
       <div class="wide"><label class="f" for="f-doc_type">Type</label>
         <select class="t" id="f-doc_type" name="doc_type"><option value="form" {{ 'selected' if lead.doc_type == 'form' }}>Contact form</option><option value="other" {{ 'selected' if lead.doc_type != 'form' }}>Other document</option></select></div>
+      <div class="wide"><label class="f" for="f-organisation_type">Organisation type (used for the Orbit export)</label>
+        <select class="t" id="f-organisation_type" name="organisation_type"><option value="">Not set</option>{% for code, label in org_types.items() %}<option value="{{ code }}" {{ 'selected' if code == org_type }}>{{ label }}</option>{% endfor %}</select></div>
       <div class="wide"><label class="f" for="f-interest">Summary of what they need</label><textarea class="t" id="f-interest" name="interest" rows="3">{{ lead.interest }}</textarea></div>
     </div>
     <div class="actions"><button class="btn">Save changes</button><a class="btn ghost" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none" href="{{ url_for('gallery') }}">Cancel</a></div>
