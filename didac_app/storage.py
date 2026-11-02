@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from dataclasses import asdict, fields
+from datetime import UTC, datetime
 from pathlib import Path
 
 import psycopg
@@ -152,6 +153,23 @@ class LeadStore:
         assignments = ", ".join(f"{column}=%s" for column in values)
         with self.connect() as conn:
             conn.execute(f"UPDATE leads SET {assignments} WHERE id=%s", [*values.values(), lead_id])
+
+    def merge_into_lead(self, lead_id: int, fill: dict[str, str], append: dict[str, str]) -> None:
+        """One UPDATE that fills only still-blank columns and appends to '; '-lists, so a dashboard edit or a parallel scan is not overwritten.
+        Keys are code-owned, never request data."""
+        sets, params = [], []
+        for column, value in fill.items():
+            sets.append(f"{column}=COALESCE(NULLIF({column}, ''), %s)")
+            params.append(value)
+        for column, value in append.items():
+            sets.append(
+                f"{column}=CASE WHEN COALESCE({column}, '')='' THEN %s WHEN %s = ANY(string_to_array({column}, '; ')) THEN {column} ELSE {column} || '; ' || %s END"
+            )
+            params += [value, value, value]
+        sets.append("updated_at=%s")
+        params.append(datetime.now(UTC).isoformat(timespec="seconds"))
+        with self.connect() as conn:
+            conn.execute(f"UPDATE leads SET {', '.join(sets)} WHERE id=%s", [*params, lead_id])
 
     def latest_lead_for_number(self, from_number: str) -> Lead | None:
         with self.connect() as conn:

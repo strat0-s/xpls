@@ -8,6 +8,7 @@ from flask import Flask, jsonify, redirect, render_template_string, request, sen
 
 from didac_app import auth, bird, blobstore, ui
 from didac_app.config import brochure_catalog, load_config
+from didac_app.dedupe import fill_blanks, find_duplicate
 from didac_app.intake import continue_intake, is_start_message, start_intake
 from didac_app.media import extract_media_text, save_media
 from didac_app.openai_services import split_lead_texts
@@ -133,6 +134,7 @@ def bird_webhook():
         skipped_count = max(0, num_media - process_count)
         extracted_texts = []
         created_leads = []
+        merged_ids = []
         media_urls = []
         local_paths = []
         applied_extracted_to_lead = False
@@ -154,6 +156,12 @@ def bird_webhook():
                         apply_text_note(new_lead, body)
                     new_lead.media_urls = media_url
                     new_lead.media_local_paths = local_path
+                    match = find_duplicate(store, new_lead)
+                    if match and match[1]:
+                        merged_ids.append(merge_scan_into(match[0], new_lead, media_url, content_type, local_path, lead_text, body, from_number))
+                        continue
+                    if match:
+                        new_lead.review_reason = f"possible duplicate of #{match[0].id}"
                     new_lead = store.create_lead(new_lead)
                     touched_lead_ids.append(new_lead.id)
                     media_id = store.add_media(new_lead.id, media_url, content_type, local_path, lead_text)
@@ -236,8 +244,9 @@ def bird_webhook():
             local_paths.append(local_path)
             if extracted:
                 extracted_texts.append(extracted)
-        if created_leads:
-            response.append(multi_card_media_reply(created_leads, process_count, skipped_count))
+        if created_leads or merged_ids:
+            touched_lead_ids.extend(merged_ids)
+            response.append(multi_card_media_reply(created_leads, process_count, skipped_count, merged_ids))
         else:
             lead = context_lead
             if not lead:
@@ -379,10 +388,31 @@ def send_replies(event_id: int, to_number: str, replies: list[str], lead_ids: li
     return "OK", 200
 
 
-def multi_card_media_reply(leads, processed_count: int, skipped_count: int) -> str:
-    lines = [f"Saved {len(leads)} lead record(s) from {processed_count} media file(s)."]
+def merge_scan_into(existing, new_lead, media_url, content_type, local_path, lead_text, body, from_number) -> int:
+    """Fill blanks of the matching lead from a repeat scan and attach the media. A scan that adds no field is not attached,
+    but its caption tags and note are always kept.
+    ponytail: the uploaded file of a skipped scan stays in the bucket; add a blobstore delete if storage matters.
+    ponytail: find_duplicate then create_lead is not atomic, so two simultaneous scans of one new person can both create a lead; take an advisory lock on the normalised email/phone if that shows up."""
+    filled = fill_blanks(existing, new_lead)
+    append = {name: getattr(new_lead, name) for name in ("tags", "captured_by", "capture_context") if getattr(new_lead, name)}
+    if filled:
+        append |= {"media_urls": media_url, "media_local_paths": local_path}
+    if filled or append:
+        store.merge_into_lead(existing.id, {name: getattr(existing, name) for name in filled}, append)
+    media_id = store.add_media(existing.id, media_url, content_type, local_path, lead_text) if filled else None
+    if body:
+        store.add_feedback(from_number, body, existing.id, feedback_type="text_caption", media_id=media_id)
+    return existing.id
+
+
+def multi_card_media_reply(leads, processed_count: int, skipped_count: int, merged_ids=()) -> str:
+    lines = []
+    if leads:
+        lines.append(f"Saved {len(leads)} lead record(s) from {processed_count} media file(s).")
     for lead in leads[:5]:
         lines.append(f"#{lead.id}: {lead.org or lead.name or lead.phone or 'Unnamed lead'}")
+    for lead_id in unique_ids(merged_ids)[:5]:
+        lines.append(f"Already saved as #{lead_id}.")
     if skipped_count:
         lines.append(f"Skipped {skipped_count} extra file(s). Please send them separately.")
     lines.append("Refresh the dashboard to see all records.")
