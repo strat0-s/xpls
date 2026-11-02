@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import ipaddress
 import logging
+import re
+import socket
 import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -85,7 +88,10 @@ def append_qr_details(local_path: str, extracted_text: str) -> str:
         return extracted_text
     lines = [extracted_text.strip()] if extracted_text else []
     for value in qr_values[:3]:
-        if is_safe_http_url(value):
+        contact = parse_contact_qr(value)
+        if contact:
+            lines.append(contact)
+        elif is_safe_http_url(value):
             lines.append(f"QR URL: {value}")
             page_text = fetch_qr_page_text(value)
             if page_text:
@@ -110,6 +116,8 @@ def decode_qr_values(local_path: str) -> list[str]:
         scale = QR_MAX_SIDE / longest
         image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
     detector = cv2.QRCodeDetector()
+    if not looks_like_qr(detector, image, cv2):
+        return []
     values = []
     deadline = time.monotonic() + QR_TIME_BUDGET_SECONDS
     for candidate in qr_candidates(image, cv2, np):
@@ -117,6 +125,19 @@ def decode_qr_values(local_path: str) -> list[str]:
         if values or time.monotonic() > deadline:
             break
     return [value for value in dict.fromkeys(values) if value]
+
+
+def looks_like_qr(detector, image, cv2) -> bool:
+    """Cheap pre-check (finder patterns only, no decode) so photos without a QR skip the ~120 expensive candidates.
+    ponytail: a very small or distant QR the detector misses on these three views is skipped; add an upscaled view if that shows up."""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    for view in (image, gray, cv2.equalizeHist(gray)):
+        try:
+            if detector.detect(view)[0]:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def decode_qr_urls(local_path: str) -> list[str]:
@@ -170,20 +191,23 @@ def qr_candidates(image, cv2, np):
 
 
 def is_safe_http_url(value: str) -> bool:
+    """http(s) URL whose host resolves only to public addresses, so a QR cannot point the server at internal services.
+    ponytail: resolve-then-fetch leaves a DNS-rebinding window; pin the resolved IP if this ever handles untrusted traffic at scale."""
     parsed = urlparse(value)
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return False
+    try:
+        addresses = {info[4][0] for info in socket.getaddrinfo(parsed.hostname, parsed.port or 443)}
+    except (socket.gaierror, UnicodeError):
+        return False
+    return bool(addresses) and all(ipaddress.ip_address(address.split("%")[0]).is_global for address in addresses)
 
 
 def fetch_qr_page_text(url: str) -> str:
     if not is_safe_http_url(url):
         return ""
     try:
-        response = requests.get(
-            url,
-            timeout=8,
-            allow_redirects=True,
-            headers={"User-Agent": "Xperimentor-DIDAC-lead-scanner/1.0"},
-        )
+        response = get_public_page(url)
         response.raise_for_status()
     except Exception:
         return ""
@@ -195,6 +219,61 @@ def fetch_qr_page_text(url: str) -> str:
         item.decompose()
     text = " ".join(soup.get_text(" ").split())
     return text[:1200]
+
+
+def get_public_page(url: str, max_redirects: int = 3) -> requests.Response:
+    """GET following redirects by hand so every hop is checked as a public address."""
+    for _ in range(max_redirects + 1):
+        if not is_safe_http_url(url):
+            raise ValueError("unsafe URL")
+        response = requests.get(
+            url, timeout=8, allow_redirects=False, headers={"User-Agent": "Xperimentor-DIDAC-lead-scanner/1.0"}
+        )
+        if not response.is_redirect:
+            return response
+        url = urljoin(url, response.headers.get("Location", ""))
+    raise ValueError("too many redirects")
+
+
+def parse_contact_qr(value: str) -> str:
+    """vCard / MECARD QR payload -> 'Name: ...' lines the lead parser understands; '' if not a contact card."""
+    fields: dict[str, str] = {}
+    text = value.strip()
+    if text.upper().startswith("BEGIN:VCARD"):
+        for line in text.splitlines():
+            key, _, val = line.partition(":")
+            key = key.split(";")[0].upper()
+            if not val.strip():
+                continue
+            if key == "FN":
+                fields.setdefault("Name", val.strip())
+            elif key == "N":
+                fields.setdefault("Name", " ".join(part for part in reversed(val.split(";")[:2]) if part).strip())
+            elif key == "ORG":
+                fields.setdefault("Org", val.replace(";", " ").strip())
+            elif key == "TITLE":
+                fields.setdefault("Role", val.strip())
+            elif key == "TEL":
+                fields.setdefault("Phone", val.strip())
+            elif key == "EMAIL":
+                fields.setdefault("Email", val.strip())
+    elif text.upper().startswith("MECARD:"):
+        for part in re.split(r"(?<!\\);", text[7:]):
+            key, _, val = part.partition(":")
+            key = key.upper()
+            val = val.replace("\\;", ";").replace("\\:", ":").strip()
+            if not val:
+                continue
+            if key == "N":
+                last, _, first = val.partition(",")
+                fields.setdefault("Name", f"{first} {last}".strip())
+            elif key == "ORG":
+                fields.setdefault("Org", val)
+            elif key == "TEL":
+                fields.setdefault("Phone", val)
+            elif key == "EMAIL":
+                fields.setdefault("Email", val)
+    return "\n".join(f"{key}: {val}" for key, val in fields.items())
 
 
 def extract_media_lead_texts(local_path: str, content_type: str) -> list[str]:
