@@ -34,12 +34,6 @@ class DidacConfig:
     case_study_url: str = os.getenv("CASE_STUDY_URL", "")
     demo_video_url: str = os.getenv("DEMO_VIDEO_URL", "")
     calendar_url: str = os.getenv("CALENDAR_URL", "")
-    default_owner: str = os.getenv("DEFAULT_OWNER", "Sales team")
-    csr_owner: str = os.getenv("CSR_OWNER", "Chethan")
-    ngo_owner: str = os.getenv("NGO_OWNER", "Partnerships")
-    school_owner: str = os.getenv("SCHOOL_OWNER", "Sales team")
-    distributor_owner: str = os.getenv("DISTRIBUTOR_OWNER", "Channel sales")
-    low_priority_owner: str = os.getenv("LOW_PRIORITY_OWNER", "Sales team")
     max_media_per_message: int = int(os.getenv("MAX_MEDIA_PER_MESSAGE", "3"))
 
 

@@ -243,7 +243,7 @@ def test_audio_feedback_is_saved_on_lead(monkeypatch):
     assert "Demo requested" in lead.interest
 
 
-def test_distributor_note_routes_to_channel_owner(monkeypatch):
+def test_distributor_note_sets_lead_type(monkeypatch):
     import didac_app.server as server
 
     client = app.test_client()
@@ -254,7 +254,6 @@ def test_distributor_note_routes_to_channel_owner(monkeypatch):
     assert response.status_code == 200
     lead = server.store.latest_lead_for_number(number)
     assert lead.lead_type == "Distributor"
-    assert lead.owner == "Channel sales"
 
 
 def test_media_file_redirects_to_signed_url(store, monkeypatch):

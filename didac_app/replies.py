@@ -22,7 +22,6 @@ Budget:
 Timeline:
 
 /summary
-/hot
 /followups
 /export excel
 /send brochure <phone>
@@ -34,9 +33,6 @@ def lead_created_reply(lead: Lead, config: DidacConfig) -> str:
     assets = asset_links(config)
     return (
         f"Lead saved: {lead.org or lead.name or 'Unnamed lead'}\n"
-        f"Priority: {lead.priority} | Score: {lead.score} | Owner: {lead.owner}\n"
-        f"Next: {lead.next_action}\n\n"
-        f"Draft WhatsApp:\n{lead.whatsapp_draft}\n\n"
         f"{assets}"
     ).strip()
 
@@ -60,18 +56,7 @@ def command_reply(body: str, store: LeadStore, config: DidacConfig) -> str:
     if command in {"/help", "help"}:
         return HELP_TEXT
     if command.startswith("/summary"):
-        leads = store.list_leads()
-        counts = store.count_by_priority()
-        return (
-            f"DIDAC summary\nTotal leads: {len(leads)}\n"
-            f"Hot: {counts.get('Hot', 0)}\n"
-            f"Warm: {counts.get('Warm', 0)}\n"
-            f"Nurture: {counts.get('Nurture', 0)}\n"
-            f"Low priority: {counts.get('Low priority', 0)}"
-        )
-    if command.startswith("/hot"):
-        leads = store.list_leads("priority=%s", ("Hot",))[:10]
-        return format_lead_list("Hot leads", leads)
+        return f"DIDAC summary\nTotal leads: {len(store.list_leads())}"
     if command.startswith("/followups"):
         leads = store.list_leads("status != %s", ("Closed",))[:10]
         return format_lead_list("Pending follow-ups", leads)
@@ -97,8 +82,7 @@ def format_lead_list(title: str, leads: list[Lead]) -> str:
     lines = [title]
     for lead in leads:
         lines.append(
-            f"#{lead.id} {lead.priority} | {lead.org or lead.name or lead.from_number} | "
-            f"{lead.interest or 'No interest noted'} | Owner: {lead.owner}"
+            f"#{lead.id} {lead.org or lead.name or lead.from_number} | {lead.interest or 'No interest noted'}"
         )
     return "\n".join(lines)
 

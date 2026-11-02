@@ -13,7 +13,6 @@ from didac_app.media import extract_media_text, save_media
 from didac_app.openai_services import split_lead_texts
 from didac_app.parser import parse_message, update_lead_from_note, update_lead_from_text
 from didac_app.replies import command_reply, lead_created_reply, media_reply
-from didac_app.scoring import enrich_lead
 from didac_app.storage import LeadStore
 
 app = Flask(__name__)
@@ -155,7 +154,6 @@ def bird_webhook():
                         apply_text_note(new_lead, body)
                     new_lead.media_urls = media_url
                     new_lead.media_local_paths = local_path
-                    new_lead = enrich_lead(new_lead, config)
                     new_lead = store.create_lead(new_lead)
                     touched_lead_ids.append(new_lead.id)
                     media_id = store.add_media(new_lead.id, media_url, content_type, local_path, lead_text)
@@ -177,7 +175,7 @@ def bird_webhook():
 
             lead = context_lead
             if not lead:
-                lead = enrich_lead(parse_message("New lead\nNotes: Media-only lead", from_number)[1], config)
+                lead = parse_message("New lead\nNotes: Media-only lead", from_number)[1]
                 lead = store.create_lead(lead)
                 touched_lead_ids.append(lead.id)
                 context_lead = lead
@@ -243,7 +241,7 @@ def bird_webhook():
         else:
             lead = context_lead
             if not lead:
-                lead = enrich_lead(parse_message("New lead\nNotes: Media-only lead", from_number)[1], config)
+                lead = parse_message("New lead\nNotes: Media-only lead", from_number)[1]
                 lead = store.create_lead(lead)
                 touched_lead_ids.append(lead.id)
             lead.media_urls = merge_semicolon(lead.media_urls, *media_urls)
@@ -260,7 +258,6 @@ def bird_webhook():
                 lead.status = "New"
             if lead.status.startswith("Intake:"):
                 lead.status = "New"
-            lead = enrich_lead(lead, config)
             store.update_lead(lead)
             if lead.id:
                 touched_lead_ids.append(lead.id)
@@ -285,7 +282,6 @@ def bird_webhook():
     else:
         kind, lead = parse_message(body, from_number)
         if lead:
-            lead = enrich_lead(lead, config)
             lead = store.create_lead(lead)
             touched_lead_ids.append(lead.id)
             response.append(lead_created_reply(lead, config))
@@ -294,7 +290,6 @@ def bird_webhook():
             if lead:
                 apply_text_note(lead, body)
                 store.add_feedback(from_number, body, lead.id, feedback_type="text_message")
-                lead = enrich_lead(lead, config)
                 store.update_lead(lead)
                 if lead.id:
                     touched_lead_ids.append(lead.id)
