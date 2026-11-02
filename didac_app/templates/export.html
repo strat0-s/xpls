@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% set active = 'export' %}
+{% block title %}Export · Xperimentor DIDAC{% endblock %}
+{% block css %}
+    h1 { margin: 0; font-size: 26px; }
+    .panel { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
+    .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; align-items: end; }
+    .sum { font-size: 15px; line-height: 1.6; }
+    .sum b { font-size: 20px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    a.btn { display: inline-flex; align-items: center; text-decoration: none; }
+    .btn.off { opacity: .4; pointer-events: none; }
+    .hint { font-size: 13px; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    td, th { text-align: left; padding: 8px 6px; border-top: 1px solid var(--line); }
+{% endblock %}
+{% block content %}
+<h1>Export for Orbit</h1>
+<form class="card panel" method="get" action="{{ url_for('export_page') }}">
+  <div class="filters">
+    <div><label class="f" for="from">Captured from</label><input class="t" type="date" id="from" name="from" value="{{ args.get('from', '') }}"></div>
+    <div><label class="f" for="to">Captured to</label><input class="t" type="date" id="to" name="to" value="{{ args.get('to', '') }}"></div>
+    <div><label class="f" for="by">Captured by</label>
+      <select class="t" id="by" name="by"><option value="">Everyone</option>{% for p in people %}<option {{ 'selected' if args.get('by') == p }}>{{ p }}</option>{% endfor %}</select></div>
+    <div><label class="f" for="type">Organisation type</label>
+      <select class="t" id="type" name="type"><option value="">All types</option>{% for code, label in org_types.items() %}<option value="{{ code }}" {{ 'selected' if args.get('type') == code }}>{{ label }}</option>{% endfor %}</select></div>
+    <div><button class="btn ghost">Apply filters</button></div>
+  </div>
+</form>
+
+<section class="card panel">
+  <div class="sum"><b>{{ rows|length }}</b> lead{{ '' if rows|length == 1 else 's' }} ready for Orbit ({{ orgs }} organisation{{ '' if orgs == 1 else 's' }}){% if left_out %}, <b>{{ left_out|length }}</b> left out{% endif %}.</div>
+  {% if orgs > max_orgs %}<div class="flash">Orbit takes at most {{ max_orgs }} organisations per file. Narrow the dates and export in parts.</div>{% endif %}
+  {% set ok = rows and orgs <= max_orgs %}
+  <div class="actions">
+    <a class="btn {{ '' if ok else 'off' }}" href="{{ url_for('export_orbit', fmt='csv', **query) }}">Download CSV</a>
+    <a class="btn ghost {{ '' if ok else 'off' }}" href="{{ url_for('export_orbit', fmt='xlsx', **query) }}">Download Excel</a>
+  </div>
+  <div class="hint">In Orbit: Organisations &rarr; Import. Orbit skips organisations it already has (same name + pincode, or same UDISE code) and never updates them.</div>
+</section>
+
+{% if left_out %}
+<section class="card panel">
+  <div style="font-size:15px;font-weight:700">Left out of the file</div>
+  <table>
+    {% for lead, reason in left_out[:50] %}
+    <tr><td><a href="{{ url_for('lead_detail', lead_id=lead.id) }}">{{ lead.name or lead.org or lead.phone or 'Lead #' ~ lead.id }}</a></td><td>{{ reason }}</td></tr>
+    {% endfor %}
+  </table>
+  {% if left_out|length > 50 %}<div class="hint">And {{ left_out|length - 50 }} more.</div>{% endif %}
+  <div class="hint">Open a lead and set the organisation name or type, then export again. The full lead list is still available as the <a href="/export/report.xlsx">full report (Excel)</a> or <a href="/export/report.csv">CSV</a>.</div>
+</section>
+{% endif %}
+{% endblock %}
