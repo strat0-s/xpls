@@ -26,8 +26,6 @@ def main() -> None:
     elif args.command == "summary":
         leads = store.list_leads()
         print(f"Total leads: {len(leads)}")
-        for priority, count in store.count_by_priority().items():
-            print(f"{priority}: {count}")
     elif args.command == "create-admin":
         password = getpass.getpass("Password: ")
         if password != getpass.getpass("Repeat password: "):

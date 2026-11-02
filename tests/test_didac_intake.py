@@ -1,5 +1,6 @@
 from didac_app.config import DidacConfig
 from didac_app.intake import continue_intake, start_intake
+from didac_app.models import Lead
 
 
 def test_visitor_intake_flow(store):
@@ -15,7 +16,8 @@ def test_visitor_intake_flow(store):
     assert lead.city == "Bangalore"
     lead, reply = continue_intake(lead, "science lab for 20 schools", store, DidacConfig())
     assert lead.status == "New"
-    assert lead.priority in {"Hot", "Warm"}
+    assert lead.interest == "science lab for 20 schools"
+    assert lead.schools_count == "20"
 
 
 def test_brochure_menu_flow(store):
@@ -45,7 +47,6 @@ def test_requirement_can_be_captured_as_one_short_note(store):
     assert lead.lead_type == "Distributor"
     assert "STREAM" in lead.interest
     assert lead.schools_count == "25"
-    assert lead.owner == "Channel sales"
     assert "saved your profile" in reply.lower()
 
 
@@ -56,3 +57,11 @@ def test_badge_scan_menu_option(store):
     lead, reply = continue_intake(lead, "6", store, config)
     assert lead.status == "Badge:collect"
     assert "badge" in reply.lower()
+
+
+def test_summary_counts_leads_and_hot_command_is_gone(store):
+    from didac_app.replies import command_reply
+
+    store.create_lead(Lead(from_number="whatsapp:+919876543299"))
+    assert "Total leads: 1" in command_reply("/summary", store, DidacConfig())
+    assert command_reply("/hot", store, DidacConfig()).startswith("Unknown command")

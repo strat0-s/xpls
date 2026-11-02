@@ -5,7 +5,6 @@ import re
 from didac_app.config import DidacConfig, brochure_catalog
 from didac_app.models import Lead
 from didac_app.parser import update_lead_from_note
-from didac_app.scoring import enrich_lead
 from didac_app.storage import LeadStore
 
 MAIN_MENU = (
@@ -54,7 +53,6 @@ def continue_intake(lead: Lead, body: str, store: LeadStore, config: DidacConfig
         lead.notes = merge_note(lead.notes, f"Feedback: {text}")
         lead.status = "New"
         update_lead_from_note(lead, text)
-        enrich_lead(lead, config)
         store.update_lead(lead)
         return lead, "Thank you. We saved your feedback. If you want anything else, reply menu."
     if state == "Badge:collect":
@@ -63,7 +61,6 @@ def continue_intake(lead: Lead, body: str, store: LeadStore, config: DidacConfig
         if is_qualification_note(text):
             update_lead_from_note(lead, text)
             lead.status = "New"
-            enrich_lead(lead, config)
             store.update_lead(lead)
             return lead, qualification_saved_reply(lead)
         lead.lead_type = normalize_role(text)
@@ -80,14 +77,8 @@ def continue_intake(lead: Lead, body: str, store: LeadStore, config: DidacConfig
         lead.interest = text
         lead.schools_count = extract_schools_count(text)
         lead.status = "New"
-        enrich_lead(lead, config)
         store.update_lead(lead)
-        return lead, (
-            f"Thanks. We saved your details.\n"
-            f"Priority: {lead.priority}\n"
-            f"Our team owner: {lead.owner}\n\n"
-            f"{lead.whatsapp_draft}"
-        )
+        return lead, "Thanks. We saved your details. Our team will be in touch."
     return lead, ROLE_PROMPT
 
 
@@ -108,16 +99,14 @@ def handle_menu_choice(lead: Lead, text: str, store: LeadStore, config: DidacCon
     if lowered.startswith("4") or "demo" in lowered:
         lead.interest = merge_note(lead.interest, "Demo requested")
         lead.status = "New"
-        enrich_lead(lead, config)
         store.update_lead(lead)
         calendar = f"\nBook here: {config.calendar_url}" if config.calendar_url else ""
         return lead, f"Thanks. We marked this as a demo request. Our team will follow up.{calendar}"
     if lowered.startswith("5") or "sales" in lowered or "talk" in lowered:
         lead.interest = merge_note(lead.interest, "Talk to sales requested")
         lead.status = "New"
-        enrich_lead(lead, config)
         store.update_lead(lead)
-        return lead, f"Thanks. We marked this for sales follow-up. Owner: {lead.owner}. Please share your name and organisation if not already shared."
+        return lead, "Thanks. We marked this for sales follow-up. Please share your name and organisation if not already shared."
     if lowered.startswith("6") or "badge" in lowered or "id card" in lowered or "qr" in lowered:
         lead.status = "Badge:collect"
         store.update_lead(lead)
@@ -147,7 +136,6 @@ def handle_brochure_choice(lead: Lead, text: str, store: LeadStore, config: Dida
     lead.interest = merge_note(lead.interest, f"Downloaded brochure: {selected['name']}")
     lead.tags = merge_note(lead.tags, selected["key"])
     lead.status = "New"
-    enrich_lead(lead, config)
     store.update_lead(lead)
     if selected["url"]:
         return lead, f"Here is the {selected['name']} brochure:\n{selected['url']}\n\nWould you also like to share your requirement? Reply 2 or type menu."
@@ -185,8 +173,7 @@ def qualification_saved_reply(lead: Lead) -> str:
     return (
         "Thanks. We saved your profile and requirement.\n"
         f"Role: {lead.lead_type or lead.organisation_type or 'Not specified'}\n"
-        f"Interest: {lead.interest or 'Not specified'}\n"
-        f"Priority: {lead.priority} | Owner: {lead.owner}\n\n"
+        f"Interest: {lead.interest or 'Not specified'}\n\n"
         "You can send a visiting card photo also, or type menu for brochures/demo."
     )
 

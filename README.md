@@ -189,7 +189,6 @@ Commands:
 
 ```text
 /summary
-/hot
 /followups
 /export excel
 /send brochure 9845xxxxx
@@ -217,7 +216,7 @@ Bot: asks city/state
 Visitor: Bangalore
 Bot: asks requirement
 Visitor: science lab for 20 schools
-Bot: saves and scores the lead
+Bot: saves the lead
 ```
 
 Dashboard (locally `http://127.0.0.1:5001`, deployed `https://<your-app>.vercel.app`):

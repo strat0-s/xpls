@@ -15,7 +15,6 @@ from didac_app.models import Lead
 
 
 LEAD_FIELDS = [field.name for field in fields(Lead)]
-INTEGER_FIELDS = {"score"}
 NOT_DELETED = "(deleted_at IS NULL OR deleted_at = '')"
 # For media/feedback joined to their lead; rows without a lead stay visible (LEFT JOIN gives NULL).
 LEAD_NOT_DELETED = "(l.deleted_at IS NULL OR l.deleted_at = '')"
@@ -34,7 +33,7 @@ class LeadStore:
 
     def init_db(self) -> None:
         columns = ", ".join(
-            f"{field} {'INTEGER' if field in INTEGER_FIELDS else 'TEXT'}" for field in LEAD_FIELDS if field != "id"
+            f"{field} TEXT" for field in LEAD_FIELDS if field != "id"
         )
         now = "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')"
         with self.connect() as conn:
@@ -48,8 +47,7 @@ class LeadStore:
             )
             for field in LEAD_FIELDS:
                 if field != "id":
-                    column_type = "INTEGER" if field in INTEGER_FIELDS else "TEXT"
-                    conn.execute(f"ALTER TABLE leads ADD COLUMN IF NOT EXISTS {field} {column_type}")
+                    conn.execute(f"ALTER TABLE leads ADD COLUMN IF NOT EXISTS {field} TEXT")
             conn.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS media (
@@ -222,11 +220,6 @@ class LeadStore:
         with self.connect() as conn:
             rows = conn.execute(query, params).fetchall()
         return [row_to_lead(row) for row in rows]
-
-    def count_by_priority(self) -> dict[str, int]:
-        with self.connect() as conn:
-            rows = conn.execute("SELECT priority, COUNT(*) AS count FROM leads GROUP BY priority").fetchall()
-        return {row["priority"] or "Unknown": row["count"] for row in rows}
 
     def add_media(self, lead_id: int, url: str, content_type: str = "", local_path: str = "", extracted_text: str = "") -> None:
         with self.connect() as conn:
