@@ -1,4 +1,5 @@
 from datetime import datetime
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -89,6 +90,38 @@ def test_public_address_and_scheme_checks(monkeypatch):
     assert not media.is_safe_http_url("javascript:alert(1)")
 
 
+@pytest.mark.parametrize("url", ["http://example.com:99999/", "http://example.com:abc/", "http://example.com:0/"])
+def test_bad_port_is_unsafe_not_a_crash(monkeypatch, url):
+    fake_dns(monkeypatch, "93.184.216.34")
+    assert not media.is_safe_http_url(url)
+
+
+def test_qr_url_is_recorded_even_when_dns_fails(monkeypatch):
+    def no_dns(host, port):
+        raise media.socket.gaierror("down")
+
+    monkeypatch.setattr(media.socket, "getaddrinfo", no_dns)
+    monkeypatch.setattr("didac_app.media.decode_qr_values", lambda local_path: ["https://dead-site.example/page"])
+    assert "QR URL: https://dead-site.example/page" in append_qr_details("/tmp/badge.jpg", "Name: Magesh")
+
+
+def test_multi_hop_relative_redirect_is_followed_and_each_hop_checked(monkeypatch):
+    fake_dns(monkeypatch, "93.184.216.34")
+    calls = []
+
+    def get(url, **kw):
+        calls.append(url)
+        if url.endswith("/a"):
+            return SimpleNamespace(is_redirect=True, headers={"Location": "/b"})
+        if url.endswith("/b"):
+            return SimpleNamespace(is_redirect=True, headers={"Location": "https://other.example/c"})
+        return SimpleNamespace(is_redirect=False, text="ok")
+
+    monkeypatch.setattr(media.requests, "get", get)
+    assert media.get_public_page("http://site.example/a").text == "ok"
+    assert calls == ["http://site.example/a", "http://site.example/b", "https://other.example/c"]
+
+
 def test_redirect_to_private_address_is_blocked(monkeypatch):
     addresses = {"public.example": "93.184.216.34", "internal.example": "10.0.0.5"}
     monkeypatch.setattr(media.socket, "getaddrinfo", lambda host, port: [(0, 0, 0, "", (addresses[host], port))])
@@ -108,6 +141,11 @@ def test_vcard_qr_becomes_lead_fields():
     assert media.parse_contact_qr(vcard) == (
         "Name: Asha Rao\nOrg: Sunrise School\nRole: Principal\nPhone: +919845604740\nEmail: asha@sunrise.edu"
     )
+
+
+def test_vcard_with_folded_lines_and_grouped_properties():
+    vcard = "BEGIN:VCARD\r\nFN:Asha\r\n  Rao\r\nitem1.EMAIL;type=INTERNET:asha@sunrise.edu\r\nitem2.TEL:+919845604740\r\nEND:VCARD"
+    assert media.parse_contact_qr(vcard) == "Name: Asha Rao\nEmail: asha@sunrise.edu\nPhone: +919845604740"
 
 
 def test_mecard_qr_becomes_lead_fields():

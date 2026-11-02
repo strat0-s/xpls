@@ -37,6 +37,7 @@ def save_media(
     name = Path(urlparse(url).path).name or "media"
     key = f"{media_storage_prefix(sender, received_at)}/{name}{suffix if not name.endswith(suffix) else ''}"
     # Bird answers with a redirect to a presigned URL; follow it without forwarding the auth header.
+    # Not run through get_public_page: both URLs come from the token-authenticated Bird webhook / Bird's own storage, not from a visitor.
     response = requests.get(url, headers=headers, timeout=20, allow_redirects=False)
     if response.is_redirect:
         response = requests.get(response.headers["Location"], timeout=20)
@@ -91,7 +92,7 @@ def append_qr_details(local_path: str, extracted_text: str) -> str:
         contact = parse_contact_qr(value)
         if contact:
             lines.append(contact)
-        elif is_safe_http_url(value):
+        elif is_http_url(value):
             lines.append(f"QR URL: {value}")
             page_text = fetch_qr_page_text(value)
             if page_text:
@@ -190,12 +191,21 @@ def qr_candidates(image, cv2, np):
             yield cv2.filter2D(resized, -1, sharpen_kernel)
 
 
+def is_http_url(value: str) -> bool:
+    """Syntax only (scheme, host, valid port): enough to record a QR URL even when the site is down or its DNS fails."""
+    try:
+        parsed = urlparse(value)
+        return parsed.scheme in {"http", "https"} and bool(parsed.hostname) and parsed.port != 0
+    except ValueError:
+        return False
+
+
 def is_safe_http_url(value: str) -> bool:
     """http(s) URL whose host resolves only to public addresses, so a QR cannot point the server at internal services.
     ponytail: resolve-then-fetch leaves a DNS-rebinding window; pin the resolved IP if this ever handles untrusted traffic at scale."""
-    parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    if not is_http_url(value):
         return False
+    parsed = urlparse(value)
     try:
         addresses = {info[4][0] for info in socket.getaddrinfo(parsed.hostname, parsed.port or 443)}
     except (socket.gaierror, UnicodeError):
@@ -240,9 +250,9 @@ def parse_contact_qr(value: str) -> str:
     fields: dict[str, str] = {}
     text = value.strip()
     if text.upper().startswith("BEGIN:VCARD"):
-        for line in text.splitlines():
+        for line in re.sub(r"\r?\n[ \t]", "", text).splitlines():
             key, _, val = line.partition(":")
-            key = key.split(";")[0].upper()
+            key = key.split(";")[0].rsplit(".", 1)[-1].upper()
             if not val.strip():
                 continue
             if key == "FN":

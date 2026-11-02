@@ -252,7 +252,9 @@ OPENAI_TTS_MODEL=gpt-4o-mini-tts
 OPENAI_TTS_VOICE=alloy
 ```
 
-With `OPENAI_API_KEY` set, WhatsApp images are processed with vision OCR into lead fields, voice notes are transcribed into notes/lead fields, and `/tts your text` creates an MP3 file (local runs only). Badge QR codes in photos are decoded with OpenCV. The file is copied to a temp file for processing and deleted right after; the original stays in the bucket. If OpenAI fails, the message is still saved with a "pending" placeholder instead of being lost.
+With `OPENAI_API_KEY` set, WhatsApp images are processed with vision OCR into lead fields, voice notes are transcribed into notes/lead fields, and `/tts your text` creates an MP3 file (local runs only). Badge QR codes in photos are decoded with OpenCV. vCard and MECARD QR codes become lead fields; other QR URLs are recorded and, if they point at a public address, their page text is read (private addresses and redirects to them are blocked).
+
+Repeat scans: a new card whose email or phone matches a saved lead, and whose name does not contradict it, fills that lead's blank fields instead of creating a second lead ("Already saved as #N"). A match on name + organisation only, or on a shared phone/email with a different name, is saved as a new lead with a "possible duplicate of #N" badge for you to check. Two scans of the same new person at the same instant can still both create a lead. The file is copied to a temp file for processing and deleted right after; the original stays in the bucket. If OpenAI fails, the message is still saved with a "pending" placeholder instead of being lost.
 
 Media cap:
 

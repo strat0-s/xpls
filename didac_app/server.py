@@ -389,22 +389,19 @@ def send_replies(event_id: int, to_number: str, replies: list[str], lead_ids: li
 
 
 def merge_scan_into(existing, new_lead, media_url, content_type, local_path, lead_text, body, from_number) -> int:
-    """Fill blanks of the matching lead from a repeat scan and attach the media. A scan that adds nothing is skipped.
-    ponytail: the uploaded file of a skipped scan stays in the bucket; add a blobstore delete if storage matters."""
+    """Fill blanks of the matching lead from a repeat scan and attach the media. A scan that adds no field is not attached,
+    but its caption tags and note are always kept.
+    ponytail: the uploaded file of a skipped scan stays in the bucket; add a blobstore delete if storage matters.
+    ponytail: find_duplicate then create_lead is not atomic, so two simultaneous scans of one new person can both create a lead; take an advisory lock on the normalised email/phone if that shows up."""
     filled = fill_blanks(existing, new_lead)
+    append = {name: getattr(new_lead, name) for name in ("tags", "captured_by", "capture_context") if getattr(new_lead, name)}
     if filled:
-        existing.media_urls = merge_semicolon(existing.media_urls, media_url)
-        existing.media_local_paths = merge_semicolon(existing.media_local_paths, local_path)
-        store.update_lead_fields(
-            existing.id,
-            **{name: getattr(existing, name) for name in filled},
-            media_urls=existing.media_urls,
-            media_local_paths=existing.media_local_paths,
-            updated_at=datetime.now(UTC).isoformat(timespec="seconds"),
-        )
-        media_id = store.add_media(existing.id, media_url, content_type, local_path, lead_text)
-        if body:
-            store.add_feedback(from_number, body, existing.id, feedback_type="text_caption", media_id=media_id)
+        append |= {"media_urls": media_url, "media_local_paths": local_path}
+    if filled or append:
+        store.merge_into_lead(existing.id, {name: getattr(existing, name) for name in filled}, append)
+    media_id = store.add_media(existing.id, media_url, content_type, local_path, lead_text) if filled else None
+    if body:
+        store.add_feedback(from_number, body, existing.id, feedback_type="text_caption", media_id=media_id)
     return existing.id
 
 
@@ -414,7 +411,7 @@ def multi_card_media_reply(leads, processed_count: int, skipped_count: int, merg
         lines.append(f"Saved {len(leads)} lead record(s) from {processed_count} media file(s).")
     for lead in leads[:5]:
         lines.append(f"#{lead.id}: {lead.org or lead.name or lead.phone or 'Unnamed lead'}")
-    for lead_id in merged_ids[:5]:
+    for lead_id in unique_ids(merged_ids)[:5]:
         lines.append(f"Already saved as #{lead_id}.")
     if skipped_count:
         lines.append(f"Skipped {skipped_count} extra file(s). Please send them separately.")
