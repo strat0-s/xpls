@@ -167,6 +167,21 @@ def test_report_downloads_xlsx_and_csv():
     assert b"first_name" in csv_response.data
 
 
+REMOVED_FIELDS = {"score", "priority", "owner", "next_action", "follow_up_date", "email_subject", "email_draft", "whatsapp_draft"}
+
+
+def test_removed_lead_fields_are_absent_from_api_and_csv():
+    import didac_app.server as server
+
+    server.store.create_lead(Lead(name="Asha"))
+    client = app.test_client()
+    api_keys = set(client.get("/api/leads").get_json()[0])
+    csv_header = set(client.get("/export/report.csv").data.decode().splitlines()[0].split(","))
+    assert "name" in api_keys and "name" in csv_header
+    assert not REMOVED_FIELDS & api_keys
+    assert not REMOVED_FIELDS & csv_header
+
+
 def test_two_cards_create_two_leads_even_with_existing_context(monkeypatch, sent):
     import didac_app.server as server
 
