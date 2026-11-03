@@ -29,7 +29,7 @@
   <div>
     <a href="{{ url_for('gallery') }}" style="font-size:13px;font-weight:600;text-decoration:none">&larr; All leads</a>
     <h1>{{ title }}</h1>
-    <div class="sub">{{ 'Contact form' if lead.doc_type == 'form' else 'Other document' }} · captured {{ lead.created_at|local_time }}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}</div>
+    <div class="sub">{{ {'form': 'Contact form', 'badge': 'Event badge / QR'}.get(lead.doc_type, 'Other document') }} · captured {{ lead.created_at|local_time }}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}</div>
   </div>
   {% if user.is_admin %}
   <form method="post" action="{{ url_for('lead_delete', lead_id=lead.id) }}" onsubmit="return confirm('Delete this lead?')">
@@ -81,7 +81,7 @@
       <div class="{{ 'wide' if field in ('name', 'org', 'email') }}"><label class="f" for="f-{{ field }}">{{ label }}</label><input class="t" id="f-{{ field }}" name="{{ field }}" value="{{ lead[field] }}"></div>
       {% endfor %}
       <div class="wide"><label class="f" for="f-doc_type">Type</label>
-        <select class="t" id="f-doc_type" name="doc_type"><option value="form" {{ 'selected' if lead.doc_type == 'form' }}>Contact form</option><option value="other" {{ 'selected' if lead.doc_type != 'form' }}>Other document</option></select></div>
+        <select class="t" id="f-doc_type" name="doc_type"><option value="form" {{ 'selected' if lead.doc_type == 'form' }}>Contact form</option><option value="badge" {{ 'selected' if lead.doc_type == 'badge' }}>Event badge / QR</option><option value="other" {{ 'selected' if lead.doc_type not in ('form', 'badge') }}>Other document</option></select></div>
       <div class="wide"><label class="f" for="f-organisation_type">Organisation type (used for the Orbit export)</label>
         <select class="t" id="f-organisation_type" name="organisation_type"><option value="">Not set</option>{% for code, label in org_types.items() %}<option value="{{ code }}" {{ 'selected' if code == org_type }}>{{ label }}</option>{% endfor %}</select></div>
       <div class="wide"><label class="f" for="f-interest">Summary of what they need</label><textarea class="t" id="f-interest" name="interest" rows="3">{{ lead.interest }}</textarea></div>

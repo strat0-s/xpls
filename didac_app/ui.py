@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
@@ -95,11 +96,14 @@ def register(app, get_store, get_config) -> None:
             media.setdefault(row["lead_id"], []).append(row)
         cards = [lead_card(lead, media.get(lead.id, []), members) for lead in leads]
         tab = request.args.get("type")
-        if tab not in ("forms", "other"):
-            tab = "forms" if any(card["is_form"] for card in cards) else "other"
+        who = request.args.get("who") if request.args.get("who") in ("team", "visitors") else ""
+        if who:
+            cards = [card for card in cards if card["is_team"] == (who == "team")]
+        if tab not in ("forms", "badges", "other"):
+            tab = next((name for name in ("forms", "badges") if any(card["tab"] == name for card in cards)), "other")
         query = request.args.get("q", "").strip().lower()
-        shown = [card for card in cards if card["is_form"] == (tab == "forms") and (not query or query in card["search"])]
-        return render_template("gallery.html", cards=shown, tab=tab, q=request.args.get("q", ""))
+        shown = [card for card in cards if card["tab"] == tab and (not query or query in card["search"])]
+        return render_template("gallery.html", cards=shown, tab=tab, q=request.args.get("q", ""), who=who)
 
     @app.route("/leads/<int:lead_id>", methods=["GET", "POST"])
     def lead_detail(lead_id: int):
@@ -114,7 +118,7 @@ def register(app, get_store, get_config) -> None:
                 **values,
                 organisation_type=org_type if (org_type := request.form.get("organisation_type", "")) in orbit.ORG_TYPES else "",
                 interest=request.form.get("interest", "").strip(),
-                doc_type="form" if request.form.get("doc_type") == "form" else "other",
+                doc_type=kind if (kind := request.form.get("doc_type")) in ("form", "badge") else "other",
                 updated_by=g.user["name"],
                 updated_at=datetime.now(UTC).isoformat(timespec="seconds"),
                 review_reason="",
@@ -160,10 +164,10 @@ def register(app, get_store, get_config) -> None:
 
     @app.get("/export")
     def export_page():
-        rows, left_out, people = export_selection(get_store(), request.args)
+        rows, people = export_selection(get_store(), request.args)
         query = {key: value for key, value in request.args.items() if value and key in EXPORT_FILTERS}
         return render_template(
-            "export.html", rows=rows, left_out=left_out, people=people, org_types=orbit.ORG_TYPES, query=query,
+            "export.html", rows=rows, people=people, org_types=orbit.ORG_TYPES, query=query,
             orgs=orbit.org_count(rows), max_orgs=orbit.MAX_ORGS, args=request.args,
         )
 
@@ -171,7 +175,7 @@ def register(app, get_store, get_config) -> None:
     def export_orbit(fmt: str):
         if fmt not in ("csv", "xlsx"):
             abort(404)
-        rows, _left_out, _people = export_selection(get_store(), request.args)
+        rows, _people = export_selection(get_store(), request.args)
         if not rows or orbit.org_count(rows) > orbit.MAX_ORGS:
             abort(400)
         body, mimetype = (orbit.to_csv(rows), "text/csv") if fmt == "csv" else (
@@ -204,9 +208,9 @@ def register(app, get_store, get_config) -> None:
 EXPORT_FILTERS = ("from", "to", "by", "type")
 
 
-def export_selection(store, args) -> tuple[list[dict], list[tuple], list[str]]:
-    """Leads matching the export filters (capture date in IST, who captured it, organisation type) as Orbit rows,
-    the leads left out with the reason, and the capture names to offer in the filter."""
+def export_selection(store, args) -> tuple[list[dict], list[str]]:
+    """Leads matching the export filters (capture date in IST, who captured it, organisation type) as Orbit rows
+    and the capture names to offer in the filter."""
     start, end = parse_day(args.get("from")), parse_day(args.get("to"))
     by, kind = args.get("by", ""), args.get("type", "")
     members = members_by_phone(store)
@@ -220,8 +224,7 @@ def export_selection(store, args) -> tuple[list[dict], list[tuple], list[str]]:
         if (by and name != by) or (kind and orbit.lead_org_type(lead) != kind):
             continue
         leads.append(lead)
-    rows, left_out = orbit.build_export(leads)
-    return rows, left_out, sorted(people)
+    return [orbit.orbit_row(lead) for lead in leads], sorted(people)
 
 
 def parse_day(value: str | None) -> date | None:
@@ -282,7 +285,7 @@ def lead_card(lead, media: list[dict], members: dict[str, str]) -> dict:
     org = " · ".join(part for part in (lead.org, lead.city) if part)
     return {
         "id": lead.id,
-        "is_form": lead.doc_type == "form",
+        "tab": {"form": "forms", "badge": "badges"}.get(lead.doc_type, "other"),
         "name": name,
         "org": org,
         "phone": lead.phone,
@@ -303,7 +306,8 @@ def lead_items(lead, store, members: dict[str, str]) -> list[dict]:
     """Everything received for the lead (photos, voice notes, texts), oldest first."""
     by, _initials, is_team = author(lead, members)
     items = []
-    for row in store.list_media(lead.id):
+    media_rows = store.list_media(lead.id)
+    for row in media_rows:
         content_type = row["content_type"] or ""
         kind = "image" if content_type.startswith("image/") else "audio" if content_type.startswith("audio/") else "file"
         items.append({"kind": kind, "id": row["id"], "text": row["extracted_text"], "by": by, "is_team": is_team, "created_at": row["created_at"]})
@@ -312,4 +316,12 @@ def lead_items(lead, store, members: dict[str, str]) -> list[dict]:
             continue
         name = members.get(auth.normalize_phone(row["from_number"]))
         items.append({"kind": "text", "text": row["body"], "by": name or "Visitor via WhatsApp", "is_team": bool(name), "created_at": row["created_at"]})
+    # Text kept only on the lead (older leads, typed "New lead" messages) has no feedback row: show it too, once.
+    shown = [item["text"] for item in items if item["kind"] == "text"]
+    saved = [part for part in lead.text_notes.split("; ") if part.strip() and not any(part.strip() in text for text in shown)]
+    typed = re.sub(r"^new lead\s*", "", lead.raw_message.strip(), flags=re.I) if lead.raw_message and not media_rows else ""
+    if typed and not any(typed in text or text in typed for text in shown + saved):
+        saved.append(typed)
+    if saved:
+        items.append({"kind": "text", "text": "; ".join(saved), "by": by, "is_team": is_team, "created_at": lead.created_at})
     return sorted(items, key=lambda item: item["created_at"])

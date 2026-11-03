@@ -30,11 +30,18 @@
 {% block content %}
 <div class="bar">
   <div class="seg">
-    <a href="{{ url_for('gallery', type='forms', q=q or None) }}" class="{{ 'on' if tab == 'forms' }}">Contact forms</a>
-    <a href="{{ url_for('gallery', type='other', q=q or None) }}" class="{{ 'on' if tab == 'other' }}">Other documents</a>
+    <a href="{{ url_for('gallery', type='forms', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'forms' }}">Contact forms</a>
+    <a href="{{ url_for('gallery', type='badges', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'badges' }}">Event badges</a>
+    <a href="{{ url_for('gallery', type='other', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'other' }}">Other documents</a>
+  </div>
+  <div class="seg" aria-label="Who sent it">
+    <a href="{{ url_for('gallery', type=tab, q=q or None) }}" class="{{ 'on' if not who }}">Everyone</a>
+    <a href="{{ url_for('gallery', type=tab, q=q or None, who='team') }}" class="{{ 'on' if who == 'team' }}">Team</a>
+    <a href="{{ url_for('gallery', type=tab, q=q or None, who='visitors') }}" class="{{ 'on' if who == 'visitors' }}">Visitors</a>
   </div>
   <form class="search" method="get" action="{{ url_for('gallery') }}">
     <input type="hidden" name="type" value="{{ tab }}">
+    {% if who %}<input type="hidden" name="who" value="{{ who }}">{% endif %}
     <label for="q" style="position:absolute;left:-9999px">Search leads</label>
     <input id="q" name="q" value="{{ q }}" placeholder="Search name, school, phone">
   </form>
@@ -71,6 +78,6 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="card empty">{{ 'No contact forms yet.' if tab == 'forms' else 'Nothing here yet.' }}{% if q %} Try a different search.{% endif %}</div>
+<div class="card empty">{{ {'forms': 'No contact forms yet.', 'badges': 'No event badges yet.'}.get(tab, 'Nothing here yet.') }}{% if q %} Try a different search.{% endif %}</div>
 {% endif %}
 {% endblock %}
