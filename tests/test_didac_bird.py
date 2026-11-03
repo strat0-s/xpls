@@ -41,7 +41,7 @@ def test_webhook_replies_through_bird_and_ignores_duplicates(sent):
 
 
 def test_failed_reply_is_recorded_and_still_returns_200(store, monkeypatch):
-    def boom(config, to_number, text):
+    def boom(*args, **kwargs):
         raise RuntimeError("bird down")
 
     monkeypatch.setattr(bird, "send_message", boom)

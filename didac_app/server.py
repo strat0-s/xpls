@@ -6,14 +6,10 @@ from pathlib import Path
 
 from flask import Flask, jsonify, redirect, render_template_string, request, send_file
 
-from didac_app import auth, bird, blobstore, ui
+from didac_app import auth, bird, blobstore, flows, ui
 from didac_app.config import brochure_catalog, load_config
-from didac_app.dedupe import fill_blanks, find_duplicate
-from didac_app.intake import continue_intake, is_start_message, start_intake
-from didac_app.media import extract_media_text, save_media
-from didac_app.openai_services import split_lead_texts
-from didac_app.parser import parse_message, update_lead_from_note, update_lead_from_text
-from didac_app.replies import command_reply, lead_created_reply, media_reply
+from didac_app.flows import Reply
+from didac_app.replies import command_reply
 from didac_app.storage import LeadStore
 
 app = Flask(__name__)
@@ -117,202 +113,12 @@ def bird_webhook():
     event_id = store.add_inbound_event(from_number, body, num_media, [url for url, _ in media], event, message_id=message["message_id"])
     if event_id is None:
         return "duplicate", 200
-    touched_lead_ids = []
-    response = []
-
-    if body.startswith("/"):
-        response.append(command_reply(body, store, config))
+    if body.startswith("/") and flows.staff_user(store, from_number):
         store.update_inbound_event(event_id, "processed_command")
-        return send_replies(event_id, from_number, response, touched_lead_ids)
-
-    latest = store.latest_lead_for_number(from_number)
-    if num_media:
-        context_lead = store.latest_lead_for_number(from_number)
-        is_feedback_media = bool(context_lead and context_lead.status == "Feedback:collect")
-        is_intake_media = bool(context_lead and context_lead.status.startswith("Intake:"))
-        process_count = min(num_media, config.max_media_per_message)
-        skipped_count = max(0, num_media - process_count)
-        extracted_texts = []
-        created_leads = []
-        merged_ids = []
-        media_urls = []
-        local_paths = []
-        applied_extracted_to_lead = False
-        for index in range(process_count):
-            media_url, content_type = media[index]
-            local_path, temp_path = download_media(media_url, content_type, from_number)
-            try:
-                extracted = extract_media_text(temp_path, content_type)
-            finally:
-                Path(temp_path).unlink(missing_ok=True)
-            media_lead_texts = split_lead_texts(extracted) if extracted else []
-            should_create_media_leads = bool(
-                media_lead_texts and (content_type.startswith("image/") or len(media_lead_texts) > 1) and (not is_feedback_media or len(media_lead_texts) > 1)
-            )
-            if should_create_media_leads:
-                for lead_text in media_lead_texts:
-                    _, new_lead = parse_message("New lead\n" + lead_text, from_number)
-                    if body:
-                        apply_text_note(new_lead, body)
-                    new_lead.media_urls = media_url
-                    new_lead.media_local_paths = local_path
-                    match = find_duplicate(store, new_lead)
-                    if match and match[1]:
-                        merged_ids.append(merge_scan_into(match[0], new_lead, media_url, content_type, local_path, lead_text, body, from_number))
-                        continue
-                    if match:
-                        new_lead.review_reason = f"possible duplicate of #{match[0].id}"
-                    new_lead = store.create_lead(new_lead)
-                    touched_lead_ids.append(new_lead.id)
-                    media_id = store.add_media(new_lead.id, media_url, content_type, local_path, lead_text)
-                    if body:
-                        store.add_feedback(
-                            from_number,
-                            body,
-                            new_lead.id,
-                            feedback_type="text_caption",
-                            media_id=media_id,
-                            sentiment="",
-                            action_required="",
-                        )
-                    created_leads.append(new_lead)
-                    extracted_texts.append(lead_text)
-                media_urls.append(media_url)
-                local_paths.append(local_path)
-                continue
-
-            lead = context_lead
-            if not lead:
-                lead = parse_message("New lead\nNotes: Media-only lead", from_number)[1]
-                lead = store.create_lead(lead)
-                touched_lead_ids.append(lead.id)
-                context_lead = lead
-            media_id = store.add_media(lead.id, media_url, content_type, local_path, extracted)
-            if is_feedback_media:
-                if body:
-                    apply_feedback_note(lead, body)
-                    store.add_feedback(
-                        from_number,
-                        body,
-                        lead.id,
-                        feedback_type="text_caption",
-                        media_id=media_id,
-                        sentiment="",
-                        action_required="",
-                    )
-                if extracted and "PENDING" not in extracted:
-                    apply_audio_or_media_note(lead, extracted, content_type)
-                    applied_extracted_to_lead = True
-                store.add_feedback(
-                    from_number,
-                    extracted or f"Media feedback saved: {content_type}",
-                    lead.id,
-                    feedback_type="audio" if content_type.startswith("audio/") else "media",
-                    media_id=media_id,
-                    sentiment="",
-                    action_required="review_media",
-                )
-            elif is_intake_media and extracted and "PENDING" not in extracted:
-                if body:
-                    apply_text_note(lead, body)
-                apply_audio_or_media_note(lead, extracted, content_type)
-                applied_extracted_to_lead = True
-                store.add_feedback(
-                    from_number,
-                    extracted,
-                    lead.id,
-                    feedback_type="audio_transcript" if content_type.startswith("audio/") else "media_text",
-                    media_id=media_id,
-                    sentiment="",
-                    action_required="",
-                )
-            elif extracted and "PENDING" not in extracted and content_type.startswith("audio/"):
-                if body:
-                    apply_text_note(lead, body)
-                apply_audio_or_media_note(lead, extracted, content_type)
-                applied_extracted_to_lead = True
-                store.add_feedback(
-                    from_number,
-                    extracted,
-                    lead.id,
-                    feedback_type="audio_transcript",
-                    media_id=media_id,
-                    sentiment="",
-                    action_required="",
-                )
-            media_urls.append(media_url)
-            local_paths.append(local_path)
-            if extracted:
-                extracted_texts.append(extracted)
-        if created_leads or merged_ids:
-            touched_lead_ids.extend(merged_ids)
-            response.append(multi_card_media_reply(created_leads, process_count, skipped_count, merged_ids))
-        else:
-            lead = context_lead
-            if not lead:
-                lead = parse_message("New lead\nNotes: Media-only lead", from_number)[1]
-                lead = store.create_lead(lead)
-                touched_lead_ids.append(lead.id)
-            lead.media_urls = merge_semicolon(lead.media_urls, *media_urls)
-            lead.media_local_paths = merge_semicolon(lead.media_local_paths, *local_paths)
-            if body:
-                apply_text_note(lead, body)
-                store.add_feedback(from_number, body, lead.id, feedback_type="text_caption")
-            if extracted_texts and not applied_extracted_to_lead and not all("PENDING" in item for item in extracted_texts):
-                if is_intake_media:
-                    apply_audio_or_media_note(lead, "\n".join(extracted_texts), "")
-                else:
-                    update_lead_from_text(lead, "\n".join(extracted_texts))
-            if lead.status == "Feedback:collect":
-                lead.status = "New"
-            if lead.status.startswith("Intake:"):
-                lead.status = "New"
-            store.update_lead(lead)
-            if lead.id:
-                touched_lead_ids.append(lead.id)
-            response.append(media_reply(lead, "\n".join(extracted_texts), process_count, skipped_count))
-        store.update_inbound_event(event_id, "processed", unique_ids(touched_lead_ids))
-    elif latest and latest.status.startswith(("Menu:", "Brochure:", "Feedback:", "Intake:", "Badge:")):
-        _, reply = continue_intake(latest, body, store, config)
-        response.append(reply)
-        if latest.id:
-            touched_lead_ids.append(latest.id)
-        store.update_inbound_event(event_id, "processed", unique_ids(touched_lead_ids))
-        return send_replies(event_id, from_number, response, touched_lead_ids)
-
-    elif is_start_message(body):
-        response.append(start_intake(from_number, store))
-        latest = store.latest_lead_for_number(from_number)
-        if latest and latest.id:
-            touched_lead_ids.append(latest.id)
-        store.update_inbound_event(event_id, "processed", unique_ids(touched_lead_ids))
-        return send_replies(event_id, from_number, response, touched_lead_ids)
-
-    else:
-        kind, lead = parse_message(body, from_number)
-        if lead:
-            lead = store.create_lead(lead)
-            touched_lead_ids.append(lead.id)
-            response.append(lead_created_reply(lead, config))
-        elif body:
-            lead = store.latest_lead_for_number(from_number)
-            if lead:
-                apply_text_note(lead, body)
-                store.add_feedback(from_number, body, lead.id, feedback_type="text_message")
-                store.update_lead(lead)
-                if lead.id:
-                    touched_lead_ids.append(lead.id)
-                response.append(lead_created_reply(lead, config))
-            else:
-                response.append("Send lead details starting with 'New lead', or send /help for the format.")
-        else:
-            response.append("Message received. Send /help for DIDAC lead commands.")
-        store.update_inbound_event(event_id, "processed", unique_ids(touched_lead_ids))
-    return send_replies(event_id, from_number, response, touched_lead_ids)
-
-
-def download_media(media_url: str, content_type: str, from_number: str = "") -> tuple[str, str]:
-    return save_media(media_url, content_type, config, bird.media_headers(config), sender=from_number)
+        return send_replies(event_id, from_number, [Reply(command_reply(body, store, config))], [])
+    replies, lead_ids = flows.handle(store, config, from_number, body, media)
+    store.update_inbound_event(event_id, "processed", unique_ids(lead_ids))
+    return send_replies(event_id, from_number, replies, lead_ids)
 
 
 def unique_ids(values):
@@ -323,100 +129,14 @@ def unique_ids(values):
     return seen
 
 
-def merge_semicolon(current: str, *values: str) -> str:
-    parts = [part for part in [current, *values] if part]
-    seen = []
-    for part in parts:
-        if part not in seen:
-            seen.append(part)
-    return "; ".join(seen)
-
-
-def apply_text_note(lead, text: str):
-    if not text:
-        return lead
-    lead.text_notes = merge_semicolon(lead.text_notes, text)
-    apply_capture_metadata(lead, text)
-    update_lead_from_note(lead, text)
-    return lead
-
-
-def apply_feedback_note(lead, text: str):
-    if not text:
-        return lead
-    lead.feedback_notes = merge_semicolon(lead.feedback_notes, text)
-    apply_capture_metadata(lead, text)
-    update_lead_from_note(lead, text)
-    return lead
-
-
-def apply_audio_or_media_note(lead, text: str, content_type: str):
-    if not text:
-        return lead
-    if content_type.startswith("audio/"):
-        lead.audio_transcript = merge_semicolon(lead.audio_transcript, text)
-    else:
-        lead.text_notes = merge_semicolon(lead.text_notes, text)
-    update_lead_from_note(lead, text)
-    return lead
-
-
-def apply_capture_metadata(lead, text: str):
-    for line in text.splitlines():
-        if ":" not in line:
-            continue
-        key, value = line.split(":", 1)
-        normalized = key.strip().lower()
-        value = value.strip()
-        if not value:
-            continue
-        if normalized in {"by", "captured by", "staff", "team member"}:
-            lead.captured_by = merge_semicolon(lead.captured_by, value)
-        elif normalized in {"context", "capture context", "event context"}:
-            lead.capture_context = merge_semicolon(lead.capture_context, value)
-        elif normalized in {"tag", "tags"}:
-            lead.tags = merge_semicolon(lead.tags, value)
-
-
-def send_replies(event_id: int, to_number: str, replies: list[str], lead_ids: list[int]) -> tuple[str, int]:
+def send_replies(event_id: int, to_number: str, replies: list[Reply], lead_ids: list[int]) -> tuple[str, int]:
     # Answer 200 even if sending fails: Bird would retry and the retry is dropped as a duplicate anyway.
     try:
-        for text in replies:
-            bird.send_message(config, to_number, text)
+        for reply in replies:
+            bird.send_message(config, to_number, reply.text, reply.options, reply.as_list)
     except Exception as exc:
         store.update_inbound_event(event_id, "reply_failed", unique_ids(lead_ids), str(exc))
     return "OK", 200
-
-
-def merge_scan_into(existing, new_lead, media_url, content_type, local_path, lead_text, body, from_number) -> int:
-    """Fill blanks of the matching lead from a repeat scan and attach the media. A scan that adds no field is not attached,
-    but its caption tags and note are always kept.
-    ponytail: the uploaded file of a skipped scan stays in the bucket; add a blobstore delete if storage matters.
-    ponytail: find_duplicate then create_lead is not atomic, so two simultaneous scans of one new person can both create a lead; take an advisory lock on the normalised email/phone if that shows up."""
-    filled = fill_blanks(existing, new_lead)
-    append = {name: getattr(new_lead, name) for name in ("tags", "captured_by", "capture_context") if getattr(new_lead, name)}
-    if filled:
-        append |= {"media_urls": media_url, "media_local_paths": local_path}
-    if filled or append:
-        store.merge_into_lead(existing.id, {name: getattr(existing, name) for name in filled}, append)
-    media_id = store.add_media(existing.id, media_url, content_type, local_path, lead_text) if filled else None
-    if body:
-        store.add_feedback(from_number, body, existing.id, feedback_type="text_caption", media_id=media_id)
-    return existing.id
-
-
-def multi_card_media_reply(leads, processed_count: int, skipped_count: int, merged_ids=()) -> str:
-    lines = []
-    if leads:
-        lines.append(f"Saved {len(leads)} lead record(s) from {processed_count} media file(s).")
-    for lead in leads[:5]:
-        lines.append(f"#{lead.id}: {lead.org or lead.name or lead.phone or 'Unnamed lead'}")
-    for lead_id in unique_ids(merged_ids)[:5]:
-        lines.append(f"Already saved as #{lead_id}.")
-    if skipped_count:
-        lines.append(f"Skipped {skipped_count} extra file(s). Please send them separately.")
-    lines.append("Refresh the dashboard to see all records.")
-    return "\n".join(lines)
 
 
 def media_library_groups():

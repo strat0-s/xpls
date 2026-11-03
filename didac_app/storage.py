@@ -116,12 +116,18 @@ class LeadStore:
             )
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_phone_key ON users (phone) WHERE phone IS NOT NULL")
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users (email) WHERE email IS NOT NULL")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS sessions (phone TEXT PRIMARY KEY, flow TEXT NOT NULL, step TEXT NOT NULL, "
+                "data JSONB NOT NULL DEFAULT '{}', updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+            )
+            # Leads left on the old text-status conversation steps go back to plain New.
+            conn.execute("UPDATE leads SET status='New' WHERE status ~ '^(Menu|Intake|Brochure|Feedback|Badge):'")
             conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS inbound_events_message_id_key ON inbound_events (message_id)")
 
     def clear(self) -> None:
         with self.connect() as conn:
-            conn.execute("TRUNCATE inbound_events, feedback, media, leads RESTART IDENTITY")
+            conn.execute("TRUNCATE inbound_events, feedback, media, leads, sessions RESTART IDENTITY")
 
     def create_lead(self, lead: Lead) -> Lead:
         data = asdict(lead)
@@ -229,6 +235,37 @@ class LeadStore:
                 (login, ip, minutes),
             ).fetchone()
         return row["by_login"], row["by_ip"]
+
+    def get_session(self, phone: str) -> dict | None:
+        """The phone's session with `age_minutes`; the caller decides whether it is too old."""
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT *, EXTRACT(EPOCH FROM (now() - updated_at)) / 60 AS age_minutes FROM sessions WHERE phone=%s", (phone,)
+            ).fetchone()
+
+    def put_session(self, phone: str, flow: str, step: str, data: dict, keep_existing: bool = False) -> None:
+        """Create or replace the phone's session; keep_existing leaves a session that is already there (a parallel message created it first)."""
+        conflict = "DO NOTHING" if keep_existing else "DO UPDATE SET flow=EXCLUDED.flow, step=EXCLUDED.step, data=EXCLUDED.data, updated_at=now()"
+        with self.connect() as conn:
+            conn.execute(
+                f"INSERT INTO sessions (phone, flow, step, data) VALUES (%s, %s, %s, %s) ON CONFLICT (phone) {conflict}",
+                (phone, flow, step, json.dumps(data)),
+            )
+
+    def delete_session(self, phone: str) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM sessions WHERE phone=%s", (phone,))
+
+    def add_session_photo(self, phone: str, photo: dict, limit: int) -> int | None:
+        """Append one photo in a single UPDATE (photos of one batch arrive as parallel webhooks). Returns the photo count, or None when full or no longer collecting."""
+        with self.connect() as conn:
+            row = conn.execute(
+                "UPDATE sessions SET data = jsonb_set(data, '{photos}', COALESCE(data->'photos', '[]'::jsonb) || %s::jsonb), updated_at=now() "
+                "WHERE phone=%s AND step IN ('photos', 'kind') AND jsonb_array_length(COALESCE(data->'photos', '[]'::jsonb)) < %s "
+                "RETURNING jsonb_array_length(data->'photos') AS n",
+                (json.dumps([photo]), phone, limit),
+            ).fetchone()
+        return row["n"] if row else None
 
     def list_leads(self, where: str = "", params: tuple = ()) -> list[Lead]:
         query = f"SELECT * FROM leads WHERE {NOT_DELETED}"

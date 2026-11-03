@@ -35,7 +35,7 @@ def isolated_store(store, monkeypatch):
 def sent(monkeypatch):
     """Capture replies the app sends through Bird instead of calling the API."""
     messages = []
-    monkeypatch.setattr(bird, "send_message", lambda config, to_number, text: messages.append((to_number, text)))
+    monkeypatch.setattr(bird, "send_message", lambda config, to_number, text, options=None, as_list=False: messages.append((to_number, text, options or [])))
     return messages
 
 

@@ -3,52 +3,18 @@ from __future__ import annotations
 from pathlib import Path
 
 from didac_app.config import DidacConfig
-from didac_app.models import Lead
 from didac_app.openai_services import openai_enabled, text_to_speech
 from didac_app.storage import LeadStore
 
 
-HELP_TEXT = """Xperimentor DIDAC WhatsApp bot:
-Visitors can type: hi or menu
-
-Staff lead format:
-New lead
-Name:
-Org:
-Role:
-City:
-Interest:
-Budget:
-Timeline:
+HELP_TEXT = """Xperimentor DIDAC WhatsApp bot (staff):
+Type menu to scan a contact form, a document or an event badge, or to add a note.
+Type cancel to stop what you are doing.
 
 /summary
-/followups
 /export excel
 /send brochure <phone>
-/tts <text>
-You can also send a visiting-card photo or a voice note."""
-
-
-def lead_created_reply(lead: Lead, config: DidacConfig) -> str:
-    assets = asset_links(config)
-    return (
-        f"Lead saved: {lead.org or lead.name or 'Unnamed lead'}\n"
-        f"{assets}"
-    ).strip()
-
-
-def media_reply(lead: Lead, extracted_text: str, processed_count: int = 1, skipped_count: int = 0) -> str:
-    if extracted_text and "PENDING" not in extracted_text:
-        extra = f"\nExtracted text: {extracted_text[:300]}"
-    elif extracted_text:
-        extra = "\nMedia saved. OCR/transcription is pending or unavailable."
-    else:
-        extra = "\nMedia saved. No readable text was extracted."
-    skipped = f"\nSkipped {skipped_count} extra file(s). Please send them in a separate message." if skipped_count else ""
-    return (
-        f"Saved {processed_count} media file(s) for lead #{lead.id}: {lead.org or lead.name or lead.from_number}."
-        f"{extra}{skipped}\nRefresh the dashboard to see the record. Send missing details as Name/Org/Role/Interest if needed."
-    )
+/tts <text>"""
 
 
 def command_reply(body: str, store: LeadStore, config: DidacConfig) -> str:
@@ -57,9 +23,6 @@ def command_reply(body: str, store: LeadStore, config: DidacConfig) -> str:
         return HELP_TEXT
     if command.startswith("/summary"):
         return f"DIDAC summary\nTotal leads: {len(store.list_leads())}"
-    if command.startswith("/followups"):
-        leads = store.list_leads("status != %s", ("Closed",))[:10]
-        return format_lead_list("Pending follow-ups", leads)
     if command.startswith("/export"):
         return f"Download the report: {config.public_base_url.rstrip('/')}/export/report.xlsx"
     if command.startswith("/send brochure"):
@@ -74,17 +37,6 @@ def command_reply(body: str, store: LeadStore, config: DidacConfig) -> str:
         path = text_to_speech(text, output)
         return f"TTS audio created: {Path(path).resolve()}" if path else "TTS generation failed."
     return "Unknown command. Send /help."
-
-
-def format_lead_list(title: str, leads: list[Lead]) -> str:
-    if not leads:
-        return f"{title}: none yet."
-    lines = [title]
-    for lead in leads:
-        lines.append(
-            f"#{lead.id} {lead.org or lead.name or lead.from_number} | {lead.interest or 'No interest noted'}"
-        )
-    return "\n".join(lines)
 
 
 def asset_links(config: DidacConfig) -> str:
