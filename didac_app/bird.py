@@ -40,13 +40,28 @@ def media_headers(config: DidacConfig) -> dict[str, str]:
     return {"Authorization": f"AccessKey {config.bird_access_key}"}
 
 
-def send_message(config: DidacConfig, to_number: str, text: str) -> None:
+def message_body(text: str, options: list[tuple[str, str]] | None = None, as_list: bool = False) -> dict:
+    """Plain text; up to 3 tappable reply buttons (label max 20 chars); or a tap-list of up to 10 rows (title max 24, description max 72).
+    A tap comes back as an ordinary inbound text whose body is the label, so typing the label does the same."""
+    if options and as_list:
+        items = [
+            {"title": label[:24], "description": description[:72], "actions": [{"type": "postback", "postback": {"text": label[:24], "payload": label}}]}
+            for label, description in options[:10]
+        ]
+        return {"type": "list", "list": {"text": text, "items": items}}
+    if options:
+        actions = [{"type": "reply", "reply": {"text": label[:20]}} for label, _ in options[:3]]
+        return {"type": "text", "text": {"text": text, "actions": actions}}
+    return {"type": "text", "text": {"text": text}}
+
+
+def send_message(config: DidacConfig, to_number: str, text: str, options: list[tuple[str, str]] | None = None, as_list: bool = False) -> None:
     response = requests.post(
         f"{API_BASE}/workspaces/{config.bird_workspace_id}/channels/{config.bird_channel_id}/messages",
         headers=media_headers(config),
         json={
             "receiver": {"contacts": [{"identifierKey": "phonenumber", "identifierValue": to_number.replace("whatsapp:", "")}]},
-            "body": {"type": "text", "text": {"text": text}},
+            "body": message_body(text, options, as_list),
         },
         timeout=15,
     )

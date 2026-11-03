@@ -36,3 +36,9 @@ def signed_url(config: DidacConfig, key: str, expires_in: int = 3600) -> str:
     )
     response.raise_for_status()
     return f"{_base(config)}{response.json()['signedURL']}"
+
+
+def download(config: DidacConfig, key: str) -> bytes:
+    response = requests.get(f"{_base(config)}/object/{config.supabase_bucket}/{quote(key)}", headers=_headers(config), timeout=30)
+    response.raise_for_status()
+    return response.content

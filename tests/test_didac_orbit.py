@@ -29,9 +29,7 @@ def test_row_maps_lead_to_orbit_columns():
         email="Asha@Sunrise.edu", pincode="560001", curriculum="CBSE; State Board; IB", medium_of_instruction="English; Hindi",
         google_maps_url="https://maps.example/x", udise_code="29010100101",
     )
-    row, reason = orbit.orbit_row(lead)
-    assert reason == ""
-    assert row | {} == {
+    assert orbit.orbit_row(lead) == {
         "name": "Sunrise School", "type": "SCHOOL", "state": "", "city": "", "district": "", "pincode": "560001",
         "website": "", "googleMapsUrl": "https://maps.example/x", "udiseCode": "29010100101", "curriculum": "CBSE, STATE",
         "mediumOfInstruction": "English, Hindi", "contact_firstName": "Asha", "contact_lastName": "Rao",
@@ -39,15 +37,15 @@ def test_row_maps_lead_to_orbit_columns():
     }
 
 
-def test_type_falls_back_to_lead_type_and_rows_orbit_would_reject_are_left_out():
-    assert orbit.orbit_row(Lead(org="Hope NGO", lead_type="NGO"))[0]["type"] == "NGO"
-    assert orbit.orbit_row(Lead(org="", organisation_type="School"))[1] == "no organisation name"
-    assert orbit.orbit_row(Lead(org="Hope", lead_type="Principal"))[1] == "no organisation type"
-    assert orbit.orbit_row(Lead(org="Hope", organisation_type="NGO", email="not-an-email"))[1] == "email is not valid"
+def test_type_falls_back_to_lead_type_and_incomplete_leads_still_get_a_row():
+    assert orbit.orbit_row(Lead(org="Hope NGO", lead_type="NGO"))["type"] == "NGO"
+    assert orbit.orbit_row(Lead(org="", organisation_type="School"))["name"] == ""
+    assert orbit.orbit_row(Lead(org="Hope", lead_type="Principal"))["type"] == ""
+    assert orbit.orbit_row(Lead(org="Hope", organisation_type="NGO", email="not-an-email"))["contact_email"] == ""
 
 
 def test_files_keep_text_and_have_no_bom():
-    rows, _ = orbit.build_export([Lead(org="Sunrise", organisation_type="School", first_name="Asha", pincode="056001", phone="+919845011111")])
+    rows = [orbit.orbit_row(l) for l in [Lead(org="Sunrise", organisation_type="School", first_name="Asha", pincode="056001", phone="+919845011111")]]
     raw = orbit.to_csv(rows)
     assert not raw.startswith(b"\xef\xbb\xbf")
     assert next(csv.DictReader(io.StringIO(raw.decode())))["pincode"] == "056001"
@@ -57,11 +55,11 @@ def test_files_keep_text_and_have_no_bom():
 
 
 def test_org_count_merges_same_name_and_pincode():
-    rows, _ = orbit.build_export([
+    rows = [orbit.orbit_row(l) for l in [
         Lead(org="Sunrise", organisation_type="School", pincode="560001"),
         Lead(org="sunrise", organisation_type="School", pincode="560001"),
         Lead(org="Sunrise", organisation_type="School", pincode="560002"),
-    ])
+    ]]
     assert orbit.org_count(rows) == 2
 
 
@@ -76,11 +74,11 @@ def test_export_page_filters_and_download(store):
     client = app.test_client()
 
     page = client.get("/export").data.decode()
-    assert "<b>2</b> leads ready" in page and "<b>1</b> left out" in page and "no organisation type" in page
+    assert "<b>3</b> leads in the file" in page and "1 without an organisation type" in page
 
-    assert "<b>1</b> lead ready" in client.get("/export?from=2026-11-02").data.decode()
-    assert "<b>1</b> lead ready" in client.get("/export?by=Ravi").data.decode()
-    assert "<b>1</b> lead ready" in client.get("/export?type=DISTRIBUTOR").data.decode()
+    assert "<b>2</b> leads in the file" in client.get("/export?from=2026-11-02").data.decode()
+    assert "<b>2</b> leads in the file" in client.get("/export?by=Ravi").data.decode()
+    assert "<b>1</b> lead in the file" in client.get("/export?type=DISTRIBUTOR").data.decode()
 
     download = client.get("/export/orbit.csv?type=DISTRIBUTOR")
     assert download.status_code == 200 and "attachment" in download.headers["Content-Disposition"]
@@ -95,8 +93,8 @@ def test_date_filter_uses_india_time(store):
     # 20:00 UTC on the 1st is already 01:30 on the 2nd in India.
     make(store, org="Late Night School", organisation_type="School", created_at="2026-11-01T20:00:00+00:00")
     client = app.test_client()
-    assert "<b>1</b> lead ready" in client.get("/export?from=2026-11-02").data.decode()
-    assert "<b>0</b> leads ready" in client.get("/export?to=2026-11-01").data.decode()
+    assert "<b>1</b> lead in the file" in client.get("/export?from=2026-11-02").data.decode()
+    assert "<b>0</b> leads in the file" in client.get("/export?to=2026-11-01").data.decode()
 
 
 def test_export_needs_login(anon_client):

@@ -29,7 +29,10 @@
 </form>
 
 <section class="card panel">
-  <div class="sum"><b>{{ rows|length }}</b> lead{{ '' if rows|length == 1 else 's' }} ready for Orbit ({{ orgs }} organisation{{ '' if orgs == 1 else 's' }}){% if left_out %}, <b>{{ left_out|length }}</b> left out{% endif %}.</div>
+  {% set no_name = rows|rejectattr('name')|list|length %}{% set no_type = rows|rejectattr('type')|list|length %}
+  <div class="sum"><b>{{ rows|length }}</b> lead{{ '' if rows|length == 1 else 's' }} in the file ({{ orgs }} organisation{{ '' if orgs == 1 else 's' }}).</div>
+  {% if not rows %}<div class="flash">No leads match these filters.</div>{% endif %}
+  {% if no_name or no_type %}<div class="flash">{% if no_name %}{{ no_name }} without an organisation name: Orbit skips these and lists them in its preview. {% endif %}{% if no_type %}{{ no_type }} without an organisation type: pick a default type on Orbit's import page.{% endif %}</div>{% endif %}
   {% if orgs > max_orgs %}<div class="flash">Orbit takes at most {{ max_orgs }} organisations per file. Narrow the dates and export in parts.</div>{% endif %}
   {% set ok = rows and orgs <= max_orgs %}
   <div class="actions">
@@ -39,16 +42,4 @@
   <div class="hint">In Orbit: Organisations &rarr; Import. Orbit skips organisations it already has (same name + pincode, or same UDISE code) and never updates them.</div>
 </section>
 
-{% if left_out %}
-<section class="card panel">
-  <div style="font-size:15px;font-weight:700">Left out of the file</div>
-  <table>
-    {% for lead, reason in left_out[:50] %}
-    <tr><td><a href="{{ url_for('lead_detail', lead_id=lead.id) }}">{{ lead.name or lead.org or lead.phone or 'Lead #' ~ lead.id }}</a></td><td>{{ reason }}</td></tr>
-    {% endfor %}
-  </table>
-  {% if left_out|length > 50 %}<div class="hint">And {{ left_out|length - 50 }} more.</div>{% endif %}
-  <div class="hint">Open a lead and set the organisation name or type, then export again. The full lead list is still available as the <a href="/export/report.xlsx">full report (Excel)</a> or <a href="/export/report.csv">CSV</a>.</div>
-</section>
-{% endif %}
 {% endblock %}

@@ -73,24 +73,15 @@ def curriculum_cell(value: str) -> str:
     return ", ".join(found)
 
 
-def orbit_row(lead) -> tuple[dict | None, str]:
-    """(row, '') for an importable lead, or (None, reason) when Orbit would reject it."""
-    org = lead.org.strip()
-    if len(org) < 2:
-        return None, "no organisation name"
-    org_type = lead_org_type(lead)
-    if not org_type:
-        return None, "no organisation type"
-    email = lead.email.strip()
-    if email and not normalize_email(email):
-        return None, "email is not valid"
+def orbit_row(lead) -> dict:
+    """One Orbit row per lead, blanks left blank: Orbit lists rows it cannot take in its preview and asks for a default type."""
     first, last = lead.first_name.strip(), lead.last_name.strip()
     if not first and lead.name.strip():
         first, _, rest = lead.name.strip().partition(" ")
         last = last or rest.strip()
     return {
-        "name": org,
-        "type": org_type,
+        "name": lead.org.strip(),
+        "type": lead_org_type(lead),
         "state": lead.state,
         "city": lead.city,
         "district": lead.district,
@@ -103,21 +94,9 @@ def orbit_row(lead) -> tuple[dict | None, str]:
         "contact_firstName": first,
         "contact_lastName": last,
         "contact_designation": lead.designation or lead.role,
-        "contact_email": normalize_email(email),
+        "contact_email": normalize_email(lead.email.strip()),  # '' when invalid, because Orbit rejects the whole row for a bad email
         "contact_phone": normalize_phone(lead.phone) or lead.phone.strip(),
-    }, ""
-
-
-def build_export(leads) -> tuple[list[dict], list[tuple]]:
-    """(rows, left_out) where left_out is [(lead, reason)]."""
-    rows, left_out = [], []
-    for lead in leads:
-        row, reason = orbit_row(lead)
-        if row:
-            rows.append(row)
-        else:
-            left_out.append((lead, reason))
-    return rows, left_out
+    }
 
 
 def org_count(rows: list[dict]) -> int:
