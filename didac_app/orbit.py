@@ -39,6 +39,7 @@ TYPE_WORDS = [
     ("SCHOOL", ("school",)),
     ("OTHER", ("other",)),
 ]
+CURRICULUM_CHOICES = ["CBSE", "ICSE", "STATE", "IGCSE", "CUSTOM"]  # the only boards Orbit keeps
 CURRICULA = {"CBSE", "ICSE", "IGCSE", "CUSTOM"}
 
 

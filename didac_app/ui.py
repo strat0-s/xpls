@@ -19,6 +19,12 @@ EDITABLE_FIELDS = [
     ("email", "Email"),
     ("city", "City"),
     ("state", "State"),
+    ("district", "District"),
+    ("pincode", "Pincode (6 digits)"),
+    ("website", "Website"),
+    ("google_maps_url", "Google Maps link"),
+    ("udise_code", "UDISE code"),
+    ("medium_of_instruction", "Medium of instruction (comma separated, e.g. English, Kannada)"),
 ]
 # Rows the bot writes while processing media; the media itself already shows what was read from it.
 DERIVED_FEEDBACK = {"audio", "audio_transcript", "media", "media_text"}
@@ -113,9 +119,14 @@ def register(app, get_store, get_config) -> None:
             abort(404)
         if request.method == "POST":
             values = {field: request.form.get(field, "").strip() for field, _label in EDITABLE_FIELDS}
+            first, _, last = values["name"].partition(" ")  # the export reads first/last name and designation, so keep them in step with what was edited
+            picked = request.form.getlist("curriculum")
             store.update_lead_fields(
                 lead_id,
                 **values,
+                first_name=first, last_name=last.strip(), role=values["designation"],
+                curriculum=", ".join(code for code in orbit.CURRICULUM_CHOICES if code in picked),
+                notes=request.form.get("notes", "").strip(),
                 organisation_type=org_type if (org_type := request.form.get("organisation_type", "")) in orbit.ORG_TYPES else "",
                 interest=request.form.get("interest", "").strip(),
                 doc_type=kind if (kind := request.form.get("doc_type")) in ("form", "badge") else "other",
@@ -129,6 +140,7 @@ def register(app, get_store, get_config) -> None:
         return render_template(
             "lead.html", lead=lead, items=items, fields=EDITABLE_FIELDS, title=display_name(lead),
             org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
+            curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )
 
     @app.post("/leads/<int:lead_id>/delete")

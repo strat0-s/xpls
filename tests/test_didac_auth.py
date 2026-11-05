@@ -1,5 +1,5 @@
 from conftest import csrf, get_or_create_user
-from didac_app import auth
+from didac_app import auth, orbit
 from didac_app.models import Lead
 from didac_app.server import app
 
@@ -236,3 +236,18 @@ def test_cli_creates_an_admin(store, monkeypatch):
     cli.main()
     created = store.find_user("+919845033333")
     assert created["is_admin"] and auth.authenticate(store, "+919845033333", "cli-password-1")
+
+
+def test_dashboard_edit_reaches_the_orbit_row(store):
+    lead = store.create_lead(Lead(name="Old Name", first_name="Old", last_name="Name", role="Teacher", curriculum="CBSE; NCERT", phone="+919800000013"))
+    client = app.test_client()
+    page = client.get(f"/leads/{lead.id}").data.decode()
+    assert 'name="curriculum" value="CBSE" checked' in page and 'name="pincode"' in page and 'name="udise_code"' in page
+    client.post(f"/leads/{lead.id}", data={
+        "name": "New Person", "designation": "Principal", "org": "Org", "pincode": "560001", "medium_of_instruction": "English, Hindi",
+        "curriculum": ["ICSE", "STATE"], "notes": "Students: 400", "doc_type": "form", "csrf": csrf(client),
+    })
+    saved = store.get_lead(lead.id)
+    row = orbit.orbit_row(saved)
+    assert (row["contact_firstName"], row["contact_lastName"], row["contact_designation"]) == ("New", "Person", "Principal")
+    assert (row["curriculum"], row["pincode"], saved.notes) == ("ICSE, STATE", "560001", "Students: 400")
