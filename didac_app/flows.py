@@ -209,7 +209,8 @@ class Chat:
             return self.say("Please type your feedback, or send a voice note or photo now. We will save it for the team. Type menu when you are done.")
         if choice == SALES.lower():
             self.visitor_lead(interest="Talk to sales requested")
-            return self.say("Thanks. We marked this for sales follow-up. Please share your name and organisation if you have not already.")
+            self.store.put_session(self.number, "requirement", "name", {})  # the same questions as Share my requirement, so the name is not lost
+            return self.say("Thanks. We marked this for sales follow-up. What is your name?")
         if media:
             self.collect_feedback(text, media)
             return self.say("Saved for the team. Type menu for options.")
@@ -282,13 +283,19 @@ class Chat:
             data |= {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], [])}
             self.store.put_session(self.number, flow, "confirm", data)
             return self.replies.append(buttons(summary(data["draft"], data["check"], with_check=True), SAVE, EDIT, RETAKE))
+        if step == "edit":  # the Save / Edit / Retake taps from the summary stay tappable, and "back" ends the edit
+            if low in ("back", "done", "stop"):
+                self.store.put_session(self.number, flow, "confirm", data)
+                return self.replies.append(buttons(summary(data["draft"], data["check"], with_check=True), SAVE, EDIT, RETAKE))
+            if low in (SAVE.lower(), EDIT.lower(), RETAKE.lower()):
+                step = "confirm"
         if step == "confirm":
             choice = low
             if choice == SAVE.lower():
                 return self.save_scan(flow, data)
             if choice == EDIT.lower():
                 self.store.put_session(self.number, flow, "edit", data)
-                return self.say("Reply with corrections, one per line.\nExample:\nPhone: 98450 11112")
+                return self.say("Reply with corrections, one per line.\nExample:\nPhone: 98450 11112\nType BACK to stop editing.")
             if choice == RETAKE.lower():
                 self.store.put_session(self.number, flow, "photos", {"photos": []})
                 return self.say("Photos cleared. Send the new photos, then reply DONE.")
@@ -296,7 +303,7 @@ class Chat:
         if step == "edit":
             applied, unknown = apply_corrections(data["draft"], text)
             if not applied:
-                return self.say("I could not read a correction. Use one per line, like:\nPhone: 98450 11112")
+                return self.say("I could not read a correction. Use one per line, like:\nPhone: 98450 11112\nType BACK to stop editing.")
             data["check"] = [item for item in data["check"] if not any(word in item.lower() for word in applied)]
             self.store.put_session(self.number, flow, "confirm", data)
             lines = summary(data["draft"], data["check"], with_check=True)

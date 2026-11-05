@@ -74,6 +74,20 @@ def test_document_with_two_photos_edit_then_save(store, sent, fake_io):
     assert "Photo 1 received" in last(sent)[0]
 
 
+def test_edit_can_be_ended_with_back_or_a_button_tap(store, sent, fake_io):
+    say(STAFF, "Other document")
+    say(STAFF, "", photo("a"))
+    say(STAFF, "done")
+    say(STAFF, "Edit")
+    say(STAFF, "back")  # ends the edit, summary shown again
+    assert last(sent)[1] == ["Save", "Edit", "Retake"] and "Name: Asha Rao" in last(sent)[0]
+    say(STAFF, "Edit")
+    say(STAFF, "Retake")  # a stale button tap while editing is not read as a correction
+    assert "Photos cleared" in last(sent)[0]
+    say(STAFF, "", photo("b"))
+    assert "Photo 1 received" in last(sent)[0]
+
+
 def test_saving_with_a_check_left_shows_the_badge(store, sent):
     say(STAFF, "Other document")
     say(STAFF, "", photo("a"))
@@ -314,3 +328,15 @@ def test_export_includes_incomplete_leads_and_says_what_is_missing(store):
     page = client.get("/export").data.decode()
     assert "<b>1</b> lead in the file" in page and "1 without an organisation name" in page
     assert b"No" in client.get("/export/orbit.csv").data
+
+
+def test_talk_to_sales_then_name_is_saved_on_the_same_lead(store, sent):
+    say(VISITOR, "Talk to sales")
+    assert "What is your name?" in last(sent)[0]
+    say(VISITOR, "Venugopal SKMG")
+    say(VISITOR, "SKMG Schools")
+    say(VISITOR, "School")
+    say(VISITOR, "Bengaluru, Karnataka")
+    say(VISITOR, "Science labs")
+    leads = store.list_leads()
+    assert len(leads) == 1 and leads[0].name == "Venugopal SKMG" and "Talk to sales requested" in leads[0].interest
