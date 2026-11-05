@@ -256,7 +256,9 @@ def test_dashboard_edit_reaches_the_orbit_row(store):
 def test_mark_as_checked_clears_the_badge_without_touching_fields(store):
     lead = store.create_lead(Lead(name="Keep Me", review_reason="district unclear", phone="+919800000014"))
     client = app.test_client()
-    assert "Mark as checked" in client.get("/?type=other").data.decode()
+    html = client.get("/?type=other").data.decode()
+    assert "Mark as checked" in html and "district unclear" not in html  # the card only says Check
+    assert "<li>district unclear</li>" in client.get(f"/leads/{lead.id}").data.decode()
     response = client.post(f"/leads/{lead.id}/resolve", data={"next": "/?type=other", "csrf": csrf(client)})
     assert response.status_code == 302 and response.headers["Location"] == "/?type=other"
     saved = store.get_lead(lead.id)

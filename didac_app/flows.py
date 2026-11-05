@@ -32,8 +32,8 @@ FORM, DOC, BADGE, NOTE = "Contact form", "Other document", "Event badge / QR", "
 SCANS = {FORM.lower(): "form", DOC.lower(): "document", BADGE.lower(): "badge"}
 BROCHURE, REQUIREMENT, FEEDBACK, SALES = "Download brochure", "Share my requirement", "Feedback / voice note", "Talk to sales"
 SAVE, EDIT, RETAKE = "Save", "Edit", "Retake"
-# The model sometimes lists every empty field as a doubt ("udise_code unknown"); a field that is simply not on the document is not a doubt.
-NOT_ON_DOCUMENT = re.compile(r"\b(unknown|not (printed|present|provided|given|available|mentioned|visible|found)|missing|n/?a)\b", re.I)
+# The model sometimes lists every empty field as a doubt ("udise_code unknown"), and flags a QR code it cannot decode from pixels; the code decodes QRs itself.
+NOT_ON_DOCUMENT = re.compile(r"\bqr\b|\b(unknown|not (printed|present|provided|given|available|mentioned|visible|found)|missing|n/?a)\b", re.I)
 WHAT_IS_IT = "Is this a contact form, another document or an event badge?"
 MENU_WORDS = {"menu", "hi", "hello", "hey", "start", "info", "brochure"}
 # (label shown in the list, Orbit type code, one-line description)
