@@ -39,6 +39,7 @@ Curriculum (CBSE, ICSE, State, IB, IGCSE, Other); Interested in demo (At School,
 Use the extra keys: demo ("At school" or "Online"), workshop ("Yes" or "No"), students (exactly as written), remarks (exactly as written).
 Put a role or curriculum that was only written in (not ticked) in role/curriculum as written and add it to "check". A crossed-out printed value is not an answer.
 Handwritten or doubtful values (student count, phone digits) go in "check".
+The photos can also include the person's visiting card, stapled or sent with the form. It is the same person: the form wins, and the card fills anything the form leaves blank (designation, organisation, email, phone, website, address).
 """
 
 
