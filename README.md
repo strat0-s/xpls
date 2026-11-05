@@ -185,39 +185,31 @@ Budget: 20 schools
 Timeline: Q1
 ```
 
-Commands:
+Staff commands (staff only; visitors typing a slash command just get the menu):
 
 ```text
+/help
 /summary
-/followups
 /export excel
 /send brochure 9845xxxxx
 ```
 
-Visitor QR flow:
+Visitor flow (tap list rows or type the label; numbers are not accepted):
 
 ```text
 Visitor: hi
-Bot: shows menu
-Visitor: 1
-Bot: shows brochure options
-Visitor: 2
-Bot: sends TiQer brochure link
+Bot: list - Download brochure, Share my requirement, Feedback / voice note, Talk to sales
+Visitor: Download brochure -> TiQer
+Bot: sends the TiQer brochure link
+Visitor: Share my requirement
+Bot: asks name, organisation, type, city and state, then the requirement, and saves one lead
 ```
 
-Lead capture flow:
+Staff flow (a phone that is active on the Team page): the menu is Contact form, Other document, Event badge / QR, Add a note. Send photos (a contact form may include the visiting card stapled to it), reply DONE, then Save, Edit or Retake. Type BACK to stop editing, cancel to stop a flow.
 
-```text
-Visitor: menu
-Visitor: 2
-Bot: asks role
-Visitor: CSR
-Bot: asks city/state
-Visitor: Bangalore
-Bot: asks requirement
-Visitor: science lab for 20 schools
-Bot: saves the lead
-```
+Brochure links come from the env vars `BROCHURE_URL`, `SIA_BROCHURE_URL`, `TIQER_BROCHURE_URL`, `PLAY_LAB_BROCHURE_URL`, `STREAM_BROCHURE_URL`, `LAB_IN_CLASSROOM_BROCHURE_URL`. Until real PDFs exist they default to sample PDFs (see `config.py`). Change one with `vercel env rm/add <NAME> production`, then redeploy.
+
+Deploys: commit to `prod` on the fork and push; Vercel deploys on push.
 
 Dashboard (locally `http://127.0.0.1:5001`, deployed `https://<your-app>.vercel.app`):
 
