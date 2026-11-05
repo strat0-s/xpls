@@ -30,7 +30,7 @@ Use empty strings when unknown. Do not guess.
 
 DOCUMENT_PROMPT = LEAD_PROMPT + """
 The images are the sides or pages of ONE document: read them together and return a single object, not a "contacts" array.
-Add a key "check": a list of short phrases naming each field you could not read with confidence (for example "phone digits unclear").
+Add a key "check": a list of short phrases naming each field you could not read with confidence (for example "phone digits unclear"). List only values that ARE on the document but are hard to read or doubtful. Never list a field that is simply empty, not printed or unknown.
 """
 
 FORM_PROMPT = DOCUMENT_PROMPT + """

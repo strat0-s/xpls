@@ -143,6 +143,16 @@ def register(app, get_store, get_config) -> None:
             curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )
 
+    @app.post("/leads/<int:lead_id>/resolve")
+    def lead_resolve(lead_id: int):
+        store = get_store()
+        if not store.get_lead(lead_id):
+            abort(404)
+        store.update_lead_fields(lead_id, review_reason="", updated_by=g.user["name"], updated_at=datetime.now(UTC).isoformat(timespec="seconds"))
+        flash("Marked as checked.")
+        target = request.form.get("next", "")
+        return redirect(target if target.startswith("/") and not target.startswith("//") else url_for("gallery"))
+
     @app.post("/leads/<int:lead_id>/delete")
     def lead_delete(lead_id: int):
         require_admin()

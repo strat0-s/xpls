@@ -340,3 +340,11 @@ def test_talk_to_sales_then_name_is_saved_on_the_same_lead(store, sent):
     say(VISITOR, "Science labs")
     leads = store.list_leads()
     assert len(leads) == 1 and leads[0].name == "Venugopal SKMG" and "Talk to sales requested" in leads[0].interest
+
+
+def test_unknown_field_doubts_are_not_checks():
+    from didac_app.flows import NOT_ON_DOCUMENT
+    for noise in ("udise_code unknown", "district not printed", "curriculum missing", "budget N/A"):
+        assert NOT_ON_DOCUMENT.search(noise)
+    for real in ("phone digits unclear", "district unclear (Basavanagudi is a locality)", "QR content not decoded"):
+        assert not NOT_ON_DOCUMENT.search(real)

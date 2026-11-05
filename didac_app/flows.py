@@ -7,6 +7,7 @@ Choices go out as tappable buttons or lists; a tap arrives as plain text equal t
 from __future__ import annotations
 
 import logging
+import re
 import tempfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -31,6 +32,8 @@ FORM, DOC, BADGE, NOTE = "Contact form", "Other document", "Event badge / QR", "
 SCANS = {FORM.lower(): "form", DOC.lower(): "document", BADGE.lower(): "badge"}
 BROCHURE, REQUIREMENT, FEEDBACK, SALES = "Download brochure", "Share my requirement", "Feedback / voice note", "Talk to sales"
 SAVE, EDIT, RETAKE = "Save", "Edit", "Retake"
+# The model sometimes lists every empty field as a doubt ("udise_code unknown"); a field that is simply not on the document is not a doubt.
+NOT_ON_DOCUMENT = re.compile(r"\b(unknown|not (printed|present|provided|given|available|mentioned|visible|found)|missing|n/?a)\b", re.I)
 WHAT_IS_IT = "Is this a contact form, another document or an event badge?"
 MENU_WORDS = {"menu", "hi", "hello", "hey", "start", "info", "brochure"}
 # (label shown in the list, Orbit type code, one-line description)
@@ -105,7 +108,7 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
     if not contacts:
         return {"fields": {}, "check": ["could not read the photos", *no_qr]}
     contact = dict(contacts[0])
-    check = [str(item).strip() for item in contact.pop("check", None) or [] if str(item).strip()] + no_qr
+    check = [item for item in (str(item).strip() for item in contact.pop("check", None) or []) if item and not NOT_ON_DOCUMENT.search(item)] + no_qr
     if len(contacts) > 1:
         check.append(f"{len(contacts)} people found, only the first is kept")
     demo, workshop, students, remarks = (str(contact.pop(key, "") or "").strip() for key in ("demo", "workshop", "students", "remarks"))

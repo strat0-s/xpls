@@ -251,3 +251,14 @@ def test_dashboard_edit_reaches_the_orbit_row(store):
     row = orbit.orbit_row(saved)
     assert (row["contact_firstName"], row["contact_lastName"], row["contact_designation"]) == ("New", "Person", "Principal")
     assert (row["curriculum"], row["pincode"], saved.notes) == ("ICSE, STATE", "560001", "Students: 400")
+
+
+def test_mark_as_checked_clears_the_badge_without_touching_fields(store):
+    lead = store.create_lead(Lead(name="Keep Me", review_reason="district unclear", phone="+919800000014"))
+    client = app.test_client()
+    assert "Mark as checked" in client.get("/?type=other").data.decode()
+    response = client.post(f"/leads/{lead.id}/resolve", data={"next": "/?type=other", "csrf": csrf(client)})
+    assert response.status_code == 302 and response.headers["Location"] == "/?type=other"
+    saved = store.get_lead(lead.id)
+    assert (saved.name, saved.review_reason, saved.updated_by) == ("Keep Me", "", "Test Admin")
+    assert client.post(f"/leads/{lead.id}/resolve", data={"next": "//evil.example", "csrf": csrf(client)}).headers["Location"] == "/"
