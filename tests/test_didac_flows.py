@@ -348,3 +348,30 @@ def test_unknown_field_doubts_are_not_checks():
         assert NOT_ON_DOCUMENT.search(noise)
     for real in ("phone digits unclear", "district unclear (Basavanagudi is a locality)"):
         assert not NOT_ON_DOCUMENT.search(real)
+
+
+def test_form_with_a_visiting_card_is_one_read_and_one_lead(store, sent, fake_io):
+    fake_io["result"] = {"fields": {"name": "Meera Iyer", "org": "Bright School", "role": "Principal", "email": "meera@bright.edu"}, "check": []}
+    say(STAFF, "Contact form")
+    for name in ("form-p1", "form-p2", "card"):
+        say(STAFF, "", photo(name))
+    say(STAFF, "DONE")
+    assert fake_io["calls"] == [(3, "form")]  # form pages and the card go through one read
+    say(STAFF, "Save")
+    leads = store.list_leads()
+    assert len(leads) == 1 and leads[0].doc_type == "form" and leads[0].email == "meera@bright.edu"
+    assert len(store.list_media(leads[0].id)) == 3
+
+
+def test_form_read_merges_card_details_and_the_prompt_asks_for_it(monkeypatch):
+    from didac_app import openai_services
+
+    assert "visiting card" in openai_services.FORM_PROMPT and "the form wins" in openai_services.FORM_PROMPT
+    seen = {}
+    monkeypatch.setattr(flows.blobstore, "download", lambda config, key: b"x")
+    monkeypatch.setattr(flows, "append_qr_details", lambda path, text: "")
+    monkeypatch.setattr(flows, "vision_read", lambda paths, kind: seen.update(n=len(paths), kind=kind) or '{"name": "Meera Iyer", "org": "Bright School", "role": "Principal", "email": "meera@bright.edu", "remarks": "call Friday"}')
+    result = real_read_documents(flows.DidacConfig(), [{"key": k, "ct": "image/jpeg"} for k in ("form", "card")], "form")
+    assert seen == {"n": 2, "kind": "form"}
+    assert result["fields"]["role"] == "Principal" and result["fields"]["email"] == "meera@bright.edu"
+    assert "call Friday" in result["fields"]["notes"]
