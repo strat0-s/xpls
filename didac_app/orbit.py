@@ -7,7 +7,6 @@ import re
 
 from openpyxl import Workbook
 
-from didac_app.auth import normalize_email, normalize_phone
 
 # Same values in the dashboard dropdown, the scanner prompt and Orbit's `type` enum, so no mapping table is needed.
 ORG_TYPES = {
@@ -41,6 +40,7 @@ TYPE_WORDS = [
 ]
 CURRICULUM_CHOICES = ["CBSE", "ICSE", "STATE", "IGCSE", "CUSTOM"]  # the only boards Orbit keeps
 CURRICULA = {"CBSE", "ICSE", "IGCSE", "CUSTOM"}
+EMAIL_RE = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")  # Orbit's own check, copied from its lib/org-import.ts
 
 
 def normalize_org_type(value: str) -> str:
@@ -54,6 +54,11 @@ def normalize_org_type(value: str) -> str:
         if any(re.search(rf"\b{re.escape(word)}\b", text) for word in words):
             return code
     return ""
+
+
+def captured_type(lead) -> str:
+    """The type Orbit understands, else the text exactly as captured, so nothing is lost and it can be fixed in the file."""
+    return lead_org_type(lead) or lead.organisation_type.strip() or lead.lead_type.strip()
 
 
 def lead_org_type(lead) -> str:
@@ -74,15 +79,25 @@ def curriculum_cell(value: str) -> str:
     return ", ".join(found)
 
 
+def curriculum_export(value: str) -> str:
+    """Every board as captured, nothing dropped; the obvious spellings of Orbit's boards are written the way Orbit expects."""
+    found: list[str] = []
+    for part in split_list(value):
+        code = "STATE" if part.upper().startswith("STATE") else part.upper() if part.upper() in CURRICULUM_CHOICES else part
+        if code.lower() not in (seen.lower() for seen in found):
+            found.append(code)
+    return ", ".join(found)
+
+
 def orbit_row(lead) -> dict:
-    """One Orbit row per lead, blanks left blank: Orbit lists rows it cannot take in its preview and asks for a default type."""
+    """One Orbit row per lead with everything as captured. Nothing is blanked or rewritten to fit: a person fills the gaps in the file and Orbit's preview lists what it cannot take."""
     first, last = lead.first_name.strip(), lead.last_name.strip()
     if not first and lead.name.strip():
         first, _, rest = lead.name.strip().partition(" ")
         last = last or rest.strip()
     return {
         "name": lead.org.strip(),
-        "type": lead_org_type(lead),
+        "type": captured_type(lead),
         "state": lead.state,
         "city": lead.city,
         "district": lead.district,
@@ -90,22 +105,17 @@ def orbit_row(lead) -> dict:
         "website": lead.website,
         "googleMapsUrl": lead.google_maps_url,
         "udiseCode": lead.udise_code,
-        "curriculum": curriculum_cell(lead.curriculum),
+        "curriculum": curriculum_export(lead.curriculum),
         "mediumOfInstruction": ", ".join(split_list(lead.medium_of_instruction)),
         "contact_firstName": first,
         "contact_lastName": last,
         "contact_designation": lead.designation or lead.role,
-        "contact_email": normalize_email(lead.email.strip()),  # '' when invalid, because Orbit rejects the whole row for a bad email
-        "contact_phone": normalize_phone(lead.phone) or lead.phone.strip(),
+        "contact_email": lead.email.strip(),
+        "contact_phone": lead.phone.strip(),
     }
 
 
-def invalid_email(lead) -> bool:
-    """True when the lead has an email that is left blank in the file because Orbit rejects the whole row for a bad one."""
-    return bool(lead.email.strip()) and not normalize_email(lead.email.strip())
-
-
-def export_warnings(rows: list[dict], dropped_emails: int = 0) -> list[str]:
+def export_warnings(rows: list[dict]) -> list[str]:
     """What Orbit's import will do with this file, in plain words. Nothing here changes the data: a person checks the file and Orbit's preview before importing."""
     named = [row for row in rows if len(row["name"].strip()) >= 2]  # Orbit skips shorter names before it looks at anything else
     pins: dict[str, set[bool]] = {}
@@ -116,7 +126,9 @@ def export_warnings(rows: list[dict], dropped_emails: int = 0) -> list[str]:
         (sum(not row["type"] for row in named), "without an organisation type: Orbit files them under the fallback type picked on its import page (Other if none is picked)."),
         (sum(bool(row["udiseCode"].strip()) and not re.fullmatch(r"\d{11}", row["udiseCode"].strip()) for row in named), "with a UDISE code that is not 11 digits: Orbit skips these rows and lists them in its preview."),
         (sum(not row["contact_firstName"] and bool(row["contact_phone"] or row["contact_email"]) for row in named), "with a phone or email but no person's name: Orbit adds the organisation without a contact, so that phone or email is not imported."),
-        (dropped_emails, "with an email Orbit would reject: it is left blank in the file so the rest of the row still imports."),
+        (sum(bool(row["type"]) and row["type"] not in ORG_TYPES for row in named), "with a type Orbit does not recognise (kept as captured): Orbit files them under the fallback type picked on its import page."),
+        (sum(bool(row["contact_email"]) and not EMAIL_RE.fullmatch(row["contact_email"]) for row in named), "with an email Orbit rejects: it skips the whole row and lists it in its preview, so fix the email in the file."),
+        (sum(any(code.upper() not in CURRICULUM_CHOICES for code in split_list(row["curriculum"])) for row in named), "with a board Orbit does not recognise (only CBSE, ICSE, STATE, IGCSE, CUSTOM): Orbit leaves that board out."),
         (sum(len(seen) == 2 for seen in pins.values()), "organisation name(s) appear both with and without a pincode: Orbit imports those as separate organisations."),
     ]
     return [f"{count} {text}" for count, text in checks if count]

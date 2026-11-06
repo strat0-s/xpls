@@ -188,7 +188,7 @@ def register(app, get_store, get_config) -> None:
     def export_page():
         leads, people = export_leads(get_store(), request.args)
         rows = [orbit.orbit_row(lead) for lead in leads]
-        warnings = orbit.export_warnings(rows, sum(orbit.invalid_email(lead) for lead in leads))
+        warnings = orbit.export_warnings(rows)
         query = {key: value for key, value in request.args.items() if value and key in EXPORT_FILTERS}
         return render_template(
             "export.html", rows=rows, people=people, warnings=warnings, org_types=orbit.ORG_TYPES, query=query,

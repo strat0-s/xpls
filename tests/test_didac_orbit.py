@@ -31,17 +31,22 @@ def test_row_maps_lead_to_orbit_columns():
     )
     assert orbit.orbit_row(lead) == {
         "name": "Sunrise School", "type": "SCHOOL", "state": "", "city": "", "district": "", "pincode": "560001",
-        "website": "", "googleMapsUrl": "https://maps.example/x", "udiseCode": "29010100101", "curriculum": "CBSE, STATE",
+        "website": "", "googleMapsUrl": "https://maps.example/x", "udiseCode": "29010100101", "curriculum": "CBSE, STATE, IB",
         "mediumOfInstruction": "English, Hindi", "contact_firstName": "Asha", "contact_lastName": "Rao",
-        "contact_designation": "Principal", "contact_email": "asha@sunrise.edu", "contact_phone": "+919845011111",
+        "contact_designation": "Principal", "contact_email": "Asha@Sunrise.edu", "contact_phone": "98450 11111",
     }
 
 
 def test_type_falls_back_to_lead_type_and_incomplete_leads_still_get_a_row():
     assert orbit.orbit_row(Lead(org="Hope NGO", lead_type="NGO"))["type"] == "NGO"
     assert orbit.orbit_row(Lead(org="", organisation_type="School"))["name"] == ""
-    assert orbit.orbit_row(Lead(org="Hope", lead_type="Principal"))["type"] == ""
-    assert orbit.orbit_row(Lead(org="Hope", organisation_type="NGO", email="not-an-email"))["contact_email"] == ""
+    assert orbit.orbit_row(Lead(org="Hope"))["type"] == ""
+
+
+def test_nothing_is_blanked_or_rewritten_on_export():
+    row = orbit.orbit_row(Lead(org="Hope", lead_type="Principal", email="not-an-email", phone="98450 12345", curriculum="CBSE; NCERT; State Board", udise_code="123"))
+    assert (row["type"], row["contact_email"], row["contact_phone"]) == ("Principal", "not-an-email", "98450 12345")
+    assert (row["curriculum"], row["udiseCode"]) == ("CBSE, NCERT, STATE", "123")
 
 
 def test_files_keep_text_and_have_no_bom():
@@ -125,7 +130,8 @@ def test_export_warnings_say_what_orbit_will_do(store):
     assert "1 without an organisation name" in page
     assert "1 with a UDISE code that is not 11 digits" in page
     assert "1 with a phone or email but no person" in page
-    assert "1 with an email Orbit would reject" in page
+    assert "1 with an email Orbit rejects" in page
+    assert "1 with a board Orbit does not recognise" not in page
     assert "1 organisation name(s) appear both with and without a pincode" in page
     assert "without an organisation type" not in page  # every named lead has a type
     assert "Check before importing" not in make_clean(store)
