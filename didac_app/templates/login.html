@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Sign in · DIDAC Leads{% endblock %}
 {% block css %}
-    body { background: radial-gradient(900px 500px at 15% 10%, #f6e2d5 0, transparent 60%), radial-gradient(800px 500px at 90% 90%, #e9ecdc 0, transparent 60%), var(--soft); }
     .login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
-    .login form { width: 100%; max-width: 410px; padding: 36px 34px; display: flex; flex-direction: column; gap: 20px; }
-    .login .logo { flex-direction: column; text-align: center; gap: 10px; margin-bottom: 4px; }
-    .login .logo i { width: 56px; height: 56px; border-radius: 18px; font-size: 28px; }
-    .login .logo b { font-size: 26px; }
-    .login h1 { margin: 0; font-size: 20px; text-align: center; }
-    .login p { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; text-align: center; }
-    .login input.t { height: 46px; font-size: 15px; }
-    .login .btn { height: 46px; font-size: 15px; }
+    .login form { width: 100%; max-width: 400px; padding: 28px; display: flex; flex-direction: column; gap: 16px; }
+    .login .logo { flex-direction: column; text-align: center; gap: 8px; }
+    .login .logo i { width: 48px; height: 48px; border-radius: 10px; background: var(--bar); color: #fff; font-size: 22px; }
+    .login .logo b { font-size: 22px; }
+    .login .logo small { color: var(--mut); opacity: 1; font-size: 13px; }
+    .login h1 { margin: 0; font-size: 18px; text-align: center; }
+    .login p { margin: 6px 0 0; color: var(--mut); font-size: 13px; line-height: 1.5; text-align: center; }
+    .login input.t { height: 42px; }
+    .login .btn { height: 42px; font-size: 15px; }
 {% endblock %}
 {% block body %}
 <div class="login">

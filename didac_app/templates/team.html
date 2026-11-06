@@ -2,20 +2,22 @@
 {% set active = 'team' %}
 {% block title %}Team · DIDAC Leads{% endblock %}
 {% block css %}
-    .cols { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
-    .list { flex: 999 1 560px; display: flex; flex-direction: column; gap: 14px; }
-    .list h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
-    .list p { margin: 4px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+    @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+    .list { display: flex; flex-direction: column; gap: 12px; }
+    .list h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .list p { margin: 2px 0 0; color: var(--mut); line-height: 1.5; }
     .wrap { overflow-x: auto; }
-    table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 14px; }
-    th { text-align: left; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 12px 16px; background: #fbf8f3; }
-    td { padding: 12px 16px; border-top: 1px solid #f1ebe3; vertical-align: top; }
-    td small { color: var(--muted); display: block; }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .row input { height: 34px; width: 150px; padding: 0 10px; border: 1px solid #ddd3c7; border-radius: 8px; }
-    .mini { height: 34px; padding: 0 12px; border: 1px solid #ddd3c7; border-radius: 8px; background: #fff; font-weight: 600; color: var(--brand); cursor: pointer; }
-    .add { flex: 1 1 320px; max-width: 380px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
-    .add h2 { margin: 0; font-size: 17px; }
+    table { width: 100%; min-width: 620px; border-collapse: collapse; }
+    th { text-align: left; color: var(--mut); font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 8px 12px; background: var(--head); }
+    td { padding: 9px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+    td small { color: var(--mut); display: block; }
+    .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .row input { height: 30px; width: 140px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); }
+    .mini { height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); font-weight: 600; color: var(--acc-text); cursor: pointer; }
+    .mini:hover { border-color: var(--acc); }
+    .add { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .add h2 { margin: 0; font-size: 16px; }
 {% endblock %}
 {% block content %}
 <div class="cols">
@@ -28,8 +30,8 @@
         <tr>
           <td><strong>{{ m.name }}</strong><small>{{ m.email or '' }}</small></td>
           <td style="white-space:nowrap">{{ m.phone or '' }}</td>
-          <td><span class="chip {{ 'team' if m.is_admin else '' }}" {% if not m.is_admin %}style="background:#f1ebe3;color:#4a423a"{% endif %}>{{ 'Admin' if m.is_admin else 'Staff' }}</span></td>
-          <td><span class="chip {{ 'visitor' if m.is_active else 'off' }}">{{ 'Active' if m.is_active else 'Deactivated' }}</span></td>
+          <td><span class="chip {{ 'team' if m.is_admin else 'staff' }}">{{ 'Admin' if m.is_admin else 'Staff' }}</span></td>
+          <td><span class="chip {{ 'ok' if m.is_active else 'off' }}">{{ 'Active' if m.is_active else 'Deactivated' }}</span></td>
           <td>
             <div class="row">
               <form class="row" method="post" action="{{ url_for('team_password', user_id=m.id) }}">
@@ -55,7 +57,7 @@
     <div><label class="f" for="a-phone">Phone (WhatsApp)</label><input class="t" id="a-phone" name="phone" placeholder="+91" required></div>
     <div><label class="f" for="a-email">Email (optional)</label><input class="t" id="a-email" name="email" type="email"></div>
     <div><label class="f" for="a-password">Temporary password</label><input class="t" id="a-password" name="password" type="password" minlength="8" required autocomplete="new-password"></div>
-    <label style="display:flex;gap:10px;align-items:center;font-size:14px;color:#4a423a"><input type="checkbox" name="is_admin" style="width:18px;height:18px"> Can manage the team (admin)</label>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="is_admin" style="width:18px;height:18px"> Can manage the team (admin)</label>
     <button class="btn">Add member</button>
   </form>
 </div>
