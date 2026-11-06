@@ -1,35 +1,58 @@
 {% extends "base.html" %}
 {% set active = 'leads' %}
 {% block css %}
-    .bar { display: flex; flex-wrap: wrap; gap: 14px 20px; align-items: center; justify-content: space-between; }
-    .seg { display: inline-flex; padding: 3px; border-radius: 8px; background: #ebe4da; }
-    .seg a { height: 34px; padding: 0 16px; border-radius: 6px; display: inline-flex; align-items: center; color: #6b6258; font-weight: 600; font-size: 14px; text-decoration: none; }
-    .seg a.on { background: #fff; color: var(--brand); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
-    .search { flex: 0 1 340px; width: 100%; max-width: 340px; }
-    .search input { width: 100%; height: 42px; padding: 0 14px; border: 1px solid #ddd3c7; border-radius: 8px; background: #fff; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
-    .tile { overflow: hidden; transition: box-shadow .2s, transform .2s; display: flex; flex-direction: column; text-decoration: none; color: inherit; }
-    .tile:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(80,55,35,.12); }
-    .thumb { position: relative; height: 150px; background: #f1ebe3; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-    .thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .thumb .tag { position: absolute; right: 10px; bottom: 10px; padding: 2px 9px; border-radius: 999px; background: rgba(43,38,34,.72); color: #fff; font-size: 11px; font-weight: 600; }
-    .thumb .check { position: absolute; left: 10px; top: 10px; right: 10px; width: fit-content; max-width: calc(100% - 20px); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; box-shadow: 0 1px 3px rgba(146,64,14,.2); font-weight: 700; }
-    .tilelink { display: flex; flex-direction: column; flex: 1; text-decoration: none; color: inherit; }
-    .resolve { padding: 0 18px 16px; }
-    .resolve .btn { width: 100%; height: 36px; font-size: 13px; }
-    .bubble { width: 84%; padding: 14px 16px; background: #fff; border-radius: 12px 12px 12px 4px; box-shadow: 0 2px 8px rgba(0,0,0,.12); font-size: 13px; line-height: 1.5; color: #4a423a; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
-    .wave { display: flex; align-items: center; gap: 14px; padding: 0 20px; }
-    .wave .play { width: 46px; height: 46px; border-radius: 50%; background: var(--brand); flex: none; display: flex; align-items: center; justify-content: center; }
-    .wave .bars { display: flex; align-items: center; gap: 3px; height: 48px; }
-    .wave .bars b { width: 4px; border-radius: 2px; background: #e2b49d; }
-    .info { padding: 16px 18px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
-    .info .name { font-weight: 700; font-size: 16px; line-height: 1.3; }
-    .info .org { font-size: 13px; color: var(--muted); line-height: 1.4; min-height: 18px; }
-    .info .phone { font-size: 13px; color: #4a423a; margin: 8px 0 14px; }
-    .foot { display: flex; flex-wrap: wrap; gap: 6px 10px; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 12px; border-top: 1px solid #f1ebe3; font-size: 12px; color: var(--muted); }
-    .av { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 10px; margin-right: 8px; background: #f3dccf; color: var(--brand); }
-    .av.visitor { background: var(--green-bg); color: var(--green-ink); }
-    .empty { padding: 48px 16px; text-align: center; color: var(--muted); }
+    .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+    .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+    .seg a { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surf); color: var(--mut); font-weight: 600; text-decoration: none; }
+    .seg a:hover { border-color: var(--acc); }
+    .seg a.on { background: var(--soft); color: var(--acc-text); border-color: var(--soft); }
+    .search { flex: 0 1 300px; width: 100%; max-width: 300px; }
+    .search input { width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); }
+
+    .split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+    .split.nopane { grid-template-columns: minmax(0, 1fr); }
+    @media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } }
+    .scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); padding: 8px 10px; background: var(--head); white-space: nowrap; }
+    td { padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
+    tbody tr:hover { background: var(--head); }
+    tbody tr.sel { background: var(--soft); box-shadow: inset 3px 0 0 var(--acc); }
+    tbody tr.chk td:first-child { box-shadow: inset 3px 0 0 var(--warn-line); }
+    tbody tr.sel.chk td:first-child { box-shadow: inset 3px 0 0 var(--acc); }
+    .js tbody tr { cursor: pointer; }
+    tr:focus-visible { outline-offset: -3px; }
+    td.nm a { color: var(--ink); text-decoration: none; font-weight: 700; }
+    td.nm a:hover { color: var(--acc-text); text-decoration: underline; }
+    td.nm small { display: block; color: var(--mut); font-size: 12px; }
+    .by { display: flex; align-items: center; gap: 8px; }
+    .av { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 10px; background: var(--soft); color: var(--acc-text); flex: none; }
+    .av.visitor { background: var(--vis); color: var(--vis-ink); }
+    .st { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+    .st form { margin: 0; }
+    .mini { height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); font-size: 12px; font-weight: 600; color: var(--acc-text); cursor: pointer; }
+    .mini:hover { border-color: var(--acc); }
+    @media (max-width: 640px) { .hide-s { display: none; } }
+
+    /* thumbnails: the photo itself, or a small drawing for voice notes and texts */
+    .th { width: 40px; height: 52px; border-radius: 6px; background: var(--soft); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--acc); }
+    .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .th svg { width: 20px; height: 20px; }
+
+    .pane { padding: 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 16px; }
+    .pane[hidden] { display: none; }
+    .shot { height: 240px; border-radius: 6px; background: var(--soft); display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; color: var(--acc); }
+    .shot img { width: 100%; height: 100%; object-fit: contain; }
+    .shot svg { width: 44px; height: 44px; }
+    .shot .bubble { width: 86%; max-height: 90%; overflow: hidden; padding: 10px 12px; background: var(--art); color: var(--ink); border-radius: 10px 10px 10px 3px; font-size: 13px; line-height: 1.5; box-shadow: 0 1px 4px rgba(40,20,50,.2); }
+    .shot .tag { position: absolute; right: 8px; bottom: 8px; padding: 1px 8px; border-radius: 999px; background: rgba(30,18,38,.75); color: #fff; font-size: 11px; font-weight: 700; }
+    .pane h2 { margin: 0; font-size: 17px; }
+    .pane .org { color: var(--mut); }
+    .pane dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
+    .pane dt { color: var(--mut); } .pane dd { margin: 0; font-weight: 500; }
+    .pane .notice { padding: 6px 10px; border-radius: 6px; background: var(--warn); color: var(--warn-ink); font-weight: 600; }
+    .pane .btn { width: 100%; }
+    .empty { padding: 40px 16px; text-align: center; color: var(--mut); }
 {% endblock %}
 {% block content %}
 <div class="bar">
@@ -52,43 +75,79 @@
 </div>
 
 {% if cards %}
-<div class="grid">
-  {% for c in cards %}
-  <div class="card tile">
-  <a class="tilelink" href="{{ url_for('lead_detail', lead_id=c.id) }}">
-    <div class="thumb">
-      {% if c.kind == 'image' %}
-        <img src="/media/{{ c.image_id }}" alt="" loading="lazy">
-        {% if c.photo_count > 1 %}<span class="tag">{{ c.photo_count }} photos</span>{% endif %}
-      {% elif c.kind == 'audio' %}
-        <div class="wave"><div class="play"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></div>
-          <div class="bars"><b style="height:14px"></b><b style="height:28px"></b><b style="height:40px"></b><b style="height:22px"></b><b style="height:34px"></b><b style="height:44px"></b><b style="height:26px"></b><b style="height:16px"></b></div></div>
-        <span class="tag">Voice note</span>
-      {% else %}
-        <div class="bubble">{{ c.note or 'No content yet' }}</div>
-        <span class="tag">Text message</span>
-      {% endif %}
-      {% if c.review_reason %}<span class="chip amber check">Check</span>{% endif %}
-    </div>
-    <div class="info">
-      <div class="name">{{ c.name }}</div>
-      <div class="org">{{ c.org }}</div>
-      <div class="phone">{{ c.phone or 'No phone' }}</div>
-      <div class="foot">
-        <span><span class="av {{ '' if c.is_team else 'visitor' }}">{{ c.initials }}</span>{{ c.by }}</span>
-        <span>{{ c.created_at|local_time }}</span>
-      </div>
-    </div>
-  </a>
-  {% if c.review_reason %}
-  <form class="resolve" method="post" action="{{ url_for('lead_resolve', lead_id=c.id) }}">
-    <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
-    <button class="btn ghost" title="Looks fine as it is: remove the Check badge">Mark as checked</button>
-  </form>
-  {% endif %}
+{% set play = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>' %}
+{% set chat = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' %}
+<div class="split nopane" id="split">
+  <div class="card scroll">
+    <table>
+      <thead><tr><th scope="col">Photo</th><th scope="col">Name</th><th scope="col" class="hide-s">Phone</th><th scope="col" class="hide-s">Captured by</th><th scope="col">Time</th><th scope="col">Status</th></tr></thead>
+      <tbody id="rows">
+        {% for c in cards %}
+        <tr class="{{ 'chk' if c.review_reason }}" data-kind="{{ c.kind }}" data-img="{{ c.image_id or '' }}" data-photos="{{ c.photo_count }}" data-name="{{ c.name }}" data-org="{{ c.org }}" data-phone="{{ c.phone or 'Not captured' }}" data-by="{{ c.by }}" data-time="{{ c.created_at|local_time }}" data-note="{{ (c.note or '')|truncate(260) }}" data-check="{{ '1' if c.review_reason }}" data-href="{{ url_for('lead_detail', lead_id=c.id) }}">
+          <td><div class="th">{% if c.kind == 'image' %}<img src="/media/{{ c.image_id }}" alt="" loading="lazy">{% elif c.kind == 'audio' %}{{ play|safe }}{% else %}{{ chat|safe }}{% endif %}</div></td>
+          <td class="nm"><a href="{{ url_for('lead_detail', lead_id=c.id) }}">{{ c.name }}</a><small>{{ c.org }}</small></td>
+          <td class="hide-s">{{ c.phone or 'No phone' }}</td>
+          <td class="hide-s"><span class="by"><span class="av {{ '' if c.is_team else 'visitor' }}">{{ c.initials }}</span>{{ c.by }}</span></td>
+          <td>{{ c.created_at|local_time }}</td>
+          <td>
+            <div class="st">
+              {% if c.review_reason %}
+              <span class="chip amber">Check</span>
+              <form method="post" action="{{ url_for('lead_resolve', lead_id=c.id) }}">
+                <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
+                <button class="mini" title="Looks fine as it is: remove the Check badge">Mark as checked</button>
+              </form>
+              {% else %}<span class="chip ok">Saved</span>{% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
-  {% endfor %}
+  <aside class="card pane" id="pane" aria-live="polite" hidden>
+    <div class="shot" id="p-shot"></div>
+    <div><h2 id="p-name"></h2><div class="org" id="p-org"></div></div>
+    <div class="notice" id="p-check" hidden>Needs a quick check</div>
+    <dl><dt>Phone</dt><dd id="p-phone"></dd><dt>By</dt><dd id="p-by"></dd><dt>Time</dt><dd id="p-time"></dd></dl>
+    <a class="btn" id="p-open" href="#">Open lead</a>
+  </aside>
 </div>
+<script>
+  // Click a row to preview its photo beside the table. Without JavaScript the rows are plain links to each lead.
+  (function () {
+    var rows = Array.prototype.slice.call(document.querySelectorAll('#rows tr'));
+    var pane = document.getElementById('pane'), shot = document.getElementById('p-shot');
+    var PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
+    function text(id, value) { document.getElementById(id).textContent = value; }
+    function select(row) {
+      rows.forEach(function (r) { r.classList.toggle('sel', r === row); });
+      var d = row.dataset;
+      shot.textContent = '';
+      if (d.kind === 'image') {
+        var img = document.createElement('img'); img.src = '/media/' + d.img; img.alt = 'Photo of the lead'; shot.appendChild(img);
+        if (+d.photos > 1) { var tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = d.photos + ' photos'; shot.appendChild(tag); }
+      } else if (d.kind === 'audio') {
+        shot.innerHTML = PLAY;
+        var t = document.createElement('span'); t.className = 'tag'; t.textContent = 'Voice note'; shot.appendChild(t);
+      } else {
+        var b = document.createElement('div'); b.className = 'bubble'; b.textContent = d.note || 'No content yet'; shot.appendChild(b);
+      }
+      text('p-name', d.name); text('p-org', d.org); text('p-phone', d.phone); text('p-by', d.by); text('p-time', d.time);
+      document.getElementById('p-check').hidden = !d.check;
+      document.getElementById('p-open').href = d.href;
+    }
+    document.documentElement.classList.add('js');
+    document.getElementById('split').classList.remove('nopane');
+    pane.hidden = false;
+    rows.forEach(function (row) {
+      row.tabIndex = 0;
+      row.addEventListener('click', function (e) { if (!e.target.closest('a, button')) select(row); });
+      row.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === row) { e.preventDefault(); select(row); } });
+    });
+    select(rows[0]);
+  })();
+</script>
 {% else %}
 <div class="card empty">{{ {'forms': 'No contact forms yet.', 'badges': 'No event badges yet.'}.get(tab, 'Nothing here yet.') }}{% if q %} Try a different search.{% endif %}</div>
 {% endif %}
