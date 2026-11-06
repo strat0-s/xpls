@@ -100,6 +100,28 @@ def orbit_row(lead) -> dict:
     }
 
 
+def invalid_email(lead) -> bool:
+    """True when the lead has an email that is left blank in the file because Orbit rejects the whole row for a bad one."""
+    return bool(lead.email.strip()) and not normalize_email(lead.email.strip())
+
+
+def export_warnings(rows: list[dict], dropped_emails: int = 0) -> list[str]:
+    """What Orbit's import will do with this file, in plain words. Nothing here changes the data: a person checks the file and Orbit's preview before importing."""
+    named = [row for row in rows if len(row["name"].strip()) >= 2]  # Orbit skips shorter names before it looks at anything else
+    pins: dict[str, set[bool]] = {}
+    for row in named:
+        pins.setdefault(row["name"].strip().lower(), set()).add(bool(row["pincode"].strip()))
+    checks = [
+        (len(rows) - len(named), "without an organisation name: Orbit skips these and lists them in its preview."),
+        (sum(not row["type"] for row in named), "without an organisation type: Orbit files them under the fallback type picked on its import page (Other if none is picked)."),
+        (sum(bool(row["udiseCode"].strip()) and not re.fullmatch(r"\d{11}", row["udiseCode"].strip()) for row in named), "with a UDISE code that is not 11 digits: Orbit skips these rows and lists them in its preview."),
+        (sum(not row["contact_firstName"] and bool(row["contact_phone"] or row["contact_email"]) for row in named), "with a phone or email but no person's name: Orbit adds the organisation without a contact, so that phone or email is not imported."),
+        (dropped_emails, "with an email Orbit would reject: it is left blank in the file so the rest of the row still imports."),
+        (sum(len(seen) == 2 for seen in pins.values()), "organisation name(s) appear both with and without a pincode: Orbit imports those as separate organisations."),
+    ]
+    return [f"{count} {text}" for count, text in checks if count]
+
+
 def org_count(rows: list[dict]) -> int:
     """Orbit merges rows with the same name + pincode into one organisation and limits the file to MAX_ORGS of them."""
     return len({(row["name"].lower(), row["pincode"].lower()) for row in rows})

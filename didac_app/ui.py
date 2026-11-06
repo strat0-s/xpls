@@ -186,10 +186,12 @@ def register(app, get_store, get_config) -> None:
 
     @app.get("/export")
     def export_page():
-        rows, people = export_selection(get_store(), request.args)
+        leads, people = export_leads(get_store(), request.args)
+        rows = [orbit.orbit_row(lead) for lead in leads]
+        warnings = orbit.export_warnings(rows, sum(orbit.invalid_email(lead) for lead in leads))
         query = {key: value for key, value in request.args.items() if value and key in EXPORT_FILTERS}
         return render_template(
-            "export.html", rows=rows, people=people, org_types=orbit.ORG_TYPES, query=query,
+            "export.html", rows=rows, people=people, warnings=warnings, org_types=orbit.ORG_TYPES, query=query,
             orgs=orbit.org_count(rows), max_orgs=orbit.MAX_ORGS, args=request.args,
         )
 
@@ -231,7 +233,12 @@ EXPORT_FILTERS = ("from", "to", "by", "type")
 
 
 def export_selection(store, args) -> tuple[list[dict], list[str]]:
-    """Leads matching the export filters (capture date in IST, who captured it, organisation type) as Orbit rows
+    leads, people = export_leads(store, args)
+    return [orbit.orbit_row(lead) for lead in leads], people
+
+
+def export_leads(store, args) -> tuple[list, list[str]]:
+    """Leads matching the export filters (capture date in IST, who captured it, organisation type)
     and the capture names to offer in the filter."""
     start, end = parse_day(args.get("from")), parse_day(args.get("to"))
     by, kind = args.get("by", ""), args.get("type", "")
@@ -246,7 +253,7 @@ def export_selection(store, args) -> tuple[list[dict], list[str]]:
         if (by and name != by) or (kind and orbit.lead_org_type(lead) != kind):
             continue
         leads.append(lead)
-    return [orbit.orbit_row(lead) for lead in leads], sorted(people)
+    return leads, sorted(people)
 
 
 def parse_day(value: str | None) -> date | None:

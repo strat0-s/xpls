@@ -111,3 +111,27 @@ def test_lead_page_sets_org_type_from_the_fixed_list(store):
     assert store.get_lead(lead.id).organisation_type == "NGO"
     client.post(f"/leads/{lead.id}", data=form | {"organisation_type": "made-up"})
     assert store.get_lead(lead.id).organisation_type == ""
+
+
+def test_export_warnings_say_what_orbit_will_do(store):
+    make(store, org="Good School", organisation_type="School", first_name="Asha", udise_code="29040100101", pincode="560001")
+    make(store, org="Bad Udise School", organisation_type="School", first_name="Ravi", udise_code="123")
+    make(store, org="No Name School", organisation_type="School", phone="+919845012345")
+    make(store, org="Bad Email School", organisation_type="School", first_name="Dev", email="not-an-email")
+    make(store, org="Pin School", organisation_type="School", first_name="A", pincode="560001")
+    make(store, org="Pin School", organisation_type="School", first_name="B")
+    make(store, first_name="No Org")
+    page = app.test_client().get("/export").data.decode()
+    assert "1 without an organisation name" in page
+    assert "1 with a UDISE code that is not 11 digits" in page
+    assert "1 with a phone or email but no person" in page
+    assert "1 with an email Orbit would reject" in page
+    assert "1 organisation name(s) appear both with and without a pincode" in page
+    assert "without an organisation type" not in page  # every named lead has a type
+    assert "Check before importing" not in make_clean(store)
+
+
+def make_clean(store):
+    store.clear()
+    make(store, org="Fine School", organisation_type="School", first_name="Asha", udise_code="29040100101", pincode="560001")
+    return app.test_client().get("/export").data.decode()

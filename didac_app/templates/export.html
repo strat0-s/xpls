@@ -30,7 +30,6 @@
 </form>
 
 <section class="card panel">
-  {% set no_name = rows|rejectattr('name')|list|length %}{% set no_type = rows|rejectattr('type')|list|length %}
   <div class="sum"><b>{{ rows|length }}</b> lead{{ '' if rows|length == 1 else 's' }} in the file ({{ orgs }} organisation{{ '' if orgs == 1 else 's' }}).</div>
   {% if rows %}
   <div class="scroll card"><table>
@@ -40,14 +39,14 @@
   <div class="hint">First {{ [rows|length, 5]|min }} of {{ rows|length }} rows.</div>
   {% endif %}
   {% if not rows %}<div class="flash">No leads match these filters.</div>{% endif %}
-  {% if no_name or no_type %}<div class="flash">{% if no_name %}{{ no_name }} without an organisation name: Orbit skips these and lists them in its preview. {% endif %}{% if no_type %}{{ no_type }} without an organisation type: pick a default type on Orbit's import page.{% endif %}</div>{% endif %}
+  {% if warnings %}<div class="flash"><b>Check before importing</b><ul style="margin:4px 0 0 18px;padding:0">{% for note in warnings %}<li>{{ note }}</li>{% endfor %}</ul></div>{% endif %}
   {% if orgs > max_orgs %}<div class="flash">Orbit takes at most {{ max_orgs }} organisations per file. Narrow the dates and export in parts.</div>{% endif %}
   {% set ok = rows and orgs <= max_orgs %}
   <div class="actions">
     <a class="btn {{ '' if ok else 'off' }}" href="{{ url_for('export_orbit', fmt='csv', **query) }}">Download CSV</a>
     <a class="btn ghost {{ '' if ok else 'off' }}" href="{{ url_for('export_orbit', fmt='xlsx', **query) }}">Download Excel</a>
   </div>
-  <div class="hint">In Orbit: Organisations &rarr; Import. Orbit skips organisations it already has (same name + pincode, or same UDISE code) and never updates them.</div>
+  <div class="hint">In Orbit: Organisations &rarr; Import. Orbit skips organisations it already has (same name + pincode, or same UDISE code), never updates them, and lists every skipped row in its preview before anything is written.</div>
 </section>
 
 {% endblock %}
