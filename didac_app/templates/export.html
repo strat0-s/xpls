@@ -2,17 +2,18 @@
 {% set active = 'export' %}
 {% block title %}Export · DIDAC Leads{% endblock %}
 {% block css %}
-    h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
-    .panel { padding: 22px; display: flex; flex-direction: column; gap: 16px; }
-    .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; align-items: end; }
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end; }
     .sum { font-size: 15px; line-height: 1.6; }
     .sum b { font-size: 20px; }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; }
-    a.btn { display: inline-flex; align-items: center; text-decoration: none; }
     .btn.off { opacity: .4; pointer-events: none; }
-    .hint { font-size: 13px; color: var(--muted); }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    td, th { text-align: left; padding: 8px 6px; border-top: 1px solid var(--line); }
+    .hint { font-size: 13px; color: var(--mut); }
+    .scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); padding: 8px 10px; background: var(--head); white-space: nowrap; }
+    td { padding: 7px 10px; border-top: 1px solid var(--line); }
 {% endblock %}
 {% block content %}
 <h1>Export for Orbit</h1>
@@ -31,6 +32,13 @@
 <section class="card panel">
   {% set no_name = rows|rejectattr('name')|list|length %}{% set no_type = rows|rejectattr('type')|list|length %}
   <div class="sum"><b>{{ rows|length }}</b> lead{{ '' if rows|length == 1 else 's' }} in the file ({{ orgs }} organisation{{ '' if orgs == 1 else 's' }}).</div>
+  {% if rows %}
+  <div class="scroll card"><table>
+    <thead><tr><th scope="col">Organisation</th><th scope="col">Type</th><th scope="col">Contact</th><th scope="col">Phone</th><th scope="col">City</th></tr></thead>
+    <tbody>{% for row in rows[:5] %}<tr><td>{{ row['name'] }}</td><td>{{ row['type'] or '' }}</td><td>{{ (row['contact_firstName'] ~ ' ' ~ row['contact_lastName'])|trim }}</td><td>{{ row['contact_phone'] }}</td><td>{{ row['city'] }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <div class="hint">First {{ [rows|length, 5]|min }} of {{ rows|length }} rows.</div>
+  {% endif %}
   {% if not rows %}<div class="flash">No leads match these filters.</div>{% endif %}
   {% if no_name or no_type %}<div class="flash">{% if no_name %}{{ no_name }} without an organisation name: Orbit skips these and lists them in its preview. {% endif %}{% if no_type %}{{ no_type }} without an organisation type: pick a default type on Orbit's import page.{% endif %}</div>{% endif %}
   {% if orgs > max_orgs %}<div class="flash">Orbit takes at most {{ max_orgs }} organisations per file. Narrow the dates and export in parts.</div>{% endif %}
