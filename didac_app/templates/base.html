@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Xperimentor DIDAC{% endblock %}</title>
+  <title>{% block title %}DIDAC Leads{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap">
   <style>
-    /* Palette matches scikraft-orbit: blue-600 primary, zinc neutrals, zinc-950 sidebar. */
-    :root { --brand: #2563eb; --brand-dark: #1d4ed8; --brand-soft: #eff6ff; --ink: #18181b; --muted: #71717a; --line: #e4e4e7; --soft: #f4f4f5; --side: #09090b;
+    /* Orange (complement of Orbit blue) on warm stone neutrals, so it never reads as Orbit. brand = orange-700 for text and buttons (AA contrast), bright = orange-600 for fills. */
+    :root { --brand: #c2410c; --brand-dark: #9a3412; --bright: #ea580c; --brand-soft: #fff7ed; --ink: #1c1917; --muted: #78716c; --line: #e7e5e4; --soft: #f5f5f4; --side: #0c0a09;
             --amber-bg: #fef3c7; --amber-ink: #92400e; --green-bg: #dcfce7; --green-ink: #166534; --red-bg: #fee2e2; --red-ink: #b91c1c; }
     * { box-sizing: border-box; }
     div, article, span, section { min-width: 0; }
@@ -18,38 +18,38 @@
     button, input, select, textarea { font-family: inherit; font-size: 14px; }
 
     .shell { display: flex; min-height: 100vh; }
-    aside.side { width: 256px; flex: none; background: var(--side); color: #f4f4f5; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+    aside.side { width: 256px; flex: none; background: var(--side); color: #f5f5f4; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
     .logo { display: flex; align-items: center; gap: 10px; }
-    .logo i { width: 32px; height: 32px; border-radius: 8px; background: var(--brand); display: flex; align-items: center; justify-content: center; font-style: normal; font-weight: 900; font-size: 15px; color: #fff; }
+    .logo i { width: 32px; height: 32px; border-radius: 8px; background: var(--bright); display: flex; align-items: center; justify-content: center; font-style: normal; font-weight: 900; font-size: 15px; color: #fff; }
     .logo b { display: block; font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
-    .logo small { display: block; font-size: 10px; color: #71717a; margin-top: -1px; }
-    aside.side .logo { padding: 20px 16px; border-bottom: 1px solid #27272a; color: #fff; }
+    .logo small { display: block; font-size: 10px; color: #78716c; margin-top: -1px; }
+    aside.side .logo { padding: 20px 16px; border-bottom: 1px solid #292524; color: #fff; }
     nav.main { flex: 1; padding: 16px 8px; display: flex; flex-direction: column; gap: 2px; }
-    nav.main p { margin: 0 12px 6px; font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #71717a; }
-    nav.main a { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #a1a1aa; font-weight: 500; font-size: 14px; text-decoration: none; transition: background .15s, color .15s; }
+    nav.main p { margin: 0 12px 6px; font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #78716c; }
+    nav.main a { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #a8a29e; font-weight: 500; font-size: 14px; text-decoration: none; transition: background .15s, color .15s; }
     nav.main a svg { width: 16px; height: 16px; flex: none; }
-    nav.main a:hover { background: #27272a; color: #fff; }
-    nav.main a.on { background: #27272a; color: #fff; }
-    .who { border-top: 1px solid #27272a; padding: 16px 12px; }
+    nav.main a:hover { background: #292524; color: #fff; }
+    nav.main a.on { background: #292524; color: #fff; }
+    .who { border-top: 1px solid #292524; padding: 16px 12px; }
     .who .me { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-    .who .dot { width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
+    .who .dot { width: 32px; height: 32px; border-radius: 50%; background: var(--bright); color: #fff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
     .who .nm { font-size: 14px; font-weight: 500; color: #fff; }
-    .who .rl { font-size: 12px; color: #71717a; }
+    .who .rl { font-size: 12px; color: #78716c; }
     .who form { margin: 0; }
-    .who .out { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 8px 12px; color: #a1a1aa; font-weight: 400; cursor: pointer; }
-    .who .out:hover { background: #27272a; color: #fff; }
+    .who .out { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 8px 12px; color: #a8a29e; font-weight: 400; cursor: pointer; }
+    .who .out:hover { background: #292524; color: #fff; }
 
     main.page { flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; max-width: 1400px; width: 100%; margin: 0 auto; }
     .flash { padding: 12px 16px; border-radius: 8px; background: var(--amber-bg); color: var(--amber-ink); font-size: 14px; }
     .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
     .btn { height: 40px; padding: 0 18px; border: 1px solid transparent; border-radius: 8px; background: var(--brand); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
     .btn:hover { background: var(--brand-dark); }
-    .btn.ghost { background: #fff; color: #52525b; border-color: var(--line); font-weight: 500; }
-    .btn.ghost:hover { color: var(--brand); border-color: #93c5fd; background: #fff; }
+    .btn.ghost { background: #fff; color: #57534e; border-color: var(--line); font-weight: 500; }
+    .btn.ghost:hover { color: var(--brand); border-color: #fdba74; background: #fff; }
     .btn.danger { background: #fff; color: var(--red-ink); border-color: #fecaca; font-weight: 500; }
     .btn.danger:hover { background: var(--red-bg); }
     label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
-    input.t, select.t, textarea.t { width: 100%; height: 40px; padding: 0 12px; border: 1px solid #d4d4d8; border-radius: 8px; background: #fff; color: var(--ink); }
+    input.t, select.t, textarea.t { width: 100%; height: 40px; padding: 0 12px; border: 1px solid #d6d3d1; border-radius: 8px; background: #fff; color: var(--ink); }
     textarea.t { height: auto; padding: 10px 12px; resize: vertical; }
     input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: transparent; }
     .chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
@@ -76,7 +76,7 @@
 {% block body %}
 <div class="shell">
   <aside class="side">
-    <div class="logo"><i>X</i><div><b>Xperimentor</b><small>DIDAC leads</small></div></div>
+    <div class="logo"><i>D</i><div><b>DIDAC</b><small>Xperimentor</small></div></div>
     <nav class="main">
       <p>Menu</p>
       <a href="{{ url_for('gallery') }}" class="{{ 'on' if active == 'leads' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Leads</a>

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% set active = 'team' %}
-{% block title %}Team · Xperimentor DIDAC{% endblock %}
+{% block title %}Team · DIDAC Leads{% endblock %}
 {% block css %}
     .cols { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
     .list { flex: 999 1 560px; display: flex; flex-direction: column; gap: 14px; }
@@ -8,12 +8,12 @@
     .list p { margin: 4px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
     .wrap { overflow-x: auto; }
     table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 14px; }
-    th { text-align: left; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 12px 16px; background: #fafafa; }
-    td { padding: 12px 16px; border-top: 1px solid #f4f4f5; vertical-align: top; }
+    th { text-align: left; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 12px 16px; background: #fafaf9; }
+    td { padding: 12px 16px; border-top: 1px solid #f5f5f4; vertical-align: top; }
     td small { color: var(--muted); display: block; }
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .row input { height: 34px; width: 150px; padding: 0 10px; border: 1px solid #d4d4d8; border-radius: 8px; }
-    .mini { height: 34px; padding: 0 12px; border: 1px solid #d4d4d8; border-radius: 8px; background: #fff; font-weight: 600; color: var(--brand); cursor: pointer; }
+    .row input { height: 34px; width: 150px; padding: 0 10px; border: 1px solid #d6d3d1; border-radius: 8px; }
+    .mini { height: 34px; padding: 0 12px; border: 1px solid #d6d3d1; border-radius: 8px; background: #fff; font-weight: 600; color: var(--brand); cursor: pointer; }
     .add { flex: 1 1 320px; max-width: 380px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
     .add h2 { margin: 0; font-size: 17px; }
 {% endblock %}
@@ -28,7 +28,7 @@
         <tr>
           <td><strong>{{ m.name }}</strong><small>{{ m.email or '' }}</small></td>
           <td style="white-space:nowrap">{{ m.phone or '' }}</td>
-          <td><span class="chip {{ 'team' if m.is_admin else '' }}" {% if not m.is_admin %}style="background:#f4f4f5;color:#3f3f46"{% endif %}>{{ 'Admin' if m.is_admin else 'Staff' }}</span></td>
+          <td><span class="chip {{ 'team' if m.is_admin else '' }}" {% if not m.is_admin %}style="background:#f5f5f4;color:#44403c"{% endif %}>{{ 'Admin' if m.is_admin else 'Staff' }}</span></td>
           <td><span class="chip {{ 'visitor' if m.is_active else 'off' }}">{{ 'Active' if m.is_active else 'Deactivated' }}</span></td>
           <td>
             <div class="row">
@@ -55,7 +55,7 @@
     <div><label class="f" for="a-phone">Phone (WhatsApp)</label><input class="t" id="a-phone" name="phone" placeholder="+91" required></div>
     <div><label class="f" for="a-email">Email (optional)</label><input class="t" id="a-email" name="email" type="email"></div>
     <div><label class="f" for="a-password">Temporary password</label><input class="t" id="a-password" name="password" type="password" minlength="8" required autocomplete="new-password"></div>
-    <label style="display:flex;gap:10px;align-items:center;font-size:14px;color:#3f3f46"><input type="checkbox" name="is_admin" style="width:18px;height:18px"> Can manage the team (admin)</label>
+    <label style="display:flex;gap:10px;align-items:center;font-size:14px;color:#44403c"><input type="checkbox" name="is_admin" style="width:18px;height:18px"> Can manage the team (admin)</label>
     <button class="btn">Add member</button>
   </form>
 </div>
