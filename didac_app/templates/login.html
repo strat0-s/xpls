@@ -1,23 +1,43 @@
 {% extends "base.html" %}
 {% block title %}Sign in · Xperimentor DIDAC{% endblock %}
 {% block css %}
-    .login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
-    .login .card { width: 100%; max-width: 400px; padding: 32px; display: flex; flex-direction: column; gap: 20px; }
-    .login h1 { margin: 0; font-size: 24px; }
-    .login p { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
-    .login input.t { height: 44px; font-size: 15px; }
+    .login { min-height: 100vh; display: flex; }
+    .brandside { display: none; flex: 1 1 50%; background: var(--brand); color: #fff; position: relative; overflow: hidden; align-items: center; justify-content: center; padding: 48px; text-align: center; }
+    .brandside::before { content: ""; position: absolute; inset: 0; opacity: .1; background-image: linear-gradient(rgba(255,255,255,.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.3) 1px, transparent 1px); background-size: 40px 40px; }
+    .brandside > div { position: relative; max-width: 420px; }
+    .brandside .mark { width: 80px; height: 80px; margin: 0 auto 28px; border-radius: 16px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.3); display: flex; align-items: center; justify-content: center; font-size: 36px; font-weight: 900; }
+    .brandside h2 { margin: 0 0 6px; font-size: 44px; font-weight: 900; letter-spacing: -.02em; }
+    .brandside .by { color: #dbeafe; font-weight: 500; font-size: 17px; }
+    .brandside hr { width: 64px; height: 2px; border: 0; background: rgba(255,255,255,.4); margin: 28px auto; }
+    .brandside p { margin: 0; color: #dbeafe; line-height: 1.6; }
+    .formside { flex: 1; display: flex; align-items: center; justify-content: center; background: #fff; padding: 32px 24px; }
+    .formside form { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 20px; }
+    .formside .logo b { color: var(--ink); } .formside .logo { margin-bottom: 8px; }
+    .formside h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+    .formside p { margin: 6px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .formside input.t { height: 44px; font-size: 15px; }
+    .formside .btn { height: 44px; }
+    @media (min-width: 1024px) { .brandside { display: flex; } }
 {% endblock %}
 {% block body %}
 <div class="login">
-  <form class="card" method="post" action="{{ url_for('login', next=request.args.get('next')) }}">
-    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-    <div class="logo"><i></i><div>Xperimentor <span>DIDAC</span></div></div>
-    <div><h1>Sign in</h1><p>Use the phone number or email your admin added.</p></div>
-    {% for message in get_flashed_messages() %}<div class="flash">{{ message }}</div>{% endfor %}
-    <div><label class="f" for="login">Phone or email</label><input class="t" id="login" name="login" autocomplete="username" required autofocus></div>
-    <div><label class="f" for="password">Password</label><input class="t" id="password" name="password" type="password" autocomplete="current-password" required></div>
-    <button class="btn">Sign in</button>
-    <p style="text-align:center">No account yet? Ask an admin to add you. Forgot your password? An admin can set a new one.</p>
-  </form>
+  <div class="brandside"><div>
+    <div class="mark">X</div>
+    <h2>Xperimentor</h2><div class="by">DIDAC lead capture</div>
+    <hr>
+    <p>Every card, form and badge your team collects on WhatsApp, read, checked and ready for Orbit.</p>
+  </div></div>
+  <div class="formside">
+    <form method="post" action="{{ url_for('login', next=request.args.get('next')) }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <div class="logo"><i>X</i><div><b>Xperimentor</b><small style="color:var(--muted)">DIDAC leads</small></div></div>
+      <div><h1>Sign in</h1><p>Use the phone number or email your admin added.</p></div>
+      {% for message in get_flashed_messages() %}<div class="flash">{{ message }}</div>{% endfor %}
+      <div><label class="f" for="login">Phone or email</label><input class="t" id="login" name="login" autocomplete="username" required autofocus></div>
+      <div><label class="f" for="password">Password</label><input class="t" id="password" name="password" type="password" autocomplete="current-password" required></div>
+      <button class="btn">Sign in</button>
+      <p style="text-align:center">No account yet? Ask an admin to add you. Forgot your password? An admin can set a new one.</p>
+    </form>
+  </div>
 </div>
 {% endblock %}

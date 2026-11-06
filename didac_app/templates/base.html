@@ -5,59 +5,94 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Xperimentor DIDAC{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap">
   <style>
-    :root { --brand: #3b2a6b; --ink: #1a1630; --muted: #6b6585; --line: #e6e3f0; --soft: #f4f3f8; --amber-bg: #fff1cc; --amber-ink: #7a5200; --green-bg: #e3f3ea; --green-ink: #1d6b3f; }
+    /* Palette matches scikraft-orbit: blue-600 primary, zinc neutrals, zinc-950 sidebar. */
+    :root { --brand: #2563eb; --brand-dark: #1d4ed8; --brand-soft: #eff6ff; --ink: #18181b; --muted: #71717a; --line: #e4e4e7; --soft: #f4f4f5; --side: #09090b;
+            --amber-bg: #fef3c7; --amber-ink: #92400e; --green-bg: #dcfce7; --green-ink: #166534; --red-bg: #fee2e2; --red-ink: #b91c1c; }
     * { box-sizing: border-box; }
     div, article, span, section { min-width: 0; }
-    body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: var(--soft); color: var(--ink); overflow-wrap: anywhere; }
+    html { height: 100%; }
+    body { margin: 0; min-height: 100%; font-family: 'Inter', system-ui, sans-serif; background: var(--soft); color: var(--ink); overflow-wrap: anywhere; -webkit-font-smoothing: antialiased; }
     a { color: var(--brand); }
     button, input, select, textarea { font-family: inherit; font-size: 14px; }
-    header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding: 14px 32px; background: #fff; border-bottom: 1px solid var(--line); }
-    .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; }
-    .logo i { width: 34px; height: 34px; border-radius: 10px; background: var(--brand); display: block; }
-    .logo span { font-weight: 500; color: var(--muted); }
-    nav.main { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
-    nav.main a { padding: 8px 14px; border-radius: 999px; color: #4a4563; font-weight: 500; font-size: 14px; text-decoration: none; }
-    nav.main a.on { background: #eeeaf8; color: var(--brand); font-weight: 600; }
-    .who { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #4a4563; }
+
+    .shell { display: flex; min-height: 100vh; }
+    aside.side { width: 256px; flex: none; background: var(--side); color: #f4f4f5; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo i { width: 32px; height: 32px; border-radius: 8px; background: var(--brand); display: flex; align-items: center; justify-content: center; font-style: normal; font-weight: 900; font-size: 15px; color: #fff; }
+    .logo b { display: block; font-size: 14px; font-weight: 700; letter-spacing: -.01em; }
+    .logo small { display: block; font-size: 10px; color: #71717a; margin-top: -1px; }
+    aside.side .logo { padding: 20px 16px; border-bottom: 1px solid #27272a; color: #fff; }
+    nav.main { flex: 1; padding: 16px 8px; display: flex; flex-direction: column; gap: 2px; }
+    nav.main p { margin: 0 12px 6px; font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: #71717a; }
+    nav.main a { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 6px; color: #a1a1aa; font-weight: 500; font-size: 14px; text-decoration: none; transition: background .15s, color .15s; }
+    nav.main a svg { width: 16px; height: 16px; flex: none; }
+    nav.main a:hover { background: #27272a; color: #fff; }
+    nav.main a.on { background: #27272a; color: #fff; }
+    .who { border-top: 1px solid #27272a; padding: 16px 12px; }
+    .who .me { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .who .dot { width: 32px; height: 32px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center; flex: none; }
+    .who .nm { font-size: 14px; font-weight: 500; color: #fff; }
+    .who .rl { font-size: 12px; color: #71717a; }
     .who form { margin: 0; }
-    .linkbtn { background: none; border: 0; color: var(--brand); font-weight: 600; cursor: pointer; padding: 0; }
-    main.page { padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; }
-    .flash { padding: 12px 16px; border-radius: 12px; background: var(--amber-bg); color: #6b4700; font-size: 14px; }
-    .card { background: #fff; border-radius: 16px; box-shadow: 0 1px 2px rgba(26,22,48,.06), 0 6px 18px rgba(26,22,48,.06); }
-    .btn { height: 44px; padding: 0 22px; border: 0; border-radius: 999px; background: var(--brand); color: #fff; font-weight: 600; font-size: 15px; cursor: pointer; }
-    .btn.ghost { background: #fff; color: var(--ink); border: 1px solid #d9d5e8; font-weight: 500; }
-    .btn.danger { background: #fff; color: #a12d1f; border: 1px solid #e3b4ac; font-weight: 500; height: 40px; font-size: 14px; }
+    .who .out { display: block; width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 8px 12px; color: #a1a1aa; font-weight: 400; cursor: pointer; }
+    .who .out:hover { background: #27272a; color: #fff; }
+
+    main.page { flex: 1; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; max-width: 1400px; width: 100%; margin: 0 auto; }
+    .flash { padding: 12px 16px; border-radius: 8px; background: var(--amber-bg); color: var(--amber-ink); font-size: 14px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .btn { height: 40px; padding: 0 18px; border: 1px solid transparent; border-radius: 8px; background: var(--brand); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; transition: background .15s, border-color .15s, color .15s; }
+    .btn:hover { background: var(--brand-dark); }
+    .btn.ghost { background: #fff; color: #52525b; border-color: var(--line); font-weight: 500; }
+    .btn.ghost:hover { color: var(--brand); border-color: #93c5fd; background: #fff; }
+    .btn.danger { background: #fff; color: var(--red-ink); border-color: #fecaca; font-weight: 500; }
+    .btn.danger:hover { background: var(--red-bg); }
     label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px; }
-    input.t, select.t, textarea.t { width: 100%; height: 42px; padding: 0 12px; border: 1px solid #d9d5e8; border-radius: 10px; background: #fff; }
+    input.t, select.t, textarea.t { width: 100%; height: 40px; padding: 0 12px; border: 1px solid #d4d4d8; border-radius: 8px; background: #fff; color: var(--ink); }
     textarea.t { height: auto; padding: 10px 12px; resize: vertical; }
-    .chip { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); outline-offset: -1px; border-color: transparent; }
+    .chip { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
     .chip.amber { background: var(--amber-bg); color: var(--amber-ink); }
-    .chip.team { background: #eeeaf8; color: var(--brand); }
+    .chip.team { background: var(--brand-soft); color: var(--brand-dark); }
     .chip.visitor { background: var(--green-bg); color: var(--green-ink); }
-    .chip.off { background: #f6e3e0; color: #a12d1f; }
-    @media (max-width: 640px) { header.top, main.page { padding-left: 16px; padding-right: 16px; } }
+    .chip.off { background: var(--red-bg); color: var(--red-ink); }
+
+    @media (max-width: 860px) {
+      .shell { flex-direction: column; }
+      aside.side { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; align-items: center; }
+      aside.side .logo { border: 0; padding: 12px 16px; }
+      nav.main { flex-direction: row; flex: 1 1 auto; padding: 0 8px; overflow-x: auto; }
+      nav.main p { display: none; }
+      .who { border: 0; padding: 8px 12px; display: flex; align-items: center; gap: 4px; margin-left: auto; }
+      .who .me { margin: 0; } .who .nm { display: none; } .who .rl { display: none; }
+      .who .out { width: auto; }
+      main.page { padding: 20px 16px; }
+    }
     {% block css %}{% endblock %}
   </style>
 </head>
 <body>
 {% block body %}
-  <header class="top">
-    <div class="logo"><i></i><div>Xperimentor <span>DIDAC</span></div></div>
+<div class="shell">
+  <aside class="side">
+    <div class="logo"><i>X</i><div><b>Xperimentor</b><small>DIDAC leads</small></div></div>
     <nav class="main">
-      <a href="{{ url_for('gallery') }}" class="{{ 'on' if active == 'leads' }}">Leads</a>
-      {% if user.is_admin %}<a href="{{ url_for('team') }}" class="{{ 'on' if active == 'team' }}">Team</a>{% endif %}
-      <a href="{{ url_for('export_page') }}" class="{{ 'on' if active == 'export' }}">Export</a>
+      <p>Menu</p>
+      <a href="{{ url_for('gallery') }}" class="{{ 'on' if active == 'leads' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Leads</a>
+      {% if user.is_admin %}<a href="{{ url_for('team') }}" class="{{ 'on' if active == 'team' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>Team</a>{% endif %}
+      <a href="{{ url_for('export_page') }}" class="{{ 'on' if active == 'export' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>Export</a>
     </nav>
-    <div class="who">{{ user.name }}
-      <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="linkbtn">Sign out</button></form>
+    <div class="who">
+      <div class="me"><span class="dot">{{ user.name[:1]|upper }}</span><div><div class="nm">{{ user.name }}</div><div class="rl">{{ 'Admin' if user.is_admin else 'Staff' }}</div></div></div>
+      <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="out">Sign out</button></form>
     </div>
-  </header>
+  </aside>
   <main class="page">
     {% for message in get_flashed_messages() %}<div class="flash">{{ message }}</div>{% endfor %}
     {% block content %}{% endblock %}
   </main>
+</div>
 {% endblock %}
 </body>
 </html>
