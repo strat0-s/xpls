@@ -196,14 +196,33 @@ Visitor flow (tap list rows or type the label; numbers are not accepted):
 
 ```text
 Visitor: hi
-Bot: list - Download brochure, Share my requirement, Feedback / voice note, Talk to sales
+Bot: list - Download brochure, Share my requirement, Feedback / voice note
 Visitor: Download brochure -> TiQer
 Bot: sends the TiQer brochure link
 Visitor: Share my requirement
 Bot: asks name, organisation, type, city and state, then the requirement, and saves one lead
 ```
 
-Staff flow (a phone that is active on the Team page): the menu is Contact form, Other document, Event badge / QR, Add a note. Send photos (a contact form may include the visiting card stapled to it), reply DONE, then Save, Edit or Retake. Type BACK to stop editing, cancel to stop a flow.
+Staff flow (a phone that is active on the Team page): the menu is Contact form, Other docs (cards, etc.), Event badge / QR, Add a note. Send photos (a contact form may include the visiting card stapled to it), reply DONE, then Save, Edit or Retake. Edit takes `Field: value` lines, including `Priority: High`. Tapping Save asks for a priority (High, Medium, Low) unless it was set in Edit; the lead is saved only after that. The "I read this as" summary is never shortened: it goes out as one message, or as one plain message plus the buttons when it is too long for a button message (about 1000 characters). Type BACK to stop editing, cancel to stop a flow.
+
+Notes always go to the sender's own most recent lead, and only if it was saved or edited in the last 30 minutes. With no such lead, a note with a name, phone or email starts a new "note only" lead.
+
+Visitor leads have no priority (shown as Unclassified); staff set it on the lead page.
+
+WhatsApp lists: Bird turns each list item into a section, so every menu is sent as ONE item holding all rows (otherwise every title shows twice). WhatsApp shows only a row's title, cut at 24 characters, and never its description.
+
+### Follow-up message to captured leads
+
+Admins open **Follow-up** in the dashboard bar. **Send next batch** sends the approved WhatsApp template `didac_thank_you` (Marketing; body "thank you for visiting Xperimentor at DIDAC", footer "Reply STOP...", quick-reply buttons `Share my requirement` and `Download brochure`, whose labels must match the visitor menu rows) to every distinct mobile number among the leads. A lead page also has **Send follow-up** for one lead. Nothing sends automatically.
+
+- One message per number, ever (`followups` table, primary key = E.164 number). Landlines, Team numbers and numbers that replied STOP or unsubscribe are skipped. A failed send gives the number back.
+- 09:00 to 21:00 IST only; at most 40 per click and `FOLLOWUP_DAILY_CAP` (default 100) per 24 hours; the batch stops at the first error.
+- Bird accepting a send only means "accepted". The Follow-up page asks Bird for each message's final status (delivered, read, failed with Meta's reason) when it loads. Meta may refuse a marketing message to someone who never messaged us (error 131049); that is Meta's decision per recipient.
+- Env vars: `BIRD_FOLLOWUP_TEMPLATE_ID` (the template's Bird project id), `BIRD_FOLLOWUP_TEMPLATE_VERSION` (default `latest`), `FOLLOWUP_DAILY_CAP`. Blank template id disables the feature. The Bird access key can only send and read messages; it cannot create or manage templates (403), so templates are made in the Bird dashboard.
+
+### Dashboard
+
+Leads page: tabs All (default), Contact forms, Event badges, Other documents; one **Filter** control (captured by Everyone/Team/Visitors, priority High/Medium/Low/Unclassified); a coloured Priority chip in the table and the preview panel. Lead page: edit every field including Priority, photo **Rotate left/right** (the angle is saved on the photo row, the stored file is never changed), Send follow-up and Delete lead (admins), in-page confirm dialogs. Every password box has a Show/Hide button.
 
 Brochure links come from the env vars `BROCHURE_URL`, `SIA_BROCHURE_URL`, `TIQER_BROCHURE_URL`, `PLAY_LAB_BROCHURE_URL`, `STREAM_BROCHURE_URL`, `LAB_IN_CLASSROOM_BROCHURE_URL`. Until real PDFs exist they default to sample PDFs (see `config.py`). Change one with `vercel env rm/add <NAME> production`, then redeploy.
 
