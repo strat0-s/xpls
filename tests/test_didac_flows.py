@@ -41,7 +41,7 @@ def last(sent):
 
 def test_staff_menu_is_a_four_row_list_and_hi_creates_no_lead(store, sent):
     say(STAFF, "menu")
-    assert last(sent) == ("Hi Test. What would you like to do?\n\nOther documents (visiting cards, brochures, flyers and all that).\n\nType menu any time. Type cancel to stop.", ["Contact form", "Other docs (cards, etc.)", "Event badge / QR", "Add a note"])
+    assert last(sent) == ("Hi Test. What would you like to do?\n\nType menu any time. Type cancel to stop.", ["Contact form", "Other docs (cards, etc.)", "Event badge / QR", "Add a note"])
     say(VISITOR, "hi")
     assert store.list_leads() == []
 

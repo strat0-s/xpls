@@ -175,7 +175,7 @@ class Chat:
         if self.user:
             first = self.user["name"].split()[0]
             rows = [(FORM, "The printed Xperimentor form"), (DOC_ROW, "Visiting cards, brochures, flyers and all that"), (BADGE, "Badge or ID card with a QR code"), (NOTE, "Voice or text note on your last lead")]
-            self.replies.append(Reply(f"Hi {first}. What would you like to do?\n\nOther documents (visiting cards, brochures, flyers and all that).\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
+            self.replies.append(Reply(f"Hi {first}. What would you like to do?\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
         else:
             rows = [(BROCHURE, "SIA, TiQer, Play Lab and more"), (REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo")]
             self.replies.append(Reply("Welcome to Xperimentor at DIDAC.\nPlease choose an option. Type menu at any time to see this again.", rows, as_list=True))
