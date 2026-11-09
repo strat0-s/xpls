@@ -54,3 +54,8 @@ def test_media_file_redirects_to_signed_url(store, monkeypatch):
     response = app.test_client().get(f"/media/{media_id}")
     assert response.status_code == 302
     assert response.headers["Location"] == "https://signed.example/2026-10-18/91/card.jpg"
+
+
+def test_password_boxes_get_a_show_hide_script(anon_client):
+    page = anon_client.get("/login").data.decode()
+    assert 'type="password"' in page and "Show" in page and "input[type=password]" in page

@@ -60,6 +60,11 @@
     .chip.none { background: var(--line); color: var(--mut); }
     .chip.staff { background: var(--line); color: var(--mut); }
 
+    .pw { position: relative; display: inline-flex; align-items: center; max-width: 100%; }
+    .pw.full { display: flex; width: 100%; }
+    .pw input { padding-right: 54px !important; }
+    .pw button { position: absolute; right: 4px; height: 24px; padding: 0 8px; border: 0; border-radius: 4px; background: transparent; color: var(--acc-text); font-weight: 600; font-size: 12px; cursor: pointer; }
+    .pw button:hover { background: var(--soft); }
     dialog.ask { border: 1px solid var(--line); border-radius: 12px; padding: 22px; width: min(400px, calc(100vw - 32px)); background: var(--surf); color: var(--ink); box-shadow: 0 12px 40px rgba(42,32,48,.25); }
     dialog.ask::backdrop { background: rgba(42,32,48,.45); }
     dialog.ask h2 { margin: 0 0 6px; font-size: 17px; }
@@ -94,6 +99,22 @@
   <h2></h2><p></p>
   <div class="row"><button type="button" class="btn ghost" data-no>Cancel</button><button type="button" class="btn" data-yes></button></div>
 </dialog>
+<script>
+  // Every password box gets a Show / Hide button.
+  document.querySelectorAll('input[type=password]').forEach(function (input) {
+    var wrap = document.createElement('span'), toggle = document.createElement('button');
+    wrap.className = 'pw' + (input.classList.contains('t') ? ' full' : '');
+    toggle.type = 'button'; toggle.textContent = 'Show'; toggle.setAttribute('aria-label', 'Show password'); toggle.setAttribute('aria-pressed', 'false');
+    toggle.onclick = function () {
+      var show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      toggle.textContent = show ? 'Hide' : 'Show';
+      toggle.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+      toggle.setAttribute('aria-pressed', String(show));
+    };
+    input.parentNode.insertBefore(wrap, input); wrap.appendChild(input); wrap.appendChild(toggle);
+  });
+</script>
 <script>
   // A form with data-confirm opens this dialog instead of the browser's confirm box; data-title / data-ok / data-danger tune it.
   (function () {
