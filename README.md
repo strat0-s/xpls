@@ -190,7 +190,6 @@ Staff commands (staff only; visitors typing a slash command just get the menu):
 /help
 /summary
 /export excel
-/send brochure 9845xxxxx
 ```
 
 Visitor flow (tap list rows or type the label; numbers are not accepted):

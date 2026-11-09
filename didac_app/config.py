@@ -31,9 +31,6 @@ class DidacConfig:
     play_lab_brochure_url: str = os.getenv("PLAY_LAB_BROCHURE_URL", "https://pdfobject.com/pdf/sample.pdf")  # placeholder PDF until the real one is set
     stream_brochure_url: str = os.getenv("STREAM_BROCHURE_URL", "https://www.orimi.com/pdf-test.pdf")  # placeholder PDF until the real one is set
     lab_in_classroom_brochure_url: str = os.getenv("LAB_IN_CLASSROOM_BROCHURE_URL", "https://pdfobject.com/pdf/sample.pdf")  # placeholder PDF until the real one is set
-    case_study_url: str = os.getenv("CASE_STUDY_URL", "")
-    demo_video_url: str = os.getenv("DEMO_VIDEO_URL", "")
-    calendar_url: str = os.getenv("CALENDAR_URL", "")
     followup_template_id: str = os.getenv("BIRD_FOLLOWUP_TEMPLATE_ID", "")  # Bird project id of the approved thank-you template; blank = follow-up disabled
     followup_template_version: str = os.getenv("BIRD_FOLLOWUP_TEMPLATE_VERSION", "latest")
     followup_daily_cap: int = int(os.getenv("FOLLOWUP_DAILY_CAP", "100"))
