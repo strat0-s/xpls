@@ -43,7 +43,7 @@ def test_staff_menu_is_a_four_row_list_and_hi_creates_no_lead(store, sent):
 def test_visitor_menu_is_a_list_without_demo_or_badge(sent):
     say(VISITOR, "menu")
     text, rows = last(sent)
-    assert rows == ["Download brochure", "Share my requirement", "Feedback / voice note", "Talk to sales"]
+    assert rows == ["Download brochure", "Share my requirement", "Feedback / voice note"]
     assert "reply with a number" not in text
     say(VISITOR, "Book a demo")
     assert last(sent)[1] == rows  # no longer an option: the menu is shown again
@@ -328,18 +328,6 @@ def test_export_includes_incomplete_leads_and_says_what_is_missing(store):
     page = client.get("/export").data.decode()
     assert "<b>1</b> lead in the file" in page and "1 without an organisation name" in page
     assert b"No" in client.get("/export/orbit.csv").data
-
-
-def test_talk_to_sales_then_name_is_saved_on_the_same_lead(store, sent):
-    say(VISITOR, "Talk to sales")
-    assert "What is your name?" in last(sent)[0]
-    say(VISITOR, "Venugopal SKMG")
-    say(VISITOR, "SKMG Schools")
-    say(VISITOR, "School")
-    say(VISITOR, "Bengaluru, Karnataka")
-    say(VISITOR, "Science labs")
-    leads = store.list_leads()
-    assert len(leads) == 1 and leads[0].name == "Venugopal SKMG" and "Talk to sales requested" in leads[0].interest
 
 
 def test_unknown_field_doubts_are_not_checks():

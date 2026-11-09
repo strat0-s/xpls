@@ -30,7 +30,7 @@ NOTE_WINDOW_MINUTES = 30
 
 FORM, DOC, BADGE, NOTE = "Contact form", "Other document", "Event badge / QR", "Add a note"
 SCANS = {FORM.lower(): "form", DOC.lower(): "document", BADGE.lower(): "badge"}
-BROCHURE, REQUIREMENT, FEEDBACK, SALES = "Download brochure", "Share my requirement", "Feedback / voice note", "Talk to sales"
+BROCHURE, REQUIREMENT, FEEDBACK = "Download brochure", "Share my requirement", "Feedback / voice note"
 SAVE, EDIT, RETAKE = "Save", "Edit", "Retake"
 # The model sometimes lists every empty field as a doubt ("udise_code unknown"), and flags a QR code it cannot decode from pixels; the code decodes QRs itself.
 NOT_ON_DOCUMENT = re.compile(r"\bqr\b|\b(unknown|not (printed|present|provided|given|available|mentioned|visible|found)|missing|n/?a)\b", re.I)
@@ -157,7 +157,7 @@ class Chat:
             self.no_flow(text, media)
 
     def menu_choices(self) -> set[str]:
-        return {label.lower() for label in ((FORM, DOC, BADGE, NOTE) if self.user else (BROCHURE, REQUIREMENT, FEEDBACK, SALES))}
+        return {label.lower() for label in ((FORM, DOC, BADGE, NOTE) if self.user else (BROCHURE, REQUIREMENT, FEEDBACK))}
 
     def say(self, text: str) -> None:
         self.replies.append(Reply(text))
@@ -173,8 +173,7 @@ class Chat:
             rows = [(FORM, "The printed Xperimentor form"), (DOC, "Visiting card, flyer, brochure"), (BADGE, "Badge or ID card with a QR code"), (NOTE, "Voice or text note on your last lead")]
             self.replies.append(Reply(f"Hi {first}. What would you like to do?\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
         else:
-            rows = [(BROCHURE, "SIA, TiQer, Play Lab and more"), (REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo"),
-                    (SALES, "Our team will get in touch")]
+            rows = [(BROCHURE, "SIA, TiQer, Play Lab and more"), (REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo")]
             self.replies.append(Reply("Welcome to Xperimentor at DIDAC.\nPlease choose an option. Type menu at any time to see this again.", rows, as_list=True))
 
     def no_flow(self, text: str, media: list[tuple[str, str]]) -> None:
@@ -210,10 +209,6 @@ class Chat:
         if choice == FEEDBACK.lower():
             self.store.put_session(self.number, "feedback", "collect", {})
             return self.say("Please type your feedback, or send a voice note or photo now. We will save it for the team. Type menu when you are done.")
-        if choice == SALES.lower():
-            self.visitor_lead(interest="Talk to sales requested")
-            self.store.put_session(self.number, "requirement", "name", {})  # the same questions as Share my requirement, so the name is not lost
-            return self.say("Thanks. We marked this for sales follow-up. What is your name?")
         if media:
             self.collect_feedback(text, media)
             return self.say("Saved for the team. Type menu for options.")
