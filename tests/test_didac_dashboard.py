@@ -30,7 +30,7 @@ def test_report_downloads_xlsx_and_csv():
     assert b"first_name" in csv_response.data
 
 
-REMOVED_FIELDS = {"score", "priority", "owner", "next_action", "follow_up_date", "email_subject", "email_draft", "whatsapp_draft"}
+REMOVED_FIELDS = {"score", "owner", "next_action", "follow_up_date", "email_subject", "email_draft", "whatsapp_draft"}
 
 
 def test_removed_lead_fields_are_absent_from_api_and_csv():

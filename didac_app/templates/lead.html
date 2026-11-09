@@ -116,6 +116,8 @@
         <select class="t" id="f-doc_type" name="doc_type"><option value="form" {{ 'selected' if lead.doc_type == 'form' }}>Contact form</option><option value="badge" {{ 'selected' if lead.doc_type == 'badge' }}>Event badge / QR</option><option value="other" {{ 'selected' if lead.doc_type not in ('form', 'badge') }}>Other document</option></select></div>
       <div class="wide"><label class="f" for="f-organisation_type">Organisation type (used for the Orbit export)</label>
         <select class="t" id="f-organisation_type" name="organisation_type"><option value="">Not set</option>{% for code, label in org_types.items() %}<option value="{{ code }}" {{ 'selected' if code == org_type }}>{{ label }}</option>{% endfor %}</select></div>
+      <div class="wide"><label class="f" for="f-priority">Priority</label>
+        <select class="t" id="f-priority" name="priority"><option value="">Unclassified</option>{% for p in priorities %}<option {{ 'selected' if p == lead.priority }}>{{ p }}</option>{% endfor %}</select></div>
       <div class="wide"><label class="f" for="f-notes">Notes (student count, remarks)</label><textarea class="t" id="f-notes" name="notes" rows="3">{{ lead.notes }}</textarea></div>
       <div class="wide"><label class="f" for="f-interest">Summary of what they need</label><textarea class="t" id="f-interest" name="interest" rows="3">{{ lead.interest }}</textarea></div>
     </div>

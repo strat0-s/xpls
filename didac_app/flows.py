@@ -32,6 +32,7 @@ FORM, DOC, BADGE, NOTE = "Contact form", "Other document", "Event badge / QR", "
 SCANS = {FORM.lower(): "form", DOC.lower(): "document", BADGE.lower(): "badge"}
 BROCHURE, REQUIREMENT, FEEDBACK = "Download brochure", "Share my requirement", "Feedback / voice note"
 SAVE, EDIT, RETAKE = "Save", "Edit", "Retake"
+PRIORITIES = ("High", "Medium", "Low")
 # The model sometimes lists every empty field as a doubt ("udise_code unknown"), and flags a QR code it cannot decode from pixels; the code decodes QRs itself.
 NOT_ON_DOCUMENT = re.compile(r"\bqr\b|\b(unknown|not (printed|present|provided|given|available|mentioned|visible|found)|missing|n/?a)\b", re.I)
 WHAT_IS_IT = "Is this a contact form, another document or an event badge?"
@@ -170,7 +171,7 @@ class Chat:
             self.say(f"Discarded {lost} photo(s) that were not saved.")
         if self.user:
             first = self.user["name"].split()[0]
-            rows = [(FORM, "The printed Xperimentor form"), (DOC, "Visiting card, flyer, brochure"), (BADGE, "Badge or ID card with a QR code"), (NOTE, "Voice or text note on your last lead")]
+            rows = [(FORM, "The printed Xperimentor form"), (DOC, "(Visiting cards, brochures, flyers, etc.)"), (BADGE, "Badge or ID card with a QR code"), (NOTE, "Voice or text note on your last lead")]
             self.replies.append(Reply(f"Hi {first}. What would you like to do?\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
         else:
             rows = [(BROCHURE, "SIA, TiQer, Play Lab and more"), (REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo")]
@@ -287,10 +288,19 @@ class Chat:
                 return self.confirm(data)
             if low in (SAVE.lower(), EDIT.lower(), RETAKE.lower()):
                 step = "confirm"
+        if step == "priority":  # a lead is only saved once staff have tagged it
+            pick = next((name for name in PRIORITIES if name.lower() == low), "")
+            if not pick:
+                return self.replies.append(buttons("Please tap High, Medium or Low.", *PRIORITIES))
+            data["draft"]["priority"] = pick
+            return self.save_scan(flow, data)
         if step == "confirm":
             choice = low
             if choice == SAVE.lower():
-                return self.save_scan(flow, data)
+                if data["draft"].get("priority"):
+                    return self.save_scan(flow, data)
+                self.store.put_session(self.number, flow, "priority", data)
+                return self.replies.append(buttons("How important is this lead?", *PRIORITIES))
             if choice == EDIT.lower():
                 self.store.put_session(self.number, flow, "edit", data)
                 return self.say("Reply with corrections, one per line.\nExample:\nPhone: 98450 11112\nType BACK to stop editing.")

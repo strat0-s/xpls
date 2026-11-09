@@ -41,14 +41,12 @@ def media_headers(config: DidacConfig) -> dict[str, str]:
 
 
 def message_body(text: str, options: list[tuple[str, str]] | None = None, as_list: bool = False) -> dict:
-    """Plain text; up to 3 tappable reply buttons (label max 20 chars); or a tap-list of up to 10 rows (title max 24, description max 72).
+    """Plain text; up to 3 tappable reply buttons (label max 20 chars); or a tap-list of up to 10 rows in one section (title max 24, description max 72).
     A tap comes back as an ordinary inbound text whose body is the label, so typing the label does the same."""
     if options and as_list:
-        items = [
-            {"title": label[:24], "description": description[:72], "actions": [{"type": "postback", "postback": {"text": label[:24], "payload": label}}]}
-            for label, description in options[:10]
-        ]
-        return {"type": "list", "list": {"text": text, "items": items}}
+        # One item = one section: with a section per row WhatsApp showed every title twice (section header and row). Tested on a phone 2026-11-09.
+        rows = [{"type": "postback", "postback": {"text": label[:24], "payload": label, "description": description[:72]}} for label, description in options[:10]]
+        return {"type": "list", "list": {"text": text, "items": [{"title": "Choose an option", "actions": rows}]}}
     if options:
         actions = [{"type": "reply", "reply": {"text": label[:20]}} for label, _ in options[:3]]
         return {"type": "text", "text": {"text": text, "actions": actions}}

@@ -47,6 +47,7 @@ class Lead:
     feedback_notes: str = ""
     tags: str = ""
     status: str = "New"
+    priority: str = ""  # High / Medium / Low; blank = unclassified until staff tag it
     media_urls: str = ""
     media_local_paths: str = ""
     raw_message: str = ""

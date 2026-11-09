@@ -29,6 +29,12 @@ def photo(name):
     return [(f"https://media.bird.com/{name}", "image/jpeg")]
 
 
+def save_scan(number):
+    """Save asks for a priority before it stores the lead."""
+    say(number, "Save")
+    say(number, "High")
+
+
 def last(sent):
     return sent[-1][1], [label for label, _ in sent[-1][2]]
 
@@ -64,7 +70,7 @@ def test_document_with_two_photos_edit_then_save(store, sent, fake_io):
     say(STAFF, "Phone: 98450 11112")
     text, labels = last(sent)
     assert "Phone: 98450 11112" in text and "Check:" not in text and labels == ["Save", "Edit", "Retake"]
-    say(STAFF, "Save")
+    save_scan(STAFF)
     lead = store.list_leads()[0]
     assert (lead.org, lead.phone, lead.doc_type, lead.captured_by, lead.review_reason) == ("Sunrise School", "98450 11112", "other", "Test Admin", "")
     assert "Phone: 9845011111" in lead.raw_message  # the scanner's first reading is kept apart from the correction
@@ -92,7 +98,7 @@ def test_saving_with_a_check_left_shows_the_badge(store, sent):
     say(STAFF, "Other document")
     say(STAFF, "", photo("a"))
     say(STAFF, "DONE")
-    say(STAFF, "Save")
+    save_scan(STAFF)
     assert store.list_leads()[0].review_reason == "phone digits unclear"
     assert "Check badge" in last(sent)[0]
 
@@ -103,7 +109,7 @@ def test_contact_form_is_filed_as_a_form(store, sent, fake_io):
     say(STAFF, "", photo("form"))
     say(STAFF, "DONE")
     assert fake_io["calls"] == [(1, "form")]
-    say(STAFF, "Save")
+    save_scan(STAFF)
     lead = store.list_leads()[0]
     assert lead.doc_type == "form" and "PUC 81" in lead.notes
 
@@ -116,8 +122,43 @@ def test_long_values_are_sent_in_full_before_the_save_buttons(store, sent, fake_
     say(STAFF, "DONE")
     assert long_notes in sent[-2][1] and sent[-2][1].startswith("Full text")
     assert "..." in sent[-1][1] and len(sent[-1][1]) <= 1000 and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake"]
-    say(STAFF, "Save")
+    save_scan(STAFF)
     assert store.list_leads()[0].notes == long_notes
+
+
+def test_save_asks_for_a_priority_and_stores_it(store, sent, fake_io):
+    say(STAFF, "Contact form")
+    say(STAFF, "", photo("form"))
+    say(STAFF, "DONE")
+    say(STAFF, "Save")
+    assert last(sent) == ("How important is this lead?", ["High", "Medium", "Low"]) and store.list_leads() == []
+    say(STAFF, "maybe")
+    assert last(sent)[0] == "Please tap High, Medium or Low." and store.list_leads() == []
+    say(STAFF, "Low")
+    assert [lead.priority for lead in store.list_leads()] == ["Low"]
+
+
+def test_visitor_leads_start_unclassified_and_staff_tag_them(store, sent):
+    say(VISITOR, "Share my requirement")
+    for answer in ("Asha", "Sunrise School", "School", "Mysuru, Karnataka", "Science labs"):
+        say(VISITOR, answer)
+    lead = store.list_leads()[0]
+    assert lead.priority == ""
+    client = app.test_client()
+    assert "Unclassified" in client.get("/dashboard").data.decode()
+    from conftest import csrf
+    client.post(f"/leads/{lead.id}", data={"csrf": csrf(client), "name": "Asha", "priority": "High", "doc_type": "other"})
+    assert store.get_lead(lead.id).priority == "High" and 'chip high">High' in client.get("/dashboard").data.decode()
+
+
+def test_all_tab_is_the_default_and_lists_every_type(store, sent):
+    store.create_lead(flows.Lead(name="A Form", doc_type="form"))
+    store.create_lead(flows.Lead(name="A Badge", doc_type="badge"))
+    store.create_lead(flows.Lead(name="A Card"))
+    client = app.test_client()
+    page = client.get("/dashboard").data.decode()
+    assert all(name in page for name in ("A Form", "A Badge", "A Card"))
+    assert "A Card" not in client.get("/dashboard?type=forms").data.decode()
 
 
 def test_repeat_scan_merges_and_name_org_match_is_flagged(store, sent, fake_io):
@@ -126,7 +167,7 @@ def test_repeat_scan_merges_and_name_org_match_is_flagged(store, sent, fake_io):
         say(STAFF, "Other document")
         say(STAFF, "", photo("p"))
         say(STAFF, "DONE")
-        say(STAFF, "Save")
+        save_scan(STAFF)
 
     scan({"name": "Kavya Nair", "org": "Dedupe Academy", "phone": "9845033333"})
     first = store.list_leads()[0]
@@ -266,7 +307,7 @@ def test_bird_message_bodies():
     assert buttons["text"]["actions"] == [{"type": "reply", "reply": {"text": "Save"}}, {"type": "reply", "reply": {"text": "Edit"}}]
     listing = bird.message_body("Pick", [("School", "A single school")], as_list=True)
     assert listing["type"] == "list"
-    assert listing["list"]["items"] == [{"title": "School", "description": "A single school", "actions": [{"type": "postback", "postback": {"text": "School", "payload": "School"}}]}]
+    assert listing["list"]["items"] == [{"title": "Choose an option", "actions": [{"type": "postback", "postback": {"text": "School", "payload": "School", "description": "A single school"}}]}]
 
 
 def test_reading_failure_still_gives_a_saveable_summary(monkeypatch):
@@ -289,7 +330,7 @@ def test_event_badge_is_its_own_type_and_flags_a_missing_qr(store, sent, fake_io
     say(STAFF, "", photo("badge"))
     say(STAFF, "DONE")
     assert fake_io["calls"] == [(1, "badge")] and "QR text: EXB0987" in last(sent)[0]
-    say(STAFF, "Save")
+    save_scan(STAFF)
     lead = store.list_leads()[0]
     assert lead.doc_type == "badge" and lead.qr_page_text == "EXB0987"
     assert "Send the next badge" in last(sent)[0]
@@ -357,7 +398,7 @@ def test_form_with_a_visiting_card_is_one_read_and_one_lead(store, sent, fake_io
         say(STAFF, "", photo(name))
     say(STAFF, "DONE")
     assert fake_io["calls"] == [(3, "form")]  # form pages and the card go through one read
-    say(STAFF, "Save")
+    save_scan(STAFF)
     leads = store.list_leads()
     assert len(leads) == 1 and leads[0].doc_type == "form" and leads[0].email == "meera@bright.edu"
     assert len(store.list_media(leads[0].id)) == 3

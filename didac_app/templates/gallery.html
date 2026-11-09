@@ -57,6 +57,7 @@
 {% block content %}
 <div class="bar">
   <div class="seg">
+    <a href="{{ url_for('gallery', type='all', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'all' }}">All</a>
     <a href="{{ url_for('gallery', type='forms', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'forms' }}">Contact forms</a>
     <a href="{{ url_for('gallery', type='badges', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'badges' }}">Event badges</a>
     <a href="{{ url_for('gallery', type='other', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'other' }}">Other documents</a>
@@ -80,7 +81,7 @@
 <div class="split nopane" id="split">
   <div class="card scroll">
     <table>
-      <thead><tr><th scope="col">Photo</th><th scope="col">Name</th><th scope="col" class="hide-s">Phone</th><th scope="col" class="hide-s">Captured by</th><th scope="col">Time</th><th scope="col">Status</th></tr></thead>
+      <thead><tr><th scope="col">Photo</th><th scope="col">Name</th><th scope="col" class="hide-s">Phone</th><th scope="col" class="hide-s">Captured by</th><th scope="col">Time</th><th scope="col">Priority</th><th scope="col">Status</th></tr></thead>
       <tbody id="rows">
         {% for c in cards %}
         <tr class="{{ 'chk' if c.review_reason }}" data-kind="{{ c.kind }}" data-img="{{ c.image_id or '' }}" data-photos="{{ c.photo_count }}" data-name="{{ c.name }}" data-org="{{ c.org }}" data-phone="{{ c.phone or 'Not captured' }}" data-by="{{ c.by }}" data-time="{{ c.created_at|local_time }}" data-note="{{ (c.note or '')|truncate(260) }}" data-check="{{ '1' if c.review_reason }}" data-href="{{ url_for('lead_detail', lead_id=c.id) }}">
@@ -89,6 +90,7 @@
           <td class="hide-s">{{ c.phone or 'No phone' }}</td>
           <td class="hide-s"><span class="by"><span class="av {{ '' if c.is_team else 'visitor' }}">{{ c.initials }}</span>{{ c.by }}</span></td>
           <td>{{ c.created_at|local_time }}</td>
+          <td><span class="chip {{ c.priority|lower or 'none' }}">{{ c.priority or 'Unclassified' }}</span></td>
           <td>
             <div class="st">
               {% if c.review_reason %}

@@ -9,7 +9,7 @@ FILLABLE = [
     "first_name", "last_name", "name", "org", "organisation_type", "role", "designation", "curriculum",
     "medium_of_instruction", "city", "district", "pincode", "phone", "email", "website", "google_maps_url",
     "qr_url", "qr_page_text", "udise_code", "lead_type", "interest", "budget", "timeline", "schools_count",
-    "grades", "state", "notes",
+    "grades", "state", "notes", "priority",
 ]
 
 

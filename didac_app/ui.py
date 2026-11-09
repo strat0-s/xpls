@@ -11,6 +11,7 @@ from didac_app import auth, followup, orbit
 
 IST = ZoneInfo("Asia/Kolkata")
 OPEN_PATHS = {"/health", "/bird/webhook"}
+PRIORITIES = ("High", "Medium", "Low")
 EDITABLE_FIELDS = [
     ("name", "Full name"),
     ("org", "Organization"),
@@ -106,9 +107,9 @@ def register(app, get_store, get_config) -> None:
         if who:
             cards = [card for card in cards if card["is_team"] == (who == "team")]
         if tab not in ("forms", "badges", "other"):
-            tab = next((name for name in ("forms", "badges") if any(card["tab"] == name for card in cards)), "other")
+            tab = "all"
         query = request.args.get("q", "").strip().lower()
-        shown = [card for card in cards if card["tab"] == tab and (not query or query in card["search"])]
+        shown = [card for card in cards if tab in ("all", card["tab"]) and (not query or query in card["search"])]
         return render_template("gallery.html", cards=shown, tab=tab, q=request.args.get("q", ""), who=who)
 
     @app.route("/leads/<int:lead_id>", methods=["GET", "POST"])
@@ -129,6 +130,7 @@ def register(app, get_store, get_config) -> None:
                 notes=request.form.get("notes", "").strip(),
                 organisation_type=org_type if (org_type := request.form.get("organisation_type", "")) in orbit.ORG_TYPES else "",
                 interest=request.form.get("interest", "").strip(),
+                priority=request.form.get("priority") if request.form.get("priority") in PRIORITIES else "",
                 doc_type=kind if (kind := request.form.get("doc_type")) in ("form", "badge") else "other",
                 updated_by=g.user["name"],
                 updated_at=datetime.now(UTC).isoformat(timespec="seconds"),
@@ -140,7 +142,7 @@ def register(app, get_store, get_config) -> None:
         return render_template(
             "lead.html", lead=lead, items=items, fields=EDITABLE_FIELDS, title=display_name(lead),
             org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
-            curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
+            priorities=PRIORITIES, curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )
 
     @app.post("/leads/<int:lead_id>/resolve")
@@ -341,6 +343,7 @@ def lead_card(lead, media: list[dict], members: dict[str, str]) -> dict:
         "photo_count": len(images),
         "note": note,
         "review_reason": lead.review_reason,
+        "priority": lead.priority,
         "by": by,
         "initials": initials,
         "is_team": is_team,
