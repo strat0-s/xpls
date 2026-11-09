@@ -54,7 +54,7 @@ def test_failed_reply_is_recorded_and_still_returns_200(store, monkeypatch):
 
 def test_send_message_posts_to_channel_with_access_key(monkeypatch):
     calls = []
-    monkeypatch.setattr(bird.requests, "post", lambda url, **kw: calls.append((url, kw)) or SimpleNamespace(raise_for_status=lambda: None))
+    monkeypatch.setattr(bird.requests, "post", lambda url, **kw: calls.append((url, kw)) or SimpleNamespace(raise_for_status=lambda: None, json=lambda: {}))
     config = DidacConfig(bird_workspace_id="ws", bird_channel_id="ch", bird_access_key="key")
     real_send_message(config, NUMBER, "hello")
     url, kwargs = calls[0]
