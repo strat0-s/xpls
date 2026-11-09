@@ -56,6 +56,12 @@
     .chip.off { background: var(--bad); color: var(--bad-ink); }
     .chip.staff { background: var(--line); color: var(--mut); }
 
+    dialog.ask { border: 1px solid var(--line); border-radius: 12px; padding: 22px; width: min(400px, calc(100vw - 32px)); background: var(--surf); color: var(--ink); box-shadow: 0 12px 40px rgba(42,32,48,.25); }
+    dialog.ask::backdrop { background: rgba(42,32,48,.45); }
+    dialog.ask h2 { margin: 0 0 6px; font-size: 17px; }
+    dialog.ask p { margin: 0 0 18px; color: var(--mut); line-height: 1.5; }
+    dialog.ask .row { display: flex; justify-content: flex-end; gap: 8px; }
+
     @media (max-width: 860px) { header.top { padding: 10px 16px; } main.page { padding: 16px; } }
     {% block css %}{% endblock %}
   </style>
@@ -80,5 +86,28 @@
   {% block content %}{% endblock %}
 </main>
 {% endblock %}
+<dialog class="ask" id="ask">
+  <h2></h2><p></p>
+  <div class="row"><button type="button" class="btn ghost" data-no>Cancel</button><button type="button" class="btn" data-yes></button></div>
+</dialog>
+<script>
+  // A form with data-confirm opens this dialog instead of the browser's confirm box; data-title / data-ok / data-danger tune it.
+  (function () {
+    var box = document.getElementById('ask'), form = null;
+    document.addEventListener('submit', function (e) {
+      var f = e.target;
+      if (!f.dataset.confirm || !box.showModal) return;
+      e.preventDefault(); form = f;
+      box.querySelector('h2').textContent = f.dataset.title || 'Are you sure?';
+      box.querySelector('p').textContent = f.dataset.confirm;
+      var yes = box.querySelector('[data-yes]');
+      yes.textContent = f.dataset.ok || 'Confirm';
+      yes.className = 'btn' + (f.dataset.danger ? ' danger' : '');
+      box.showModal();
+    });
+    box.querySelector('[data-no]').onclick = function () { box.close(); };
+    box.querySelector('[data-yes]').onclick = function () { var f = form; box.close(); f.submit(); };
+  })();
+</script>
 </body>
 </html>
