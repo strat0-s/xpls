@@ -20,7 +20,7 @@ def store():
     store = LeadStore(os.environ["DATABASE_URL"])
     store.clear()
     with store.connect() as conn:
-        conn.execute("TRUNCATE users, login_attempts RESTART IDENTITY")  # clear() leaves users alone so reset-sample can't lock everyone out
+        conn.execute("TRUNCATE users, login_attempts, followups RESTART IDENTITY")  # clear() leaves users alone so reset-sample can't lock everyone out
     return store
 
 

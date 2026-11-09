@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set active = 'followup' %}
+{% block title %}Follow-up · DIDAC Leads{% endblock %}
+{% block css %}
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    .hint { font-size: 13px; color: var(--mut); }
+{% endblock %}
+{% block content %}
+<h1>WhatsApp follow-up</h1>
+<section class="card panel">
+  <div><b>{{ waiting }}</b> lead{{ '' if waiting == 1 else 's' }} with a mobile number waiting for the thank-you message. {{ [left, 0]|max }} of {{ cap }} left for the next 24 hours.</div>
+  {% if not ready %}<div class="flash">Not set up yet: add the approved template's id as BIRD_FOLLOWUP_TEMPLATE_ID.</div>{% endif %}
+  <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn" {{ '' if ready and waiting else 'disabled' }}>Send next batch</button></form>
+  <div class="hint">Each number gets one message, ever. Landlines, team members and anyone who replied STOP are skipped. Messages only go out 9:00 to 21:00 IST, up to 40 per click.</div>
+</section>
+{% endblock %}

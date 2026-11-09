@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from didac_app import auth, orbit
+from didac_app import auth, followup, orbit
 
 IST = ZoneInfo("Asia/Kolkata")
 OPEN_PATHS = {"/health", "/bird/webhook"}
@@ -194,6 +194,16 @@ def register(app, get_store, get_config) -> None:
             "export.html", rows=rows, people=people, warnings=warnings, org_types=orbit.ORG_TYPES, query=query,
             orgs=orbit.org_count(rows), max_orgs=orbit.MAX_ORGS, args=request.args,
         )
+
+    @app.route("/followup", methods=["GET", "POST"])
+    def followup_page():
+        require_admin()
+        store, config = get_store(), get_config()
+        if request.method == "POST":
+            flash(followup.send_batch(store, config))
+            return redirect(url_for("followup_page"))
+        return render_template("followup.html", waiting=len(followup.eligible(store)), left=config.followup_daily_cap - store.followups_last_day(),
+                               cap=config.followup_daily_cap, ready=bool(config.followup_template_id))
 
     @app.get("/export/orbit.<fmt>")
     def export_orbit(fmt: str):

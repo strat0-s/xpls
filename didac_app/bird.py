@@ -55,14 +55,22 @@ def message_body(text: str, options: list[tuple[str, str]] | None = None, as_lis
     return {"type": "text", "text": {"text": text}}
 
 
-def send_message(config: DidacConfig, to_number: str, text: str, options: list[tuple[str, str]] | None = None, as_list: bool = False) -> None:
+def post_message(config: DidacConfig, to_number: str, content: dict) -> None:
     response = requests.post(
         f"{API_BASE}/workspaces/{config.bird_workspace_id}/channels/{config.bird_channel_id}/messages",
         headers=media_headers(config),
-        json={
-            "receiver": {"contacts": [{"identifierKey": "phonenumber", "identifierValue": to_number.replace("whatsapp:", "")}]},
-            "body": message_body(text, options, as_list),
-        },
+        json={"receiver": {"contacts": [{"identifierKey": "phonenumber", "identifierValue": to_number.replace("whatsapp:", "")}]}, **content},
         timeout=15,
     )
     response.raise_for_status()
+
+
+def send_message(config: DidacConfig, to_number: str, text: str, options: list[tuple[str, str]] | None = None, as_list: bool = False) -> None:
+    post_message(config, to_number, {"body": message_body(text, options, as_list)})
+
+
+def send_template(config: DidacConfig, to_number: str) -> None:
+    """The approved parameterless follow-up template. Needed because WhatsApp only lets us message first with a template; its two
+    quick-reply buttons are labelled exactly like the visitor menu rows ("Share my requirement", "Download brochure"), so a tap lands in that flow."""
+    template = {"projectId": config.followup_template_id, "version": config.followup_template_version, "locale": "en", "parameters": []}
+    post_message(config, to_number, {"template": template})

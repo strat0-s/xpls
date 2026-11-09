@@ -120,10 +120,35 @@ class LeadStore:
                 "CREATE TABLE IF NOT EXISTS sessions (phone TEXT PRIMARY KEY, flow TEXT NOT NULL, step TEXT NOT NULL, "
                 "data JSONB NOT NULL DEFAULT '{}', updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"
             )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS followups (phone TEXT PRIMARY KEY, lead_id BIGINT, sent_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
+                "opted_out BOOLEAN NOT NULL DEFAULT FALSE)"
+            )
             # Leads left on the old text-status conversation steps go back to plain New.
             conn.execute("UPDATE leads SET status='New' WHERE status ~ '^(Menu|Intake|Brochure|Feedback|Badge):'")
             conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS inbound_events_message_id_key ON inbound_events (message_id)")
+
+    # One row per phone ever: sent, or opted out. The primary key is what keeps it to one message per number.
+    def followup_phones(self) -> set[str]:
+        with self.connect() as conn:
+            return {row["phone"] for row in conn.execute("SELECT phone FROM followups")}
+
+    def followups_last_day(self) -> int:
+        with self.connect() as conn:
+            return conn.execute("SELECT count(*) AS n FROM followups WHERE NOT opted_out AND sent_at > now() - interval '24 hours'").fetchone()["n"]
+
+    def claim_followup(self, phone: str, lead_id: int) -> bool:
+        with self.connect() as conn:
+            return conn.execute("INSERT INTO followups (phone, lead_id) VALUES (%s, %s) ON CONFLICT DO NOTHING RETURNING phone", (phone, lead_id)).fetchone() is not None
+
+    def release_followup(self, phone: str) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM followups WHERE phone = %s AND NOT opted_out", (phone,))
+
+    def opt_out(self, phone: str) -> None:
+        with self.connect() as conn:
+            conn.execute("INSERT INTO followups (phone, opted_out) VALUES (%s, TRUE) ON CONFLICT (phone) DO UPDATE SET opted_out = TRUE", (phone,))
 
     def clear(self) -> None:
         with self.connect() as conn:

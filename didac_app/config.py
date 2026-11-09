@@ -34,6 +34,9 @@ class DidacConfig:
     case_study_url: str = os.getenv("CASE_STUDY_URL", "")
     demo_video_url: str = os.getenv("DEMO_VIDEO_URL", "")
     calendar_url: str = os.getenv("CALENDAR_URL", "")
+    followup_template_id: str = os.getenv("BIRD_FOLLOWUP_TEMPLATE_ID", "")  # Bird project id of the approved thank-you template; blank = follow-up disabled
+    followup_template_version: str = os.getenv("BIRD_FOLLOWUP_TEMPLATE_VERSION", "latest")
+    followup_daily_cap: int = int(os.getenv("FOLLOWUP_DAILY_CAP", "100"))
     max_media_per_message: int = int(os.getenv("MAX_MEDIA_PER_MESSAGE", "3"))
 
 

@@ -1,0 +1,76 @@
+from dataclasses import replace
+from datetime import datetime
+
+import pytest
+
+from bird_helpers import post_bird
+from conftest import csrf
+from didac_app import bird, followup
+from didac_app.config import load_config
+from didac_app.models import Lead
+from didac_app.server import app
+
+DAY = datetime(2026, 11, 10, 12, 0, tzinfo=followup.IST)
+CONFIG = replace(load_config(), followup_template_id="tpl", followup_daily_cap=3)
+
+
+@pytest.fixture
+def templates(monkeypatch):
+    sent = []
+    monkeypatch.setattr(bird, "send_template", lambda config, to: sent.append(to))
+    return sent
+
+
+def lead(store, phone, name="A"):
+    return store.create_lead(Lead(name=name, phone=phone))
+
+
+def test_sends_once_to_mobiles_only_never_staff_or_landline(store, templates):
+    lead(store, "98450 11111")
+    lead(store, "+91 9845011111", "dup")        # same number as above
+    lead(store, "080 2345 6789")                  # landline
+    lead(store, "+91 98000 00001", "staff")       # the admin from conftest
+    lead(store, "")
+    assert followup.send_batch(store, CONFIG, DAY) == "Sent 1 message(s)."
+    assert templates == ["+919845011111"]
+    assert followup.send_batch(store, CONFIG, DAY) == "Sent 0 message(s)."
+
+
+def test_quiet_hours_cap_and_missing_template(store, templates):
+    for n in range(5):
+        lead(store, f"98450 0000{n}")
+    night = datetime(2026, 11, 10, 22, 0, tzinfo=followup.IST)
+    assert "Quiet hours" in followup.send_batch(store, CONFIG, night)
+    assert "not set up" in followup.send_batch(store, replace(CONFIG, followup_template_id=""), DAY)
+    assert followup.send_batch(store, CONFIG, DAY) == "Sent 3 message(s)."
+    assert "Daily cap" in followup.send_batch(store, CONFIG, DAY)
+
+
+def test_failure_stops_the_batch_and_the_number_can_be_retried(store, monkeypatch):
+    lead(store, "98450 11111")
+    lead(store, "98450 22222")
+    monkeypatch.setattr(bird, "send_template", lambda config, to: 1 / 0)
+    assert followup.send_batch(store, CONFIG, DAY).startswith("Sent 0, then stopped")
+    assert len(followup.eligible(store)) == 2
+
+
+def test_stop_reply_opts_out_and_is_never_messaged(store, templates, sent):
+    lead(store, "98450 11111")
+    post_bird(app.test_client(), "whatsapp:+919845011111", "STOP")
+    assert "will not get any more" in sent[-1][1]
+    assert followup.send_batch(store, CONFIG, DAY) == "Sent 0 message(s)."
+    assert store.list_leads()[0].phone == "98450 11111"
+
+
+def test_followup_page_is_admin_only_and_sends(store, templates, monkeypatch, anon_client):
+    import didac_app.server as server
+
+    monkeypatch.setattr(server, "config", CONFIG)
+    monkeypatch.setattr(followup, "SEND_HOURS", range(24))
+    lead(store, "98450 11111")
+    client = app.test_client()
+    page = client.get("/followup")
+    assert page.status_code == 200 and b"1</b> lead" in page.data
+    assert client.post("/followup", data={"csrf": csrf(client)}).status_code == 302
+    assert templates == ["+919845011111"]
+    assert anon_client.get("/followup").status_code == 302

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, redirect, render_template_string, request, send_file
 
-from didac_app import auth, bird, blobstore, flows, ui
+from didac_app import auth, bird, blobstore, flows, followup, ui
 from didac_app.config import brochure_catalog, load_config
 from didac_app.flows import Reply
 from didac_app.replies import command_reply
@@ -116,6 +116,10 @@ def bird_webhook():
     if body.startswith("/") and flows.staff_user(store, from_number):
         store.update_inbound_event(event_id, "processed_command")
         return send_replies(event_id, from_number, [Reply(command_reply(body, store, config))], [])
+    if body.strip(" .!").lower() in followup.STOP_WORDS and not flows.staff_user(store, from_number):
+        store.opt_out(auth.normalize_phone(from_number) or from_number)
+        store.update_inbound_event(event_id, "opted_out")
+        return send_replies(event_id, from_number, [Reply("You will not get any more follow-up messages from us. Type menu if you want our brochures.")], [])
     replies, lead_ids = flows.handle(store, config, from_number, body, media)
     store.update_inbound_event(event_id, "processed", unique_ids(lead_ids))
     return send_replies(event_id, from_number, replies, lead_ids)
