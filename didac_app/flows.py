@@ -317,11 +317,13 @@ class Chat:
             return self.confirm(data, f"I could not use: {', '.join(unknown)}\n\n" if unknown else "")
 
     def confirm(self, data: dict, prefix: str = "") -> None:
-        """The Save / Edit / Retake message. A button message holds ~1000 characters and the summary shortens long values, so anything shortened goes out in full first."""
-        cut = [f"{label}: {data['draft'][name]}" for name, label in SUMMARY if len(data["draft"].get(name, "")) > 120]
-        if cut:
-            self.say("Full text of what was shortened below:\n\n" + "\n\n".join(cut)[:3800])
-        self.replies.append(buttons((prefix + summary(data["draft"], data["check"], with_check=True))[:1000], SAVE, EDIT, RETAKE))
+        """The Save / Edit / Retake step, with nothing shortened. A button message holds about 1000 characters; a longer summary goes out as one plain
+        message (WhatsApp allows 4096) with the buttons right after it."""
+        text = prefix + summary(data["draft"], data["check"], with_check=True)
+        if len(text) <= 1000:
+            return self.replies.append(buttons(text, SAVE, EDIT, RETAKE))
+        self.say(text[:4000])
+        self.replies.append(buttons("Save this lead, edit it, or retake the photos?", SAVE, EDIT, RETAKE))
 
     def save_scan(self, flow: str, data: dict) -> None:
         lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow if flow in ("form", "badge") else "other",
@@ -484,7 +486,7 @@ def summary(fields: dict, check: list[str], with_check: bool = False) -> str:
         if name == "organisation_type" and value:
             value = orbit.ORG_TYPES.get(value, value)
         if value or name in ALWAYS:
-            lines.append(f"{label}: {(value[:120] + '...') if len(value) > 120 else value or '(blank)'}")
+            lines.append(f"{label}: {value or '(blank)'}")
     text = "\n".join(lines)
     if not with_check:
         return text

@@ -2,6 +2,7 @@
 {% set active = 'leads' %}
 {% block css %}
     .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+    .grp { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
     .seg { display: flex; gap: 6px; flex-wrap: wrap; }
     .seg a { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surf); color: var(--mut); font-weight: 600; text-decoration: none; }
     .seg a:hover { border-color: var(--acc); }
@@ -63,6 +64,7 @@
 {% set keep = {'q': q or None, 'who': who or None, 'prio': prio or None} %}
 {% set active_filters = (1 if who else 0) + (1 if prio else 0) %}
 <div class="bar">
+  <div class="grp">
   <div class="seg">
     <a href="{{ url_for('gallery', type='all', **keep) }}" class="{{ 'on' if tab == 'all' }}">All</a>
     <a href="{{ url_for('gallery', type='forms', **keep) }}" class="{{ 'on' if tab == 'forms' }}">Contact forms</a>
@@ -81,6 +83,7 @@
       <div class="row"><button class="btn">Apply</button><a class="btn ghost" href="{{ url_for('gallery', type=tab, q=q or None) }}">Clear</a></div>
     </form>
   </details>
+  </div>
   <form class="search" method="get" action="{{ url_for('gallery') }}">
     <input type="hidden" name="type" value="{{ tab }}">
     {% if who %}<input type="hidden" name="who" value="{{ who }}">{% endif %}

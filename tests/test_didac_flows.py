@@ -114,14 +114,21 @@ def test_contact_form_is_filed_as_a_form(store, sent, fake_io):
     assert lead.doc_type == "form" and "PUC 81" in lead.notes
 
 
-def test_long_values_are_sent_in_full_before_the_save_buttons(store, sent, fake_io):
-    long_notes = "Remarks: " + "wants a science lab for every school in the district " * 5
-    fake_io["result"] = {"fields": {"name": "Meera Iyer", "notes": long_notes}, "check": []}
+def test_nothing_is_shortened_in_the_scan_summary(store, sent, fake_io):
+    short_notes = "Remarks: " + "wants a science lab for every school in the district " * 5  # fits one button message
+    fake_io["result"] = {"fields": {"name": "Meera Iyer", "notes": short_notes}, "check": []}
     say(STAFF, "Contact form")
     say(STAFF, "", photo("form"))
     say(STAFF, "DONE")
-    assert long_notes in sent[-2][1] and sent[-2][1].startswith("Full text")
-    assert "..." in sent[-1][1] and len(sent[-1][1]) <= 1000 and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake"]
+    assert short_notes in sent[-1][1] and "..." not in sent[-1][1] and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake"]
+
+    long_notes = "Remarks: " + "wants a science lab for every school in the district " * 30  # too long for a button message
+    fake_io["result"] = {"fields": {"name": "Meera Iyer", "notes": long_notes}, "check": []}
+    say(STAFF, "cancel")
+    say(STAFF, "Contact form")
+    say(STAFF, "", photo("form"))
+    say(STAFF, "DONE")
+    assert long_notes in sent[-2][1] and sent[-2][2] == [] and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake"]
     save_scan(STAFF)
     assert store.list_leads()[0].notes == long_notes
 
