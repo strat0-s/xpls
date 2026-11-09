@@ -4,6 +4,8 @@
 {% block css %}
     .head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; justify-content: space-between; }
     .head h1 { margin: 4px 0 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .admin-actions { display: flex; gap: 8px; align-items: center; }
+    .admin-actions form { margin: 0; }
     .head .sub { color: var(--mut); margin-top: 2px; }
     .notice { padding: 10px 14px; border-radius: 8px; background: var(--warn); color: var(--warn-ink); border: 1px solid var(--warn-line); line-height: 1.5; }
     .cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -39,12 +41,14 @@
     <div class="sub">{{ {'form': 'Contact form', 'badge': 'Event badge / QR'}.get(lead.doc_type, 'Other document') }} · captured {{ lead.created_at|local_time }}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}</div>
   </div>
   {% if user.is_admin %}
+  <div class="admin-actions">
   <form method="post" action="{{ url_for('lead_followup', lead_id=lead.id) }}" data-title="Send follow-up?" data-confirm="This sends the thank-you WhatsApp to this lead's number. Each number can only be messaged once." data-ok="Send message">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn ghost">Send follow-up</button>
   </form>
   <form method="post" action="{{ url_for('lead_delete', lead_id=lead.id) }}" data-title="Delete this lead?" data-confirm="It disappears from the dashboard and from exports." data-ok="Delete lead" data-danger="1">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">Delete lead</button>
   </form>
+  </div>
   {% endif %}
 </div>
 
