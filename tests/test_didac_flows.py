@@ -141,6 +141,19 @@ def test_other_documents_row_and_the_plain_label_both_start_a_scan(store, sent):
     assert "Send photos of the document" in last(sent)[0]
 
 
+def test_priority_can_be_set_in_edit_and_then_save_does_not_ask(store, sent, fake_io):
+    say(STAFF, "Contact form")
+    say(STAFF, "", photo("form"))
+    say(STAFF, "DONE")
+    say(STAFF, "Edit")
+    say(STAFF, "Priority: urgent")
+    assert "I could not read a correction" in last(sent)[0]
+    say(STAFF, "Priority: medium")
+    assert "Priority: Medium" in last(sent)[0]
+    say(STAFF, "Save")
+    assert "Saved as #" in last(sent)[0] and [lead.priority for lead in store.list_leads()] == ["Medium"]
+
+
 def test_save_asks_for_a_priority_and_stores_it(store, sent, fake_io):
     say(STAFF, "Contact form")
     say(STAFF, "", photo("form"))

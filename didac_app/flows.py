@@ -53,7 +53,7 @@ TYPES = [
     ("Other", "OTHER", "Individual, media, investor"),
 ]
 # Lead fields shown in the scan summary: (field, label). Name, Organisation, Phone and Email always show, even blank.
-SUMMARY = [("name", "Name"), ("org", "Organisation"), ("role", "Role"), ("phone", "Phone"), ("email", "Email"), ("organisation_type", "Type"),
+SUMMARY = [("name", "Name"), ("org", "Organisation"), ("role", "Role"), ("phone", "Phone"), ("email", "Email"), ("organisation_type", "Type"), ("priority", "Priority"),
            ("city", "City"), ("state", "State"), ("curriculum", "Curriculum"), ("interest", "Interest"), ("notes", "Notes"),
            ("qr_url", "QR link"), ("qr_page_text", "QR text")]
 ALWAYS = {"name", "org", "phone", "email"}
@@ -306,7 +306,7 @@ class Chat:
                 return self.replies.append(buttons("How important is this lead?", *PRIORITIES))
             if choice == EDIT.lower():
                 self.store.put_session(self.number, flow, "edit", data)
-                return self.say("Reply with corrections, one per line.\nExample:\nPhone: 98450 11112\nType BACK to stop editing.")
+                return self.say("Reply with corrections, one per line.\nExample:\nPhone: 98450 11112\nPriority: High\nType BACK to stop editing.")
             if choice == RETAKE.lower():
                 self.store.put_session(self.number, flow, "photos", {"photos": []})
                 return self.say("Photos cleared. Send the new photos, then reply DONE.")
@@ -504,6 +504,8 @@ def apply_corrections(draft: dict, text: str) -> tuple[list[str], list[str]]:
         key, value = normalize_key(key), value.strip()
         if key in ("type", "organisation type", "organization type"):
             name, value = "organisation_type", orbit.normalize_org_type(value)
+        elif key == "priority":
+            name, value = "priority", next((p for p in PRIORITIES if p.lower() == value.lower()), "")
         else:
             name = FIELD_ALIASES.get(key)
         if name in FILLABLE and value:
