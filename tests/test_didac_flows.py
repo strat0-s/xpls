@@ -456,6 +456,8 @@ def test_one_filter_controls_who_and_priority(store, sent):
         page = client.get(f"/dashboard?{query}").data.decode()
         return {n for n in ("Hot Lead", "Cold Visitor", "Open Visitor") if n in page}
 
+    page = client.get("/dashboard").data.decode()
+    assert 'data-prio="High"' in page and 'data-prio="Unclassified"' in page and 'id="p-prio"' in page
     assert names("") == {"Hot Lead", "Cold Visitor", "Open Visitor"}
     assert names("prio=High") == {"Hot Lead"}
     assert names("prio=none") == {"Open Visitor"}

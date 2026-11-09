@@ -102,7 +102,7 @@
       <thead><tr><th scope="col">Photo</th><th scope="col">Name</th><th scope="col" class="hide-s">Phone</th><th scope="col" class="hide-s">Captured by</th><th scope="col">Time</th><th scope="col">Priority</th><th scope="col">Status</th></tr></thead>
       <tbody id="rows">
         {% for c in cards %}
-        <tr class="{{ 'chk' if c.review_reason }}" data-kind="{{ c.kind }}" data-img="{{ c.image_id or '' }}" data-photos="{{ c.photo_count }}" data-name="{{ c.name }}" data-org="{{ c.org }}" data-phone="{{ c.phone or 'Not captured' }}" data-by="{{ c.by }}" data-time="{{ c.created_at|local_time }}" data-note="{{ (c.note or '')|truncate(260) }}" data-check="{{ '1' if c.review_reason }}" data-href="{{ url_for('lead_detail', lead_id=c.id) }}">
+        <tr class="{{ 'chk' if c.review_reason }}" data-kind="{{ c.kind }}" data-img="{{ c.image_id or '' }}" data-photos="{{ c.photo_count }}" data-name="{{ c.name }}" data-org="{{ c.org }}" data-phone="{{ c.phone or 'Not captured' }}" data-by="{{ c.by }}" data-time="{{ c.created_at|local_time }}" data-prio="{{ c.priority or 'Unclassified' }}" data-note="{{ (c.note or '')|truncate(260) }}" data-check="{{ '1' if c.review_reason }}" data-href="{{ url_for('lead_detail', lead_id=c.id) }}">
           <td><div class="th">{% if c.kind == 'image' %}<img src="/media/{{ c.image_id }}" alt="" loading="lazy">{% elif c.kind == 'audio' %}{{ play|safe }}{% else %}{{ chat|safe }}{% endif %}</div></td>
           <td class="nm"><a href="{{ url_for('lead_detail', lead_id=c.id) }}">{{ c.name }}</a><small>{{ c.org }}</small></td>
           <td class="hide-s">{{ c.phone or 'No phone' }}</td>
@@ -129,7 +129,7 @@
     <div class="shot" id="p-shot"></div>
     <div><h2 id="p-name"></h2><div class="org" id="p-org"></div></div>
     <div class="notice" id="p-check" hidden>Needs a quick check</div>
-    <dl><dt>Phone</dt><dd id="p-phone"></dd><dt>By</dt><dd id="p-by"></dd><dt>Time</dt><dd id="p-time"></dd></dl>
+    <dl><dt>Phone</dt><dd id="p-phone"></dd><dt>By</dt><dd id="p-by"></dd><dt>Time</dt><dd id="p-time"></dd><dt>Priority</dt><dd id="p-prio"></dd></dl>
     <a class="btn" id="p-open" href="#">Open lead</a>
   </aside>
 </div>
@@ -154,6 +154,7 @@
         var b = document.createElement('div'); b.className = 'bubble'; b.textContent = d.note || 'No content yet'; shot.appendChild(b);
       }
       text('p-name', d.name); text('p-org', d.org); text('p-phone', d.phone); text('p-by', d.by); text('p-time', d.time);
+      var prio = document.getElementById('p-prio'); prio.textContent = d.prio; prio.className = 'chip ' + (d.prio === 'Unclassified' ? 'none' : d.prio.toLowerCase()); prio.style.justifySelf = 'start';
       document.getElementById('p-check').hidden = !d.check;
       document.getElementById('p-open').href = d.href;
     }
