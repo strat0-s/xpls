@@ -41,7 +41,7 @@ def last(sent):
 
 def test_staff_menu_is_a_four_row_list_and_hi_creates_no_lead(store, sent):
     say(STAFF, "menu")
-    assert last(sent) == ("Hi Test. What would you like to do?\n\nType menu any time. Type cancel to stop.", ["Contact form", "Other document", "Event badge / QR", "Add a note"])
+    assert last(sent) == ("Hi Test. What would you like to do?\n\nOther documents (visiting cards, brochures, flyers and all that).\n\nType menu any time. Type cancel to stop.", ["Contact form", "Other docs (cards, etc.)", "Event badge / QR", "Add a note"])
     say(VISITOR, "hi")
     assert store.list_leads() == []
 
@@ -131,6 +131,14 @@ def test_nothing_is_shortened_in_the_scan_summary(store, sent, fake_io):
     assert long_notes in sent[-2][1] and sent[-2][2] == [] and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake"]
     save_scan(STAFF)
     assert store.list_leads()[0].notes == long_notes
+
+
+def test_other_documents_row_and_the_plain_label_both_start_a_scan(store, sent):
+    say(STAFF, "Other docs (cards, etc.)")
+    assert "Send photos of the document" in last(sent)[0]
+    say(STAFF, "cancel")
+    say(STAFF, "Other document")
+    assert "Send photos of the document" in last(sent)[0]
 
 
 def test_save_asks_for_a_priority_and_stores_it(store, sent, fake_io):

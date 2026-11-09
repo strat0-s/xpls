@@ -29,7 +29,10 @@ MAX_PHOTOS = 10
 NOTE_WINDOW_MINUTES = 30
 
 FORM, DOC, BADGE, NOTE = "Contact form", "Other document", "Event badge / QR", "Add a note"
-SCANS = {FORM.lower(): "form", DOC.lower(): "document", BADGE.lower(): "badge"}
+# WhatsApp shows a list row's title only (never its description) and cuts it at 24 characters, so the hint lives in the title. The 3-button question
+# ("Is this a contact form...") keeps the plain DOC label, since a button label may be 20 characters.
+DOC_ROW = "Other docs (cards, etc.)"
+SCANS = {FORM.lower(): "form", DOC.lower(): "document", DOC_ROW.lower(): "document", BADGE.lower(): "badge"}
 BROCHURE, REQUIREMENT, FEEDBACK = "Download brochure", "Share my requirement", "Feedback / voice note"
 SAVE, EDIT, RETAKE = "Save", "Edit", "Retake"
 PRIORITIES = ("High", "Medium", "Low")
@@ -158,7 +161,7 @@ class Chat:
             self.no_flow(text, media)
 
     def menu_choices(self) -> set[str]:
-        return {label.lower() for label in ((FORM, DOC, BADGE, NOTE) if self.user else (BROCHURE, REQUIREMENT, FEEDBACK))}
+        return {label.lower() for label in ((FORM, DOC, DOC_ROW, BADGE, NOTE) if self.user else (BROCHURE, REQUIREMENT, FEEDBACK))}
 
     def say(self, text: str) -> None:
         self.replies.append(Reply(text))
@@ -171,8 +174,8 @@ class Chat:
             self.say(f"Discarded {lost} photo(s) that were not saved.")
         if self.user:
             first = self.user["name"].split()[0]
-            rows = [(FORM, "The printed Xperimentor form"), (DOC, "(Visiting cards, brochures, flyers and all that)"), (BADGE, "Badge or ID card with a QR code"), (NOTE, "Voice or text note on your last lead")]
-            self.replies.append(Reply(f"Hi {first}. What would you like to do?\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
+            rows = [(FORM, "The printed Xperimentor form"), (DOC_ROW, "Visiting cards, brochures, flyers and all that"), (BADGE, "Badge or ID card with a QR code"), (NOTE, "Voice or text note on your last lead")]
+            self.replies.append(Reply(f"Hi {first}. What would you like to do?\n\nOther documents (visiting cards, brochures, flyers and all that).\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
         else:
             rows = [(BROCHURE, "SIA, TiQer, Play Lab and more"), (REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo")]
             self.replies.append(Reply("Welcome to Xperimentor at DIDAC.\nPlease choose an option. Type menu at any time to see this again.", rows, as_list=True))
