@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from didac_app.config import DidacConfig
-from didac_app.openai_services import openai_enabled, text_to_speech
 from didac_app.storage import LeadStore
 
 
@@ -13,8 +10,7 @@ Type cancel to stop what you are doing.
 
 /summary
 /export excel
-/send brochure <phone>
-/tts <text>"""
+/send brochure <phone>"""
 
 
 def command_reply(body: str, store: LeadStore, config: DidacConfig) -> str:
@@ -27,15 +23,6 @@ def command_reply(body: str, store: LeadStore, config: DidacConfig) -> str:
         return f"Download the report: {config.public_base_url.rstrip('/')}/export/report.xlsx"
     if command.startswith("/send brochure"):
         return asset_links(config) or "Brochure links are not configured yet. Set BROCHURE_URL/CASE_STUDY_URL/CALENDAR_URL in .env."
-    if command.startswith("/tts"):
-        text = body_after_command(body, "/tts")
-        if not text:
-            return "Usage: /tts text to convert into speech"
-        if not openai_enabled():
-            return "OpenAI TTS is not enabled. Set OPENAI_API_KEY in .env."
-        output = config.media_dir / "tts" / "whatsapp_reply.mp3"
-        path = text_to_speech(text, output)
-        return f"TTS audio created: {Path(path).resolve()}" if path else "TTS generation failed."
     return "Unknown command. Send /help."
 
 

@@ -113,23 +113,6 @@ def transcribe_audio(local_path: str) -> str:
     return getattr(transcript, "text", "") or str(transcript)
 
 
-def text_to_speech(text: str, output_path: str | Path) -> str:
-    if not openai_enabled():
-        return ""
-    from openai import OpenAI
-
-    output = Path(output_path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    client = OpenAI()
-    speech = client.audio.speech.create(
-        model=os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
-        voice=os.getenv("OPENAI_TTS_VOICE", "alloy"),
-        input=text[:4096],
-    )
-    speech.write_to_file(output)
-    return str(output)
-
-
 def image_data_url(local_path: str, content_type: str = "") -> str:
     path = Path(local_path)
     mime = content_type or mimetypes.guess_type(path.name)[0] or "image/jpeg"

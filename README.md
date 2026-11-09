@@ -168,7 +168,6 @@ Known limits on Vercel:
 - Hobby plan is non-commercial use only; use Pro or a team account for real commercial use.
 - The 60s limit covers the whole webhook call (download, OCR, reply). QR decoding is capped (1600px, 8s) to stay inside it.
 - A cold start re-runs the table-creation SQL (about a second extra).
-- `/tts` writes its MP3 to `/tmp`, so the file is not reachable afterwards. Treat it as unsupported on Vercel.
 - Free-form WhatsApp replies only work within 24 hours of the person's last message (Bird/WhatsApp rule).
 - To change the app URL (project rename or custom domain), then also update the Bird webhook, `PUBLIC_BASE_URL`, and redeploy.
 
@@ -240,11 +239,9 @@ Optional OpenAI intelligence:
 OPENAI_API_KEY=...
 OPENAI_VISION_MODEL=gpt-5-mini
 OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
-OPENAI_TTS_MODEL=gpt-4o-mini-tts
-OPENAI_TTS_VOICE=alloy
 ```
 
-With `OPENAI_API_KEY` set, WhatsApp images are processed with vision OCR into lead fields, voice notes are transcribed into notes/lead fields, and `/tts your text` creates an MP3 file (local runs only). Badge QR codes in photos are decoded with OpenCV. vCard and MECARD QR codes become lead fields; other QR URLs are recorded and, if they point at a public address, their page text is read (private addresses and redirects to them are blocked). The file is copied to a temp file for processing and deleted right after; the original stays in the bucket. If OpenAI fails, the message is still saved with a "pending" placeholder instead of being lost.
+With `OPENAI_API_KEY` set, WhatsApp images are processed with vision OCR into lead fields, voice notes are transcribed into notes/lead fields. Badge QR codes in photos are decoded with OpenCV. vCard and MECARD QR codes become lead fields; other QR URLs are recorded and, if they point at a public address, their page text is read (private addresses and redirects to them are blocked). The file is copied to a temp file for processing and deleted right after; the original stays in the bucket. If OpenAI fails, the message is still saved with a "pending" placeholder instead of being lost.
 
 Repeat scans: a new card whose email or phone matches a saved lead, and whose name does not contradict it, fills that lead's blank fields instead of creating a second lead ("Already saved as #N"). A match on name + organisation only, or on a shared phone/email with a different name, is saved as a new lead with a "possible duplicate of #N" badge for you to check. Two scans of the same new person at the same instant can still both create a lead.
 
