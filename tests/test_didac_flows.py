@@ -169,7 +169,7 @@ def test_save_asks_for_a_priority_and_stores_it(store, sent, fake_io):
 
 def test_visitor_leads_start_unclassified_and_staff_tag_them(store, sent):
     say(VISITOR, "Share my requirement")
-    for answer in ("Asha", "Sunrise School", "School", "Mysuru, Karnataka", "Science labs"):
+    for answer in ("Asha", "asha@sunrise.edu", "Sunrise School", "School", "Mysuru, Karnataka", "Science labs"):
         say(VISITOR, answer)
     lead = store.list_leads()[0]
     assert lead.priority == ""
@@ -274,6 +274,10 @@ def test_note_without_a_recent_lead_needs_a_name_or_phone(store, sent):
 def test_visitor_requirement_becomes_an_orbit_ready_lead(store, sent):
     say(VISITOR, "Share my requirement")
     say(VISITOR, "Anil Kumar")
+    assert "email address" in last(sent)[0]
+    say(VISITOR, "not an email")
+    assert "does not look like an email" in last(sent)[0]
+    say(VISITOR, "Anil@GVT.org")
     say(VISITOR, "Green Valley Trust")
     text, rows = last(sent)
     assert text == "What best describes it?" and len(rows) == 9
@@ -283,12 +287,19 @@ def test_visitor_requirement_becomes_an_orbit_ready_lead(store, sent):
     assert last(sent)[0].startswith("Thanks Anil.")
     lead = store.list_leads()[0]
     assert (lead.name, lead.org, lead.organisation_type, lead.city, lead.state, lead.schools_count) == ("Anil Kumar", "Green Valley Trust", "SCHOOL_CHAIN", "Pune", "Maharashtra", "12")
+    assert lead.email == "anil@gvt.org"
     assert lead.phone == "+919811111111" and lead.captured_by == "" and store.get_session(VISITOR) is None
     assert [f["body"] for f in store.list_feedback(lead.id)] == ["STEM labs for 12 schools"]
 
 
+def test_visitor_can_skip_the_email(store, sent):
+    for answer in ("Share my requirement", "Anil", "skip", "Org", "School", "Pune, Maharashtra", "Labs"):
+        say(VISITOR, answer)
+    assert store.list_leads()[0].email == ""
+
+
 def test_visitor_type_step_reasks_on_nonsense(sent):
-    for answer in ("Share my requirement", "Anil", "Org", "purple"):
+    for answer in ("Share my requirement", "Anil", "skip", "Org", "purple"):
         say(VISITOR, answer)
     assert last(sent)[0] == "Please pick one from the list."
 

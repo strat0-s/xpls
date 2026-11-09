@@ -442,7 +442,13 @@ class Chat:
         if not text:
             return self.say("Please type your answer, or type menu to stop.")
         if step == "name":
-            self.store.put_session(self.number, "requirement", "org", data | {"name": text})
+            self.store.put_session(self.number, "requirement", "email", data | {"name": text})
+            return self.say("What is your email address? Type skip if you would rather not share it.")
+        if step == "email":
+            email = "" if text.lower().strip(" .!") == "skip" else auth.normalize_email(text)
+            if not email and text.lower().strip(" .!") != "skip":
+                return self.say("That does not look like an email address. Type it again, or type skip.")
+            self.store.put_session(self.number, "requirement", "org", data | {"email": email})
             return self.say("Which organisation are you with?")
         if step == "org":
             self.store.put_session(self.number, "requirement", "type", data | {"org": text})
@@ -457,7 +463,7 @@ class Chat:
             self.store.put_session(self.number, "requirement", "need", data | {"place": text})
             return self.say("What are you looking for? Example: science lab for 20 schools, teacher training, CSR pilot.")
         city, _, state = data["place"].partition(",")
-        lead = Lead(from_number=self.number, phone=self.number.replace("whatsapp:", ""), name=data["name"], org=data["org"], organisation_type=data["type"],
+        lead = Lead(from_number=self.number, phone=self.number.replace("whatsapp:", ""), name=data["name"], email=data.get("email", ""), org=data["org"], organisation_type=data["type"],
                     city=city.strip(), state=state.strip(), interest=text, schools_count=extract_schools_count(text))
         normalize_contact_name(lead)
         saved, outcome = self.store_lead(lead, [])
