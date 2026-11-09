@@ -108,6 +108,18 @@ def test_contact_form_is_filed_as_a_form(store, sent, fake_io):
     assert lead.doc_type == "form" and "PUC 81" in lead.notes
 
 
+def test_long_values_are_sent_in_full_before_the_save_buttons(store, sent, fake_io):
+    long_notes = "Remarks: " + "wants a science lab for every school in the district " * 5
+    fake_io["result"] = {"fields": {"name": "Meera Iyer", "notes": long_notes}, "check": []}
+    say(STAFF, "Contact form")
+    say(STAFF, "", photo("form"))
+    say(STAFF, "DONE")
+    assert long_notes in sent[-2][1] and sent[-2][1].startswith("Full text")
+    assert "..." in sent[-1][1] and len(sent[-1][1]) <= 1000 and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake"]
+    say(STAFF, "Save")
+    assert store.list_leads()[0].notes == long_notes
+
+
 def test_repeat_scan_merges_and_name_org_match_is_flagged(store, sent, fake_io):
     def scan(fields):
         fake_io["result"] = {"fields": fields, "check": []}

@@ -280,11 +280,11 @@ class Chat:
             result = read_documents(self.config, data["photos"], flow)
             data |= {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], [])}
             self.store.put_session(self.number, flow, "confirm", data)
-            return self.replies.append(buttons(summary(data["draft"], data["check"], with_check=True), SAVE, EDIT, RETAKE))
+            return self.confirm(data)
         if step == "edit":  # the Save / Edit / Retake taps from the summary stay tappable, and "back" ends the edit
             if low in ("back", "done", "stop"):
                 self.store.put_session(self.number, flow, "confirm", data)
-                return self.replies.append(buttons(summary(data["draft"], data["check"], with_check=True), SAVE, EDIT, RETAKE))
+                return self.confirm(data)
             if low in (SAVE.lower(), EDIT.lower(), RETAKE.lower()):
                 step = "confirm"
         if step == "confirm":
@@ -304,8 +304,14 @@ class Chat:
                 return self.say("I could not read a correction. Use one per line, like:\nPhone: 98450 11112\nType BACK to stop editing.")
             data["check"] = [item for item in data["check"] if not any(word in item.lower() for word in applied)]
             self.store.put_session(self.number, flow, "confirm", data)
-            lines = summary(data["draft"], data["check"], with_check=True)
-            return self.replies.append(buttons((f"I could not use: {', '.join(unknown)}\n\n" if unknown else "") + lines, SAVE, EDIT, RETAKE))
+            return self.confirm(data, f"I could not use: {', '.join(unknown)}\n\n" if unknown else "")
+
+    def confirm(self, data: dict, prefix: str = "") -> None:
+        """The Save / Edit / Retake message. A button message holds ~1000 characters and the summary shortens long values, so anything shortened goes out in full first."""
+        cut = [f"{label}: {data['draft'][name]}" for name, label in SUMMARY if len(data["draft"].get(name, "")) > 120]
+        if cut:
+            self.say("Full text of what was shortened below:\n\n" + "\n\n".join(cut)[:3800])
+        self.replies.append(buttons((prefix + summary(data["draft"], data["check"], with_check=True))[:1000], SAVE, EDIT, RETAKE))
 
     def save_scan(self, flow: str, data: dict) -> None:
         lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow if flow in ("form", "badge") else "other",
