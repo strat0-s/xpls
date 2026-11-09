@@ -462,3 +462,16 @@ def test_one_filter_controls_who_and_priority(store, sent):
     assert names("who=visitors") == {"Cold Visitor", "Open Visitor"}
     assert names("who=visitors&prio=Low") == {"Cold Visitor"}
     assert names("prio=bogus") == {"Hot Lead", "Cold Visitor", "Open Visitor"}
+
+
+def test_photo_rotation_is_saved_per_photo(store, sent):
+    from conftest import csrf
+
+    lead = store.create_lead(flows.Lead(name="Rotated"))
+    media_id = store.add_media(lead.id, "https://x/y.jpg", "image/jpeg", "k/y.jpg")
+    client = app.test_client()
+    turn = lambda direction: client.post(f"/media/{media_id}/rotate", data={"csrf": csrf(client), "dir": direction}).get_json()["rotation"]
+    assert [turn("right"), turn("right"), turn("left"), turn("left"), turn("left")] == [90, 180, 90, 0, 270]
+    page = client.get(f"/leads/{lead.id}").data.decode()
+    assert 'data-rot="270"' in page
+    assert client.post("/media/99999/rotate", data={"csrf": csrf(client)}).status_code == 404

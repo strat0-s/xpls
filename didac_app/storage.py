@@ -128,6 +128,7 @@ class LeadStore:
                 conn.execute(f"ALTER TABLE followups ADD COLUMN IF NOT EXISTS {column} TEXT")
             # Leads left on the old text-status conversation steps go back to plain New.
             conn.execute("UPDATE leads SET status='New' WHERE status ~ '^(Menu|Intake|Brochure|Feedback|Badge):'")
+            conn.execute("ALTER TABLE media ADD COLUMN IF NOT EXISTS rotation INTEGER NOT NULL DEFAULT 0")
             conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS inbound_events_message_id_key ON inbound_events (message_id)")
 
@@ -356,6 +357,11 @@ class LeadStore:
 
     def list_media(self, lead_id: int | None = None) -> list[dict]:
         return self._of_live_leads("media", lead_id)
+
+    def rotate_media(self, media_id: int, degrees: int) -> int:
+        """Turn the photo's saved view by `degrees` (+90 clockwise, -90 anticlockwise); returns the new angle. The stored file itself is never changed."""
+        with self.connect() as conn:
+            return conn.execute("UPDATE media SET rotation = ((rotation + %s) %% 360 + 360) %% 360 WHERE id = %s RETURNING rotation", (degrees, media_id)).fetchone()["rotation"]
 
     def get_media(self, media_id: int) -> dict | None:
         with self.connect() as conn:

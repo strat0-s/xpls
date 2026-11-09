@@ -18,7 +18,12 @@
     .item .meta { font-size: 12px; color: var(--mut); margin-top: 2px; }
     .item audio { width: 100%; }
     .viewer { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-    .shot img { width: 100%; max-height: 460px; object-fit: contain; border-radius: 6px; background: var(--soft); display: block; }
+    .shot .rot { display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; background: var(--soft); }
+    .shot img { max-width: 100%; max-height: 460px; display: block; transition: transform .2s; }
+    .turn { display: none; gap: 6px; }
+    .js .turn { display: inline-flex; }
+    .turn button { height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--acc-text); font-weight: 600; cursor: pointer; }
+    .turn button:hover { border-color: var(--acc); }
     .strip { display: none; gap: 8px; flex-wrap: wrap; }
     .js .strip { display: flex; }
     .strip button { padding: 0; width: 64px; height: 80px; border: 2px solid var(--line); border-radius: 8px; background: var(--soft); overflow: hidden; cursor: pointer; }
@@ -66,7 +71,8 @@
     <section class="card viewer" id="viewer">
       {% for it in photos %}
       <figure class="shot" style="margin:0">
-        <img src="/media/{{ it.id }}" alt="Photo {{ loop.index }} sent to the bot" loading="{{ 'eager' if loop.first else 'lazy' }}">
+        <div class="rot" data-rot="{{ it.rotation }}"><img src="/media/{{ it.id }}" alt="Photo {{ loop.index }} sent to the bot" loading="{{ 'eager' if loop.first else 'lazy' }}"></div>
+        <div class="turn" style="margin-top:6px"><button type="button" data-turn="left" data-id="{{ it.id }}" aria-label="Rotate photo {{ loop.index }} left">&#8634; Rotate left</button><button type="button" data-turn="right" data-id="{{ it.id }}" aria-label="Rotate photo {{ loop.index }} right">Rotate right &#8635;</button></div>
         <figcaption class="meta hint" style="margin-top:6px">Photo {{ loop.index }} of {{ photos|length }} · {{ it.by }} · {{ it.created_at|local_time }} · <a href="/media/{{ it.id }}" target="_blank" rel="noopener">Open full size</a></figcaption>
         {% if it.text %}<details style="margin-top:6px"><summary>Text read from the photo</summary><div class="quote">{{ it.text }}</div></details>{% endif %}
       </figure>
@@ -135,6 +141,32 @@
     function show(i) { shots.forEach(function (s, n) { s.hidden = n !== i; }); thumbs.forEach(function (t, n) { t.setAttribute('aria-pressed', n === i); }); }
     thumbs.forEach(function (t, n) { t.addEventListener('click', function () { show(n); }); });
     show(0);
+  })();
+
+  // Photo rotation: the saved angle is applied with CSS (a sideways photo is shrunk to fit the width), and the buttons save the new angle for everyone.
+  (function () {
+    function show(box) {
+      var img = box.querySelector('img'), deg = parseInt(box.dataset.rot, 10) || 0;
+      if (!img.complete || !img.naturalWidth) return;
+      img.style.transform = ''; box.style.height = '';
+      if (deg % 180) {
+        var w = img.offsetWidth, h = img.offsetHeight, fit = Math.min(1, box.clientWidth / h);
+        box.style.height = Math.round(w * fit) + 'px';
+        img.style.transform = 'rotate(' + deg + 'deg) scale(' + fit + ')';
+      } else if (deg) { img.style.transform = 'rotate(' + deg + 'deg)'; }
+    }
+    document.querySelectorAll('.shot .rot').forEach(function (box) {
+      var img = box.querySelector('img');
+      img.addEventListener('load', function () { show(box); }); show(box);
+    });
+    document.querySelectorAll('.turn button').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var box = button.closest('.shot').querySelector('.rot'), body = new FormData();
+        body.append('csrf', document.querySelector('input[name=csrf]').value); body.append('dir', button.dataset.turn);
+        fetch('/media/' + button.dataset.id + '/rotate', { method: 'POST', body: body })
+          .then(function (r) { return r.json(); }).then(function (data) { box.dataset.rot = data.rotation; show(box); });
+      });
+    });
   })();
 </script>
 {% endblock %}

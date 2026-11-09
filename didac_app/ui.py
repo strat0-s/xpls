@@ -158,6 +158,12 @@ def register(app, get_store, get_config) -> None:
         target = request.form.get("next", "")
         return redirect(target if target.startswith("/") and not target.startswith("//") else url_for("gallery"))
 
+    @app.post("/media/<int:media_id>/rotate")
+    def media_rotate(media_id: int):
+        if not get_store().get_media(media_id):
+            abort(404)
+        return jsonify(rotation=get_store().rotate_media(media_id, -90 if request.form.get("dir") == "left" else 90))
+
     @app.post("/leads/<int:lead_id>/followup")
     def lead_followup(lead_id: int):
         require_admin()
@@ -363,7 +369,7 @@ def lead_items(lead, store, members: dict[str, str]) -> list[dict]:
     for row in media_rows:
         content_type = row["content_type"] or ""
         kind = "image" if content_type.startswith("image/") else "audio" if content_type.startswith("audio/") else "file"
-        items.append({"kind": kind, "id": row["id"], "text": row["extracted_text"], "by": by, "is_team": is_team, "created_at": row["created_at"]})
+        items.append({"kind": kind, "id": row["id"], "rotation": row["rotation"], "text": row["extracted_text"], "by": by, "is_team": is_team, "created_at": row["created_at"]})
     for row in store.list_feedback(lead.id):
         if row["feedback_type"] in DERIVED_FEEDBACK:
             continue
