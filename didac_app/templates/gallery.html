@@ -6,6 +6,11 @@
     .seg a { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surf); color: var(--mut); font-weight: 600; text-decoration: none; }
     .seg a:hover { border-color: var(--acc); }
     .seg a.on { background: var(--soft); color: var(--acc-text); border-color: var(--soft); }
+    .filter { position: relative; }
+    .filter summary { list-style: none; cursor: pointer; height: 34px; gap: 6px; }
+    .filter summary::-webkit-details-marker { display: none; }
+    .filter form { position: absolute; z-index: 5; top: 40px; left: 0; width: 240px; padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(42,32,48,.18); }
+    .filter .row { display: flex; gap: 8px; }
     .search { flex: 0 1 300px; width: 100%; max-width: 300px; }
     .search input { width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); }
 
@@ -55,21 +60,31 @@
     .empty { padding: 40px 16px; text-align: center; color: var(--mut); }
 {% endblock %}
 {% block content %}
+{% set keep = {'q': q or None, 'who': who or None, 'prio': prio or None} %}
+{% set active_filters = (1 if who else 0) + (1 if prio else 0) %}
 <div class="bar">
   <div class="seg">
-    <a href="{{ url_for('gallery', type='all', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'all' }}">All</a>
-    <a href="{{ url_for('gallery', type='forms', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'forms' }}">Contact forms</a>
-    <a href="{{ url_for('gallery', type='badges', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'badges' }}">Event badges</a>
-    <a href="{{ url_for('gallery', type='other', q=q or None, who=who or None) }}" class="{{ 'on' if tab == 'other' }}">Other documents</a>
+    <a href="{{ url_for('gallery', type='all', **keep) }}" class="{{ 'on' if tab == 'all' }}">All</a>
+    <a href="{{ url_for('gallery', type='forms', **keep) }}" class="{{ 'on' if tab == 'forms' }}">Contact forms</a>
+    <a href="{{ url_for('gallery', type='badges', **keep) }}" class="{{ 'on' if tab == 'badges' }}">Event badges</a>
+    <a href="{{ url_for('gallery', type='other', **keep) }}" class="{{ 'on' if tab == 'other' }}">Other documents</a>
   </div>
-  <div class="seg" aria-label="Who sent it">
-    <a href="{{ url_for('gallery', type=tab, q=q or None) }}" class="{{ 'on' if not who }}">Everyone</a>
-    <a href="{{ url_for('gallery', type=tab, q=q or None, who='team') }}" class="{{ 'on' if who == 'team' }}">Team</a>
-    <a href="{{ url_for('gallery', type=tab, q=q or None, who='visitors') }}" class="{{ 'on' if who == 'visitors' }}">Visitors</a>
-  </div>
+  <details class="filter">
+    <summary class="btn ghost">Filter{% if active_filters %} <span class="chip ok">{{ active_filters }}</span>{% endif %}</summary>
+    <form class="card" method="get" action="{{ url_for('gallery') }}">
+      <input type="hidden" name="type" value="{{ tab }}">
+      {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+      <div><label class="f" for="fl-who">Captured by</label>
+        <select class="t" id="fl-who" name="who"><option value="">Everyone</option><option value="team" {{ 'selected' if who == 'team' }}>Team</option><option value="visitors" {{ 'selected' if who == 'visitors' }}>Visitors</option></select></div>
+      <div><label class="f" for="fl-prio">Priority</label>
+        <select class="t" id="fl-prio" name="prio"><option value="">Any priority</option>{% for p in priorities %}<option {{ 'selected' if prio == p }}>{{ p }}</option>{% endfor %}<option value="none" {{ 'selected' if prio == 'none' }}>Unclassified</option></select></div>
+      <div class="row"><button class="btn">Apply</button><a class="btn ghost" href="{{ url_for('gallery', type=tab, q=q or None) }}">Clear</a></div>
+    </form>
+  </details>
   <form class="search" method="get" action="{{ url_for('gallery') }}">
     <input type="hidden" name="type" value="{{ tab }}">
     {% if who %}<input type="hidden" name="who" value="{{ who }}">{% endif %}
+    {% if prio %}<input type="hidden" name="prio" value="{{ prio }}">{% endif %}
     <label for="q" style="position:absolute;left:-9999px">Search leads</label>
     <input id="q" name="q" value="{{ q }}" placeholder="Search name, school, phone">
   </form>

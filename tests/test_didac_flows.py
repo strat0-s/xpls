@@ -416,3 +416,21 @@ def test_form_read_merges_card_details_and_the_prompt_asks_for_it(monkeypatch):
     assert seen == {"n": 2, "kind": "form"}
     assert result["fields"]["role"] == "Principal" and result["fields"]["email"] == "meera@bright.edu"
     assert "call Friday" in result["fields"]["notes"]
+
+
+def test_one_filter_controls_who_and_priority(store, sent):
+    store.create_lead(flows.Lead(name="Hot Lead", priority="High", captured_by="Test Admin"))
+    store.create_lead(flows.Lead(name="Cold Visitor", priority="Low"))
+    store.create_lead(flows.Lead(name="Open Visitor"))
+    client = app.test_client()
+
+    def names(query):
+        page = client.get(f"/dashboard?{query}").data.decode()
+        return {n for n in ("Hot Lead", "Cold Visitor", "Open Visitor") if n in page}
+
+    assert names("") == {"Hot Lead", "Cold Visitor", "Open Visitor"}
+    assert names("prio=High") == {"Hot Lead"}
+    assert names("prio=none") == {"Open Visitor"}
+    assert names("who=visitors") == {"Cold Visitor", "Open Visitor"}
+    assert names("who=visitors&prio=Low") == {"Cold Visitor"}
+    assert names("prio=bogus") == {"Hot Lead", "Cold Visitor", "Open Visitor"}

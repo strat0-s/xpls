@@ -106,11 +106,14 @@ def register(app, get_store, get_config) -> None:
         who = request.args.get("who") if request.args.get("who") in ("team", "visitors") else ""
         if who:
             cards = [card for card in cards if card["is_team"] == (who == "team")]
+        prio = request.args.get("prio") if request.args.get("prio") in (*PRIORITIES, "none") else ""
+        if prio:
+            cards = [card for card in cards if card["priority"] == ("" if prio == "none" else prio)]
         if tab not in ("forms", "badges", "other"):
             tab = "all"
         query = request.args.get("q", "").strip().lower()
         shown = [card for card in cards if tab in ("all", card["tab"]) and (not query or query in card["search"])]
-        return render_template("gallery.html", cards=shown, tab=tab, q=request.args.get("q", ""), who=who)
+        return render_template("gallery.html", cards=shown, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, priorities=PRIORITIES)
 
     @app.route("/leads/<int:lead_id>", methods=["GET", "POST"])
     def lead_detail(lead_id: int):
