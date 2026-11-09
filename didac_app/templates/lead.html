@@ -39,6 +39,9 @@
     <div class="sub">{{ {'form': 'Contact form', 'badge': 'Event badge / QR'}.get(lead.doc_type, 'Other document') }} · captured {{ lead.created_at|local_time }}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}</div>
   </div>
   {% if user.is_admin %}
+  <form method="post" action="{{ url_for('lead_followup', lead_id=lead.id) }}" onsubmit="return confirm('Send the thank-you WhatsApp to this lead?')">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn ghost">Send follow-up</button>
+  </form>
   <form method="post" action="{{ url_for('lead_delete', lead_id=lead.id) }}" onsubmit="return confirm('Delete this lead?')">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">Delete lead</button>
   </form>

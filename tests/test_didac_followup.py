@@ -74,3 +74,26 @@ def test_followup_page_is_admin_only_and_sends(store, templates, monkeypatch, an
     assert client.post("/followup", data={"csrf": csrf(client)}).status_code == 302
     assert templates == ["+919845011111"]
     assert anon_client.get("/followup").status_code == 302
+
+
+def test_send_to_one_lead_follows_the_same_rules(store, templates, monkeypatch):
+    import didac_app.server as server
+
+    monkeypatch.setattr(server, "config", CONFIG)
+    monkeypatch.setattr(followup, "SEND_HOURS", range(24))
+    mobile, landline, staff = lead(store, "98450 11111"), lead(store, "080 2345 6789"), lead(store, "+91 98000 00001")
+    client = app.test_client()
+
+    def press(item):
+        client.post(f"/leads/{item.id}/followup", data={"csrf": csrf(client)})
+        return [m for m in get_flashed(client)]
+
+    def get_flashed(c):
+        with c.session_transaction() as sess:
+            return sess.pop("_flashes", [])
+
+    assert press(mobile) == [("message", "Message sent.")] and templates == ["+919845011111"]
+    assert "already messaged" in press(mobile)[0][1]
+    assert "no mobile number" in press(landline)[0][1]
+    assert "team member" in press(staff)[0][1]
+    assert templates == ["+919845011111"]

@@ -32,23 +32,52 @@ def eligible(store: LeadStore) -> list[tuple[str, int]]:
     return list(out.items())
 
 
-def send_batch(store: LeadStore, config: DidacConfig, now: datetime | None = None) -> str:
-    """Send to the next eligible numbers and say what happened. Stops at the first failure so a rejected template is not hammered."""
+def blocked(store: LeadStore, config: DidacConfig, now: datetime | None) -> str:
+    """Why nothing may go out right now, or an empty string."""
     if not config.followup_template_id:
         return "Follow-up is not set up: BIRD_FOLLOWUP_TEMPLATE_ID is missing."
     if (now or datetime.now(IST)).astimezone(IST).hour not in SEND_HOURS:
         return "Quiet hours: messages go out between 9:00 and 21:00 IST."
-    room = min(BATCH, config.followup_daily_cap - store.followups_last_day())
-    if room <= 0:
+    if config.followup_daily_cap - store.followups_last_day() <= 0:
         return f"Daily cap of {config.followup_daily_cap} reached. Try again tomorrow."
+    return ""
+
+
+def send_to(store: LeadStore, config: DidacConfig, phone: str, lead_id: int) -> str:
+    """Claim the number, send, and give the claim back if the send fails. Returns an error text, or empty."""
+    if not store.claim_followup(phone, lead_id):
+        return ""
+    try:
+        bird.send_template(config, phone)
+    except Exception as exc:
+        store.release_followup(phone)
+        return str(exc)
+    return "sent"
+
+
+def send_batch(store: LeadStore, config: DidacConfig, now: datetime | None = None) -> str:
+    """Send to the next eligible numbers and say what happened. Stops at the first failure so a rejected template is not hammered."""
+    if reason := blocked(store, config, now):
+        return reason
     sent = 0
-    for phone, lead_id in eligible(store)[:room]:
-        if not store.claim_followup(phone, lead_id):
-            continue
-        try:
-            bird.send_template(config, phone)
-        except Exception as exc:
-            store.release_followup(phone)
-            return f"Sent {sent}, then stopped: {exc}"
-        sent += 1
+    for phone, lead_id in eligible(store)[:min(BATCH, config.followup_daily_cap - store.followups_last_day())]:
+        result = send_to(store, config, phone, lead_id)
+        if result not in ("", "sent"):
+            return f"Sent {sent}, then stopped: {result}"
+        sent += result == "sent"
     return f"Sent {sent} message(s)."
+
+
+def send_one(store: LeadStore, config: DidacConfig, lead, now: datetime | None = None) -> str:
+    """The same message to one lead's number, with the same rules (mobile only, once per number, not staff, not opted out)."""
+    if reason := blocked(store, config, now):
+        return reason
+    phone = normalize_phone(lead.phone)
+    if not phone or not is_mobile(phone):
+        return "This lead has no mobile number to message."
+    if phone in store.followup_phones():
+        return "This number was already messaged, or asked us to stop."
+    if any(normalize_phone(user["phone"]) == phone for user in store.list_users() if user["phone"]):
+        return "This is a team member's number."
+    result = send_to(store, config, phone, lead.id)
+    return "Message sent." if result == "sent" else f"Could not send: {result}"

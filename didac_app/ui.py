@@ -153,6 +153,13 @@ def register(app, get_store, get_config) -> None:
         target = request.form.get("next", "")
         return redirect(target if target.startswith("/") and not target.startswith("//") else url_for("gallery"))
 
+    @app.post("/leads/<int:lead_id>/followup")
+    def lead_followup(lead_id: int):
+        require_admin()
+        lead = get_store().get_lead(lead_id) or abort(404)
+        flash(followup.send_one(get_store(), get_config(), lead))
+        return redirect(url_for("lead_detail", lead_id=lead_id))
+
     @app.post("/leads/<int:lead_id>/delete")
     def lead_delete(lead_id: int):
         require_admin()
