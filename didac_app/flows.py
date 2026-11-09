@@ -171,7 +171,7 @@ class Chat:
             self.say(f"Discarded {lost} photo(s) that were not saved.")
         if self.user:
             first = self.user["name"].split()[0]
-            rows = [(FORM, "The printed Xperimentor form"), (DOC, "(Visiting cards, brochures, flyers, etc.)"), (BADGE, "Badge or ID card with a QR code"), (NOTE, "Voice or text note on your last lead")]
+            rows = [(FORM, "The printed Xperimentor form"), (DOC, "(Visiting cards, brochures, flyers and all that)"), (BADGE, "Badge or ID card with a QR code"), (NOTE, "Voice or text note on your last lead")]
             self.replies.append(Reply(f"Hi {first}. What would you like to do?\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
         else:
             rows = [(BROCHURE, "SIA, TiQer, Play Lab and more"), (REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo")]
