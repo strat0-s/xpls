@@ -209,7 +209,8 @@ def register(app, get_store, get_config) -> None:
         if request.method == "POST":
             flash(followup.send_batch(store, config))
             return redirect(url_for("followup_page"))
-        return render_template("followup.html", waiting=len(followup.eligible(store)), left=config.followup_daily_cap - store.followups_last_day(),
+        followup.refresh_statuses(store, config)
+        return render_template("followup.html", sent=store.list_followups(), tz=IST, waiting=len(followup.eligible(store)), left=config.followup_daily_cap - store.followups_last_day(),
                                cap=config.followup_daily_cap, ready=bool(config.followup_template_id))
 
     @app.get("/export/orbit.<fmt>")

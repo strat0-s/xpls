@@ -55,7 +55,7 @@ def message_body(text: str, options: list[tuple[str, str]] | None = None, as_lis
     return {"type": "text", "text": {"text": text}}
 
 
-def post_message(config: DidacConfig, to_number: str, content: dict) -> None:
+def post_message(config: DidacConfig, to_number: str, content: dict) -> dict:
     response = requests.post(
         f"{API_BASE}/workspaces/{config.bird_workspace_id}/channels/{config.bird_channel_id}/messages",
         headers=media_headers(config),
@@ -63,14 +63,24 @@ def post_message(config: DidacConfig, to_number: str, content: dict) -> None:
         timeout=15,
     )
     response.raise_for_status()
+    return response.json()
 
 
 def send_message(config: DidacConfig, to_number: str, text: str, options: list[tuple[str, str]] | None = None, as_list: bool = False) -> None:
     post_message(config, to_number, {"body": message_body(text, options, as_list)})
 
 
-def send_template(config: DidacConfig, to_number: str) -> None:
+def send_template(config: DidacConfig, to_number: str) -> str:
     """The approved parameterless follow-up template. Needed because WhatsApp only lets us message first with a template; its two
     quick-reply buttons are labelled exactly like the visitor menu rows ("Share my requirement", "Download brochure"), so a tap lands in that flow."""
     template = {"projectId": config.followup_template_id, "version": config.followup_template_version, "locale": "en", "parameters": []}
-    post_message(config, to_number, {"template": template})
+    return post_message(config, to_number, {"template": template}).get("id", "")
+
+
+def message_status(config: DidacConfig, message_id: str) -> tuple[str, str]:
+    """(status, reason) of a sent message, e.g. ("delivery_failed", "facebook: (code: 131049; ...)"). A 202 on send only means Bird accepted it."""
+    response = requests.get(
+        f"{API_BASE}/workspaces/{config.bird_workspace_id}/channels/{config.bird_channel_id}/messages/{message_id}", headers=media_headers(config), timeout=10)
+    response.raise_for_status()
+    body = response.json()
+    return body.get("status", ""), body.get("reason") or ""

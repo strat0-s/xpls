@@ -48,10 +48,12 @@ def send_to(store: LeadStore, config: DidacConfig, phone: str, lead_id: int) -> 
     if not store.claim_followup(phone, lead_id):
         return ""
     try:
-        bird.send_template(config, phone)
+        message_id = bird.send_template(config, phone)
     except Exception as exc:
         store.release_followup(phone)
         return str(exc)
+    if message_id:
+        store.set_followup_message(phone, message_id)
     return "sent"
 
 
@@ -80,4 +82,14 @@ def send_one(store: LeadStore, config: DidacConfig, lead, now: datetime | None =
     if any(normalize_phone(user["phone"]) == phone for user in store.list_users() if user["phone"]):
         return "This is a team member's number."
     result = send_to(store, config, phone, lead.id)
-    return "Message sent." if result == "sent" else f"Could not send: {result}"
+    return "Message handed to WhatsApp. Check delivery on the Follow-up page." if result == "sent" else f"Could not send: {result}"
+
+
+def refresh_statuses(store: LeadStore, config: DidacConfig, limit: int = 20) -> None:
+    """Ask Bird how the undecided messages ended up (Meta can still refuse after Bird accepted). Bounded so the page stays quick."""
+    for row in store.pending_followups(limit):
+        try:
+            status, reason = bird.message_status(config, row["message_id"])
+        except Exception:
+            return  # try again on the next page load
+        store.update_followup_status(row["phone"], status, reason)

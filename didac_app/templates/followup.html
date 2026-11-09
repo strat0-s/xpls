@@ -5,6 +5,10 @@
     h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
     .panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .hint { font-size: 13px; color: var(--mut); }
+    .scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); padding: 8px 10px; background: var(--head); white-space: nowrap; }
+    td { padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: top; }
 {% endblock %}
 {% block content %}
 <h1>WhatsApp follow-up</h1>
@@ -14,4 +18,21 @@
   <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn" {{ '' if ready and waiting else 'disabled' }}>Send next batch</button></form>
   <div class="hint">Each number gets one message, ever. Landlines, team members and anyone who replied STOP are skipped. Messages only go out 9:00 to 21:00 IST, up to 40 per click.</div>
 </section>
+{% if sent %}
+<section class="card panel">
+  <b>Sent messages</b>
+  <div class="scroll"><table>
+    <thead><tr><th scope="col">Lead</th><th scope="col">Number</th><th scope="col">Sent</th><th scope="col">Delivery</th></tr></thead>
+    <tbody>{% for row in sent %}<tr>
+      <td><a href="{{ url_for('lead_detail', lead_id=row.lead_id) }}">{{ row.name or row.org or ('Lead #' ~ row.lead_id) }}</a></td>
+      <td>{{ row.phone }}</td>
+      <td>{{ row.sent_at.astimezone(tz).strftime('%d %b, %H:%M') }}</td>
+      <td>{% if row.status in ('delivered', 'read') %}<span class="chip ok">{{ row.status|capitalize }}</span>
+        {% elif row.status in ('delivery_failed', 'sending_failed') %}<span class="chip off">Failed</span><div class="hint">{{ row.reason or 'WhatsApp did not deliver it.' }}</div>
+        {% else %}<span class="chip amber">{{ (row.status or 'sent')|replace('_', ' ')|capitalize }}</span>{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  <div class="hint">WhatsApp may refuse a message after accepting it, for example to someone who has never messaged us. Reload the page to update.</div>
+</section>
+{% endif %}
 {% endblock %}

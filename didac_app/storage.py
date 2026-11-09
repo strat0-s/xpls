@@ -124,6 +124,8 @@ class LeadStore:
                 "CREATE TABLE IF NOT EXISTS followups (phone TEXT PRIMARY KEY, lead_id BIGINT, sent_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
                 "opted_out BOOLEAN NOT NULL DEFAULT FALSE)"
             )
+            for column in ("message_id", "status", "reason"):
+                conn.execute(f"ALTER TABLE followups ADD COLUMN IF NOT EXISTS {column} TEXT")
             # Leads left on the old text-status conversation steps go back to plain New.
             conn.execute("UPDATE leads SET status='New' WHERE status ~ '^(Menu|Intake|Brochure|Feedback|Badge):'")
             conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
@@ -145,6 +147,26 @@ class LeadStore:
     def release_followup(self, phone: str) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM followups WHERE phone = %s AND NOT opted_out", (phone,))
+
+    def set_followup_message(self, phone: str, message_id: str) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE followups SET message_id = %s, status = 'accepted' WHERE phone = %s", (message_id, phone))
+
+    def update_followup_status(self, phone: str, status: str, reason: str) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE followups SET status = %s, reason = %s WHERE phone = %s", (status, reason, phone))
+
+    def pending_followups(self, limit: int) -> list[dict]:
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT phone, message_id FROM followups WHERE message_id IS NOT NULL AND status NOT IN ('delivered', 'read', 'delivery_failed', 'sending_failed') "
+                "ORDER BY sent_at LIMIT %s", (limit,)).fetchall()
+
+    def list_followups(self, limit: int = 50) -> list[dict]:
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT f.phone, f.lead_id, f.sent_at, f.status, f.reason, l.name, l.org FROM followups f LEFT JOIN leads l ON l.id = f.lead_id "
+                "WHERE NOT f.opted_out ORDER BY f.sent_at DESC LIMIT %s", (limit,)).fetchall()
 
     def opt_out(self, phone: str) -> None:
         with self.connect() as conn:

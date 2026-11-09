@@ -92,8 +92,24 @@ def test_send_to_one_lead_follows_the_same_rules(store, templates, monkeypatch):
         with c.session_transaction() as sess:
             return sess.pop("_flashes", [])
 
-    assert press(mobile) == [("message", "Message sent.")] and templates == ["+919845011111"]
+    assert press(mobile) == [("message", "Message handed to WhatsApp. Check delivery on the Follow-up page.")] and templates == ["+919845011111"]
     assert "already messaged" in press(mobile)[0][1]
     assert "no mobile number" in press(landline)[0][1]
     assert "team member" in press(staff)[0][1]
     assert templates == ["+919845011111"]
+
+
+def test_delivery_status_is_recorded_and_shown(store, monkeypatch):
+    import didac_app.server as server
+
+    monkeypatch.setattr(server, "config", CONFIG)
+    monkeypatch.setattr(followup, "SEND_HOURS", range(24))
+    monkeypatch.setattr(bird, "send_template", lambda config, to: "msg-1")
+    calls = []
+    monkeypatch.setattr(bird, "message_status", lambda config, mid: calls.append(mid) or ("delivery_failed", "code 131049"))
+    lead(store, "98450 11111")
+    followup.send_batch(store, CONFIG, DAY)
+    page = app.test_client().get("/followup").data.decode()
+    assert "Failed" in page and "code 131049" in page and calls == ["msg-1"]
+    app.test_client().get("/followup")
+    assert calls == ["msg-1"]  # a decided status is not asked about again
