@@ -59,3 +59,7 @@ def test_media_file_redirects_to_signed_url(store, monkeypatch):
 def test_password_boxes_get_a_show_hide_script(anon_client):
     page = anon_client.get("/login").data.decode()
     assert 'type="password"' in page and "Show" in page and "input[type=password]" in page
+
+
+def test_pages_carry_a_favicon(anon_client):
+    assert 'rel="icon"' in anon_client.get("/login").data.decode()
