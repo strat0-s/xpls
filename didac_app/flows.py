@@ -342,7 +342,7 @@ class Chat:
         self.store.put_session(self.number, flow, "photos", {"photos": []})
         if outcome == "created":
             badge = " It shows a Check badge on the dashboard." if saved.review_reason else ""
-            self.say(f"Saved as #{saved.id}, {label}.{badge}\nSend the next {flow}, or type menu.")
+            self.say(f"Saved as #{saved.id}, {label}{f' ({saved.priority} priority)' if saved.priority else ''}.{badge}\nSend the next {flow}, or type menu.")
         else:
             added = "I added the new details to it." if outcome == "merged" else "There was nothing new to add."
             self.say(f"Already saved as #{saved.id}, {saved.name or label}. {added}\nSend the next {flow}, or type menu.")
@@ -488,8 +488,8 @@ def summary(fields: dict, check: list[str], with_check: bool = False) -> str:
         value = fields.get(name, "")
         if name == "organisation_type" and value:
             value = orbit.ORG_TYPES.get(value, value)
-        if value or name in ALWAYS:
-            lines.append(f"{label}: {value or '(blank)'}")
+        if value or name in ALWAYS or (name == "priority" and with_check):  # the saved "original reading" leaves the empty priority out
+            lines.append(f"{label}: {value or ('(not set, asked on Save)' if name == 'priority' else '(blank)')}")
     text = "\n".join(lines)
     if not with_check:
         return text

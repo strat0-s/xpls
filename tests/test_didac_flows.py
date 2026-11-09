@@ -75,7 +75,7 @@ def test_document_with_two_photos_edit_then_save(store, sent, fake_io):
     assert (lead.org, lead.phone, lead.doc_type, lead.captured_by, lead.review_reason) == ("Sunrise School", "98450 11112", "other", "Test Admin", "")
     assert "Phone: 9845011111" in lead.raw_message  # the scanner's first reading is kept apart from the correction
     assert [m["local_path"] for m in store.list_media(lead.id)] == ["k/back", "k/front"]
-    assert f"Saved as #{lead.id}, Sunrise School." in last(sent)[0]
+    assert f"Saved as #{lead.id}, Sunrise School (High priority)." in last(sent)[0]
     say(STAFF, "", photo("next"))  # stays in the flow for the next document
     assert "Photo 1 received" in last(sent)[0]
 
@@ -158,6 +158,7 @@ def test_save_asks_for_a_priority_and_stores_it(store, sent, fake_io):
     say(STAFF, "Contact form")
     say(STAFF, "", photo("form"))
     say(STAFF, "DONE")
+    assert "Priority: (not set, asked on Save)" in sent[-1][1]
     say(STAFF, "Save")
     assert last(sent) == ("How important is this lead?", ["High", "Medium", "Low"]) and store.list_leads() == []
     say(STAFF, "maybe")
