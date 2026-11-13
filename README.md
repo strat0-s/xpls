@@ -256,6 +256,7 @@ Optional OpenAI intelligence:
 ```bash
 OPENAI_API_KEY=...
 OPENAI_VISION_MODEL=gpt-5-mini
+OPENAI_VISION_EFFORT=low   # optional: faster scan reading; leave unset for the model's default
 OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
 ```
 

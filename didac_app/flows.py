@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -95,9 +96,11 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
     """One read over every photo of a document (kind is form, document or badge). Returns {"fields": {lead field: value}, "check": [doubtful things]}; never raises."""
     paths, qr_text = [], ""
     try:
-        for photo in photos:
+        with ThreadPoolExecutor(max_workers=max(1, len(photos))) as pool:  # all photos download at once, not one after another
+            blobs = list(pool.map(lambda photo: blobstore.download(config, photo["key"]), photos))
+        for photo, blob in zip(photos, blobs):
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix_for(photo["ct"], photo["key"])) as tmp:
-                tmp.write(blobstore.download(config, photo["key"]))
+                tmp.write(blob)
             paths.append((tmp.name, photo["ct"]))
         raw = vision_read(paths, kind)
         qr_text = "\n".join(filter(None, (append_qr_details(path, "") for path, _ in paths)))

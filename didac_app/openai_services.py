@@ -57,7 +57,10 @@ def vision_read(images: list[tuple[str, str]], kind: str = "document") -> str:
 
     content = [{"type": "input_text", "text": {"form": FORM_PROMPT, "badge": BADGE_PROMPT}.get(kind, DOCUMENT_PROMPT)}]
     content += [{"type": "input_image", "image_url": image_data_url(path, content_type)} for path, content_type in images]
-    response = OpenAI().responses.create(model=os.getenv("OPENAI_VISION_MODEL", "gpt-5-mini"), input=[{"role": "user", "content": content}])
+    # OPENAI_VISION_EFFORT (minimal, low, medium, high) trims the model's thinking time; unset keeps the model's default.
+    effort = os.getenv("OPENAI_VISION_EFFORT", "").strip()
+    extra = {"reasoning": {"effort": effort}} if effort else {}
+    response = OpenAI().responses.create(model=os.getenv("OPENAI_VISION_MODEL", "gpt-5-mini"), input=[{"role": "user", "content": content}], **extra)
     return response.output_text
 
 
