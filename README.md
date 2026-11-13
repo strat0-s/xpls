@@ -200,7 +200,7 @@ Bot: list - Download brochure, Share my requirement, Feedback / voice note
 Visitor: Download brochure -> TiQer
 Bot: sends the TiQer brochure link
 Visitor: Share my requirement
-Bot: asks name, organisation, type, city and state, then the requirement, and saves one lead
+Bot: asks name, email (can be skipped), organisation, type, city and state, then the requirement, and saves one lead
 ```
 
 Staff flow (a phone that is active on the Team page): the menu is Contact form, Other docs (cards, etc.), Event badge / QR, Add a note. Send photos (a contact form may include the visiting card stapled to it), reply DONE, then Save, Edit or Retake. Edit takes `Field: value` lines, including `Priority: High`. Tapping Save asks for a priority (High, Medium, Low) unless it was set in Edit; the lead is saved only after that. The "I read this as" summary is never shortened: it goes out as one message, or as one plain message plus the buttons when it is too long for a button message (about 1000 characters). Type BACK to stop editing, cancel to stop a flow.
