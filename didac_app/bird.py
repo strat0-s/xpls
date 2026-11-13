@@ -5,6 +5,7 @@ import requests
 from didac_app.config import DidacConfig
 
 API_BASE = "https://api.bird.com"
+session = requests.Session()  # reused, so a warm instance skips the TLS handshake to Bird on every call
 
 
 def parse_inbound(event: dict) -> dict | None:
@@ -54,7 +55,7 @@ def message_body(text: str, options: list[tuple[str, str]] | None = None, as_lis
 
 
 def post_message(config: DidacConfig, to_number: str, content: dict) -> dict:
-    response = requests.post(
+    response = session.post(
         f"{API_BASE}/workspaces/{config.bird_workspace_id}/channels/{config.bird_channel_id}/messages",
         headers=media_headers(config),
         json={"receiver": {"contacts": [{"identifierKey": "phonenumber", "identifierValue": to_number.replace("whatsapp:", "")}]}, **content},
@@ -77,7 +78,7 @@ def send_template(config: DidacConfig, to_number: str) -> str:
 
 def message_status(config: DidacConfig, message_id: str) -> tuple[str, str]:
     """(status, reason) of a sent message, e.g. ("delivery_failed", "facebook: (code: 131049; ...)"). A 202 on send only means Bird accepted it."""
-    response = requests.get(
+    response = session.get(
         f"{API_BASE}/workspaces/{config.bird_workspace_id}/channels/{config.bird_channel_id}/messages/{message_id}", headers=media_headers(config), timeout=10)
     response.raise_for_status()
     body = response.json()
