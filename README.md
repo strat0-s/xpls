@@ -265,14 +265,6 @@ Repeat scans: a new card whose email or phone matches a saved lead, and whose na
 
 Export for Orbit: the **Export** page builds a CSV or Excel file for Orbit CRM's Organisations → Import (one row per lead, `name` = organisation). Filter by capture date (India time), who captured it, and organisation type. Leads Orbit would reject (no organisation name, no organisation type, invalid email) are listed on the page and left out; fix them on the lead page and export again. Orbit takes at most 500 organisations per file and skips ones it already has. Organisation type is one fixed list, the same as Orbit's `type`: SCHOOL, SCHOOL_CHAIN, CSR, NGO, GOVERNMENT, DISTRIBUTOR, INSTITUTION, VENDOR, OTHER (the last four must exist in Orbit before importing leads of those types).
 
-Media cap:
-
-```bash
-MAX_MEDIA_PER_MESSAGE=3
-```
-
-The bot processes only the first 3 images/voice notes in one WhatsApp message and asks the sender to send additional files separately.
-
 ## Notes
 
 LinkedIn discovery is intentionally limited to public links found on crawled pages. The app does not authenticate to LinkedIn or scrape private LinkedIn content.

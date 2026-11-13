@@ -34,7 +34,6 @@ class DidacConfig:
     followup_template_id: str = os.getenv("BIRD_FOLLOWUP_TEMPLATE_ID", "")  # Bird project id of the approved thank-you template; blank = follow-up disabled
     followup_template_version: str = os.getenv("BIRD_FOLLOWUP_TEMPLATE_VERSION", "latest")
     followup_daily_cap: int = int(os.getenv("FOLLOWUP_DAILY_CAP", "100"))
-    max_media_per_message: int = int(os.getenv("MAX_MEDIA_PER_MESSAGE", "3"))
 
 
 def load_config() -> DidacConfig:
