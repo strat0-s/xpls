@@ -247,4 +247,5 @@ BROCHURES_HTML = """
 
 
 if __name__ == "__main__":
+    store.init_db()  # local runs only; on Vercel run `python -m didac_app.cli init-db` after a schema change
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5001")), debug=os.getenv("FLASK_DEBUG") == "1")

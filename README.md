@@ -81,7 +81,7 @@ WhatsApp -> Bird -> /bird/webhook (Flask on Vercel) -> Supabase Postgres (leads,
 ### Supabase setup
 
 1. Create a project (region Mumbai to match Vercel). The Data API can stay off, the app talks to Postgres directly.
-2. Project settings > Database > Connection string > **Transaction pooler**. Use it as `DATABASE_URL` (port 6543). Tables are created automatically on the first start.
+2. Project settings > Database > Connection string > **Transaction pooler**. Use it as `DATABASE_URL` (port 6543). Create the tables once with `venv/bin/python -m didac_app.cli init-db` (also after any schema change); the app does not create them on every start.
 3. Storage > New bucket named `didac-media`, **private**.
 4. Project settings > API keys: copy the project URL into `SUPABASE_URL` and the secret key into `SUPABASE_SECRET_KEY`. Set `SUPABASE_BUCKET=didac-media`. The secret key bypasses all access rules, so keep it server-side only.
 

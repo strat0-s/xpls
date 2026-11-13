@@ -11,7 +11,7 @@ from didac_app.storage import LeadStore
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="DIDAC WhatsApp lead app utilities")
-    parser.add_argument("command", choices=["export", "summary", "reset-sample", "create-admin"])
+    parser.add_argument("command", choices=["init-db", "export", "summary", "reset-sample", "create-admin"])
     parser.add_argument("--output", default="outputs/didac/didac_leads.xlsx")
     parser.add_argument("--name", help="create-admin: full name")
     parser.add_argument("--phone", help="create-admin: phone number (used to sign in)")
@@ -20,7 +20,10 @@ def main() -> None:
 
     config = load_config()
     store = LeadStore(config.database_url)
-    if args.command == "export":
+    store.init_db()  # the web app no longer creates tables on every start; this is where they get created
+    if args.command == "init-db":
+        print("Tables are up to date")
+    elif args.command == "export":
         path = store.export_report_excel(Path(args.output))
         print(path)
     elif args.command == "summary":
