@@ -18,10 +18,12 @@ from didac_app.storage import LeadStore
 @pytest.fixture
 def store():
     store = LeadStore(os.environ["DATABASE_URL"])
+    store.init_db()
     store.clear()
     with store.connect() as conn:
         conn.execute("TRUNCATE users, login_attempts, followups RESTART IDENTITY")  # clear() leaves users alone so reset-sample can't lock everyone out
-    return store
+    yield store
+    store.close()
 
 
 @pytest.fixture(autouse=True)

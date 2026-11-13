@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import csv
 import json
 from dataclasses import asdict, fields
@@ -8,6 +9,7 @@ from pathlib import Path
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -26,11 +28,20 @@ class LeadStore:
         if not dsn:
             raise RuntimeError("DATABASE_URL is not set")
         self.dsn = dsn
-        self.init_db()
+        # A warm instance keeps these connections, so most queries skip the TCP/TLS/login handshake. A connection Supabase dropped while idle is replaced on checkout.
+        # prepare_threshold=None: Supabase's transaction pooler (pgbouncer) rejects prepared statements.
+        self.pool = ConnectionPool(
+            dsn, min_size=1, max_size=4, timeout=10, open=False, check=ConnectionPool.check_connection,
+            kwargs={"row_factory": dict_row, "prepare_threshold": None},
+        )
+        self.pool.open()
+        atexit.register(self.pool.close)  # else Python complains about the pool's worker threads at exit
 
     def connect(self):
-        # prepare_threshold=None: Supabase's transaction pooler (pgbouncer) rejects prepared statements.
-        return psycopg.connect(self.dsn, row_factory=dict_row, prepare_threshold=None)
+        return self.pool.connection()  # same `with ... as conn` use as before: commits on success, rolls back on error, then hands the connection back
+
+    def close(self) -> None:
+        self.pool.close()
 
     def init_db(self) -> None:
         columns = ", ".join(
