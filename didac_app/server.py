@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 import os
+import sys
+import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -13,6 +16,9 @@ from didac_app.replies import command_reply
 from didac_app.storage import LeadStore
 
 app = Flask(__name__)
+timing = logging.getLogger("didac.timing")  # one line per webhook in the Vercel logs, to see where the time goes
+timing.setLevel(logging.INFO)
+timing.addHandler(logging.StreamHandler(sys.stdout))
 config = load_config()
 store = LeadStore(config.database_url)
 app.secret_key = config.secret_key
@@ -102,6 +108,7 @@ def bird_webhook():
     # Fail closed: Bird is told to call /bird/webhook?token=<BIRD_WEBHOOK_TOKEN>.
     if not config.bird_webhook_token or not auth.same(request.args.get("token", ""), config.bird_webhook_token):
         return {"error": "unauthorized"}, 401
+    started = time.perf_counter()
     event = request.get_json(silent=True) or {}
     message = bird.parse_inbound(event)
     if not message:
@@ -114,15 +121,12 @@ def bird_webhook():
     if event_id is None:
         return "duplicate", 200
     if body.startswith("/") and flows.staff_user(store, from_number):
-        store.update_inbound_event(event_id, "processed_command")
-        return send_replies(event_id, from_number, [Reply(command_reply(body, store, config))], [])
+        return send_replies(event_id, from_number, [Reply(command_reply(body, store, config))], [], "processed_command", started)
     if body.strip(" .!").lower() in followup.STOP_WORDS and not flows.staff_user(store, from_number):
         store.opt_out(auth.normalize_phone(from_number) or from_number)
-        store.update_inbound_event(event_id, "opted_out")
-        return send_replies(event_id, from_number, [Reply("You will not get any more follow-up messages from us. Type menu if you want our brochures.")], [])
+        return send_replies(event_id, from_number, [Reply("You will not get any more follow-up messages from us. Type menu if you want our brochures.")], [], "opted_out", started)
     replies, lead_ids = flows.handle(store, config, from_number, body, media)
-    store.update_inbound_event(event_id, "processed", unique_ids(lead_ids))
-    return send_replies(event_id, from_number, replies, lead_ids)
+    return send_replies(event_id, from_number, replies, lead_ids, "processed", started)
 
 
 def unique_ids(values):
@@ -133,13 +137,19 @@ def unique_ids(values):
     return seen
 
 
-def send_replies(event_id: int, to_number: str, replies: list[Reply], lead_ids: list[int]) -> tuple[str, int]:
+def send_replies(event_id: int, to_number: str, replies: list[Reply], lead_ids: list[int], status: str, started: float) -> tuple[str, int]:
+    # Reply first, then record the outcome, so the visitor does not wait for the status write.
     # Answer 200 even if sending fails: Bird would retry and the retry is dropped as a duplicate anyway.
+    worked = time.perf_counter()
+    error = ""
     try:
         for reply in replies:
             bird.send_message(config, to_number, reply.text, reply.options, reply.as_list)
     except Exception as exc:
-        store.update_inbound_event(event_id, "reply_failed", unique_ids(lead_ids), str(exc))
+        status, error = "reply_failed", str(exc)
+    sent = time.perf_counter()
+    store.update_inbound_event(event_id, status, unique_ids(lead_ids), error)
+    timing.info("webhook work_ms=%d send_ms=%d log_ms=%d total_ms=%d status=%s", (worked - started) * 1000, (sent - worked) * 1000, (time.perf_counter() - sent) * 1000, (time.perf_counter() - started) * 1000, status)
     return "OK", 200
 
 
