@@ -143,15 +143,17 @@
     function select(row) {
       rows.forEach(function (r) { r.classList.toggle('sel', r === row); });
       var d = row.dataset;
-      shot.textContent = '';
+      shot.textContent = ''; shot.style.display = '';
       if (d.kind === 'image') {
         var img = document.createElement('img'); img.src = '/media/' + d.img; img.alt = 'Photo of the lead'; shot.appendChild(img);
         if (+d.photos > 1) { var tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = d.photos + ' photos'; shot.appendChild(tag); }
       } else if (d.kind === 'audio') {
         shot.innerHTML = PLAY;
         var t = document.createElement('span'); t.className = 'tag'; t.textContent = 'Voice note'; shot.appendChild(t);
+      } else if (d.note) {
+        var b = document.createElement('div'); b.className = 'bubble'; b.textContent = d.note; shot.appendChild(b);
       } else {
-        var b = document.createElement('div'); b.className = 'bubble'; b.textContent = d.note || 'No content yet'; shot.appendChild(b);
+        shot.style.display = 'none';  // nothing was sent besides the number: no empty box, just the details below
       }
       text('p-name', d.name); text('p-org', d.org); text('p-phone', d.phone); text('p-by', d.by); text('p-time', d.time);
       var prio = document.getElementById('p-prio'); prio.textContent = d.prio; prio.className = 'chip ' + (d.prio === 'Unclassified' ? 'none' : d.prio.toLowerCase()); prio.style.justifySelf = 'start';
