@@ -166,6 +166,13 @@ class Chat:
     def say(self, text: str) -> None:
         self.replies.append(Reply(text))
 
+    def say_now(self, text: str) -> None:
+        """Send right away, before the slow work that follows. A failure is ignored: the normal replies still go out afterwards."""
+        try:
+            bird.send_message(self.config, self.number, text)
+        except Exception:
+            logger.exception("Could not send the progress message")
+
     def menu(self, session: dict | None = None) -> None:
         lost = len((session or {}).get("data", {}).get("photos", []))
         if session:
@@ -281,6 +288,7 @@ class Chat:
                 return self.say("Send a photo, or reply DONE when all photos are sent. Type cancel to stop.")
             if not data.get("photos"):
                 return self.say("No photos yet. Send a photo first.")
+            self.say_now(f"Reading your {len(data['photos'])} photo(s)... this takes a few seconds.")
             result = read_documents(self.config, data["photos"], flow)
             data |= {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], [])}
             self.store.put_session(self.number, flow, "confirm", data)
