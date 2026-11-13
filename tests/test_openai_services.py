@@ -41,3 +41,24 @@ def test_split_lead_texts_handles_contact_separator():
     assert len(texts) == 2
     assert "Org: ABC" in texts[0]
     assert "Org: XYZ" in texts[1]
+
+
+def test_big_photos_are_shrunk_upright_and_small_ones_are_left_alone(tmp_path):
+    import struct
+
+    import cv2
+    import numpy as np
+
+    from didac_app.openai_services import shrunk_jpeg
+
+    big = tmp_path / "big.jpg"
+    data = cv2.imencode(".jpg", np.zeros((1500, 3000, 3), np.uint8))[1].tobytes()
+    exif = b"MM\x00*\x00\x00\x00\x08\x00\x01\x01\x12\x00\x03\x00\x00\x00\x01\x00\x06\x00\x00\x00\x00\x00\x00"  # EXIF Orientation = 6 (turn right)
+    big.write_bytes(data[:2] + b"\xff\xe1" + struct.pack(">H", len(exif) + 8) + b"Exif\x00\x00" + exif + data[2:])
+    small = tmp_path / "small.jpg"
+    small.write_bytes(cv2.imencode(".jpg", np.zeros((800, 600, 3), np.uint8))[1].tobytes())
+
+    out = cv2.imdecode(np.frombuffer(shrunk_jpeg(str(big)), np.uint8), cv2.IMREAD_COLOR)
+    assert out.shape[:2] == (2000, 1000)  # turned upright (portrait) and longest side 2000
+    assert shrunk_jpeg(str(small)) is None
+    assert shrunk_jpeg(str(tmp_path / "missing.jpg")) is None

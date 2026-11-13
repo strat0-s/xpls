@@ -119,8 +119,28 @@ def transcribe_audio(local_path: str) -> str:
 def image_data_url(local_path: str, content_type: str = "") -> str:
     path = Path(local_path)
     mime = content_type or mimetypes.guess_type(path.name)[0] or "image/jpeg"
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    shrunk = shrunk_jpeg(local_path)
+    if shrunk:
+        mime = "image/jpeg"
+    encoded = base64.b64encode(shrunk or path.read_bytes()).decode("ascii")
     return f"data:{mime};base64,{encoded}"
+
+
+def shrunk_jpeg(local_path: str, max_side: int = 2000) -> bytes | None:
+    """A phone photo is 3-10 MB; the model reads at most about 2000 px anyway, so a smaller upload is the same read, sooner.
+    Upright (EXIF turn applied) and re-encoded, only when the photo is bigger than max_side. None means send the original."""
+    try:
+        import cv2
+
+        image = cv2.imread(local_path)
+        if image is None or max(image.shape[:2]) <= max_side:
+            return None
+        scale = max_side / max(image.shape[:2])
+        image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        ok, buffer = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 88])
+        return buffer.tobytes() if ok else None
+    except Exception:
+        return None
 
 
 def json_to_lead_text(value: str) -> str:
