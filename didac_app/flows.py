@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -24,6 +25,7 @@ from didac_app.parser import FIELD_ALIASES, extract_schools_count, normalize_con
 from didac_app.storage import LeadStore
 
 logger = logging.getLogger(__name__)
+timing = logging.getLogger("didac.timing")  # same logger the webhook uses, so these lines show up in the Vercel logs too
 
 SESSION_MINUTES = 30
 MAX_PHOTOS = 10
@@ -95,6 +97,7 @@ def fetch_media(config: DidacConfig, url: str, content_type: str, number: str) -
 def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
     """One read over every photo of a document (kind is form, document or badge). Returns {"fields": {lead field: value}, "check": [doubtful things]}; never raises."""
     paths, qr_text = [], ""
+    started = time.perf_counter()
     try:
         with ThreadPoolExecutor(max_workers=max(1, len(photos))) as pool:  # all photos download at once, not one after another
             blobs = list(pool.map(lambda photo: blobstore.download(config, photo["key"]), photos))
@@ -102,8 +105,15 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix_for(photo["ct"], photo["key"])) as tmp:
                 tmp.write(blob)
             paths.append((tmp.name, photo["ct"]))
-        raw = vision_read(paths, kind)
-        qr_text = "\n".join(filter(None, (append_qr_details(path, "") for path, _ in paths)))
+        downloaded = time.perf_counter()
+        # The model call is mostly waiting on OpenAI and the QR decode is CPU work, so they run side by side instead of one after the other.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            reading = pool.submit(lambda: (vision_read(paths, kind), time.perf_counter()))
+            qr_text = "\n".join(filter(None, (append_qr_details(path, "") for path, _ in paths)))
+            qr_done = time.perf_counter()
+            raw, vision_done = reading.result()
+        timing.info("read photos=%d download_ms=%d vision_ms=%d qr_ms=%d total_ms=%d", len(photos), (downloaded - started) * 1000,
+                    (vision_done - downloaded) * 1000, (qr_done - downloaded) * 1000, (time.perf_counter() - started) * 1000)
     except Exception:
         logger.exception("Reading the document failed")
         return {"fields": {}, "check": ["could not read the photos"]}
