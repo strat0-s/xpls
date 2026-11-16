@@ -10,7 +10,6 @@ from flask import Response, abort, flash, g, jsonify, redirect, render_template,
 from didac_app import auth, flows, followup, orbit
 from didac_app.models import NOT_SCANNED
 from didac_app import blobstore
-from didac_app.admin import DEFAULT_FOLLOWUP, FOLLOWUP_KEY
 from didac_app.pager import paginate
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -296,7 +295,7 @@ def register(app, get_store, get_config) -> None:
         sent = store.list_followups(event_id=event_id)
         left = max(0, config.followup_daily_cap - store.followups_last_day())
         return render_template("followup.html", tz=IST, events=events, event_id=event_id, left=left, cap=config.followup_daily_cap, ready=bool(config.followup_template_id),
-                               batch=min(followup.BATCH, left, len(waiting)), message=store.get_setting(FOLLOWUP_KEY, DEFAULT_FOLLOWUP),
+                               batch=min(followup.BATCH, left, len(waiting)),
                                w=paginate(waiting, request.args.get("wpage", 1, type=int), 25), s=paginate(skipped, request.args.get("spage", 1, type=int), 25),
                                d=paginate(sent, request.args.get("dpage", 1, type=int), 25), total_sent=len(sent))
 

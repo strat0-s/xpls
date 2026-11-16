@@ -36,8 +36,7 @@
       {% if not ready %}<div class="flash">Not set up yet: add the approved template's id as BIRD_FOLLOWUP_TEMPLATE_ID.</div>{% endif %}
       <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn" {{ '' if ready and w.total else 'disabled' }}>Send next batch of {{ batch }}</button></form>
     </div>
-    <div class="wa"><div class="cap">What they will see</div><div class="bubble">{{ message.replace('[name]', 'Meera').replace('[event]', (events|selectattr('id', 'equalto', event_id)|map(attribute='name')|first) or 'the event') }}</div>
-      <a href="{{ url_for('admin_messages') }}" style="display:inline-block;margin-top:8px">Edit message in Messages</a></div>
+    <div class="hint" style="flex:1 1 300px;max-width:420px">The thank-you goes out as the approved WhatsApp template in Bird. Its wording is changed there, not here.</div>
   </section>
 
   <section class="card">

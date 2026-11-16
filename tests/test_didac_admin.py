@@ -91,5 +91,5 @@ def test_the_welcome_message_is_per_event_and_the_default_is_not_stored(store, s
     assert sent[-1][1] == "Hello! Welcome to DIDAC 2026.\nPick one:"
     post(client, "/admin/messages/welcome", event=event["id"], text=flows.DEFAULT_WELCOME.format(event="DIDAC 2026"))
     assert store.get_event(event["id"])["welcome_text"] == ""
-    post(client, "/admin/messages/followup", text="Thanks [name]!")
-    assert store.get_setting("followup_message") == "Thanks [name]!"
+    assert client.post("/admin/messages/followup", data={"csrf": csrf(client), "text": "x"}).status_code == 404  # the thank-you wording is not editable here
+    assert "Follow-up message" not in client.get("/admin/messages").data.decode()

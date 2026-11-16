@@ -26,15 +26,6 @@
     <div class="wa"><div class="cap">How it looks on WhatsApp</div><div class="bubble" id="p-welcome">{{ welcome }}</div></div>
   </section>
   {% endif %}
-  <section class="card panel">
-    <form class="col" method="post" action="{{ url_for('admin_followup_save') }}">
-      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-      <h2>Follow-up message</h2><div class="hint">The thank-you sent from the Follow-up page. It goes out as the approved template in Bird: wording saved here is for reference until the same wording is approved there.</div>
-      <label class="f" for="followup">Message text</label><textarea class="t" id="followup" name="text" rows="4" data-preview="p-followup" data-event="{{ event.name if event else 'the event' }}">{{ followup }}</textarea>
-      <div><button class="btn">Save message</button></div>
-    </form>
-    <div class="wa"><div class="cap">How it looks on WhatsApp</div><div class="bubble" id="p-followup">{{ followup }}</div></div>
-  </section>
 </div>
 <script>
   // The preview follows what is typed: [name] shows as a sample name and [event] as this event's name.

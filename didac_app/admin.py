@@ -8,8 +8,6 @@ from flask import abort, flash, g, redirect, render_template, request, url_for
 from didac_app.flows import DEFAULT_WELCOME
 
 READERS = {"document": "Other document (up to 2 per photo)", "form": "Form (one person, several pages)", "badge": "Badge with a QR code"}
-FOLLOWUP_KEY = "followup_message"
-DEFAULT_FOLLOWUP = "Hi [name], thank you for stopping by our stall at [event]. Our team will be in touch soon."
 
 
 def day(value: str | None) -> date | None:
@@ -176,8 +174,7 @@ def register(app, get_store) -> None:
     def admin_messages():
         store = get_store()
         event = chosen_event(store)
-        return render_template("admin_messages.html", event=event, welcome=(event["welcome_text"] or DEFAULT_WELCOME.format(event=event["name"])) if event else "",
-                               followup=store.get_setting(FOLLOWUP_KEY, DEFAULT_FOLLOWUP))
+        return render_template("admin_messages.html", event=event, welcome=(event["welcome_text"] or DEFAULT_WELCOME.format(event=event["name"])) if event else "")
 
     @app.post("/admin/messages/welcome")
     def admin_welcome_save():
@@ -187,10 +184,3 @@ def register(app, get_store) -> None:
         store.update_event(event["id"], welcome_text="" if text == default else text)  # the standard wording is not stored, so it follows a renamed event
         flash("Welcome message saved.")
         return back("admin_messages", event)
-
-    @app.post("/admin/messages/followup")
-    def admin_followup_save():
-        store = get_store()
-        store.set_setting(FOLLOWUP_KEY, request.form.get("text", "").strip() or DEFAULT_FOLLOWUP)
-        flash("Follow-up message saved.")
-        return redirect(url_for("admin_messages"))
