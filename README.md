@@ -59,7 +59,15 @@ python -m app.main --input outputs/ngo_enriched_live_fixed.xlsx --output outputs
 
 This adds lead fit score, priority, segment, recommended channel, outreach readiness, pitch angle, first-email draft, LinkedIn note, objection risk, and next action. It also creates `Priority Outreach` and `Manual Review` sheets.
 
-## DIDAC WhatsApp lead app
+## Footfall: WhatsApp lead capture for events
+
+Footfall runs one event at a time. Whichever event is **live** decides the document types in the team's WhatsApp menu, the brochures, the welcome message, and which event every new lead belongs to. Between events nothing is saved.
+
+- **Admin pages** (admins only, sidebar): *Event control* (create, copy the setup of a past event, make live, stop), *Documents and brochures* (add, rename, drag to reorder, activate or deactivate a type; brochures are pasted links, so a Google Drive file can be updated without touching the app), *Messages* (welcome message per event), *Team access*.
+- **Deactivating** a document type hides it from WhatsApp straight away and never deletes leads captured with it.
+- **Team on WhatsApp:** scan documents (up to 2 documents in one photo for the generic "document" type), send event photos, get team-only brochures, add notes.
+- **Reading trouble:** if the reading service fails, photos are kept and the team gets calm messages; a lead can be saved as *Not scanned* and read again from its page. After 5 failures in a row the dashboard shows a banner (admins also see the reason).
+- **Command line** (`python -m didac_app.cli ...`): `init-db` (creates tables, and on first run the live DIDAC event), `events`, `new-event --event-name "..." [--copy-from N]`, `start-event --id N`, `stop-event --id N`.
 
 Visitors and staff talk to a WhatsApp number on Bird. Bird posts each message to the Flask app, which saves leads in Postgres and photos/voice notes in a private storage bucket.
 

@@ -1,2 +1,2 @@
-"""WhatsApp-first DIDAC lead capture app."""
+"""Footfall: WhatsApp-first lead capture for events."""
 

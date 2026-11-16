@@ -337,9 +337,9 @@ def test_deactivated_staff_get_the_visitor_menu_and_lose_their_scan(store, sent,
 
 def test_slash_commands_are_for_staff_only(sent):
     say(STAFF, "/summary")
-    assert sent[-1][1].startswith("DIDAC summary")
+    assert sent[-1][1].startswith("Footfall summary")
     say(VISITOR, "/summary")
-    assert not sent[-1][1].startswith("DIDAC summary")
+    assert not sent[-1][1].startswith("Footfall summary")
     say(STAFF, "/followups")
     assert sent[-1][1].startswith("Unknown command")
 

@@ -12,7 +12,7 @@ def openai_enabled() -> bool:
 
 
 LEAD_PROMPT = """
-Extract lead details from this DIDAC stall image. It may be a visiting card, event ID badge, QR badge, handwritten note, brochure, or visitor form.
+Extract lead details from this event stall image. It may be a visiting card, event ID badge, QR badge, handwritten note, brochure, or visitor form.
 If multiple visiting cards or contacts are visible in one image, return JSON with a top-level "contacts" array, one object per card/contact.
 If only one card/contact is visible, you may return a single object.
 For event badges and handwritten forms, carefully read printed and handwritten text. Preserve uncertain handwritten words in notes instead of guessing.

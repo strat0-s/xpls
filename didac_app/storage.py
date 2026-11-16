@@ -622,7 +622,7 @@ class LeadStore:
         leads = list(reversed(self.list_leads()))
         wb = Workbook()
         ws = wb.active
-        ws.title = "DIDAC Leads"
+        ws.title = "Leads"
         headers = [field for field in LEAD_FIELDS if field != "raw_message"]
         ws.append(headers)
         for lead in leads:

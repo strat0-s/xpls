@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Sign in · DIDAC Leads{% endblock %}
+{% block title %}Sign in · Footfall{% endblock %}
 {% block css %}
     .login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 16px; }
     .login form { width: 100%; max-width: 400px; padding: 28px; display: flex; flex-direction: column; gap: 16px; }
@@ -16,7 +16,7 @@
 <div class="login">
   <form class="card" method="post" action="{{ url_for('login', next=request.args.get('next')) }}">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-    <div class="logo"><i>D</i><div><b>DIDAC</b><small>Lead capture by Xperimentor</small></div></div>
+    <div class="logo"><svg width="52" height="52" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#7d4a8c"/><g fill="#fff"><ellipse cx="11.5" cy="20" rx="3.6" ry="5.4" transform="rotate(-10 11.5 20)"/><ellipse cx="11" cy="11.2" rx="2.4" ry="2.2"/><ellipse cx="21" cy="17" rx="3.6" ry="5.4" transform="rotate(10 21 17)"/></g><circle cx="21.6" cy="8" r="2.4" fill="#f2b84b"/></svg><div><b>Footfall</b><small>Event lead capture</small></div></div>
     <div><h1>Welcome back</h1><p>Sign in with the phone number or email your admin added.</p></div>
     {% for message in get_flashed_messages() %}<div class="flash">{{ message }}</div>{% endfor %}
     <div><label class="f" for="login">Phone or email</label><input class="t" id="login" name="login" autocomplete="username" required autofocus></div>

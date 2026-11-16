@@ -177,7 +177,7 @@ MEDIA_LIBRARY_HTML = """
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DIDAC Media Library</title>
+  <title>Media Library · Footfall</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 18px; background: #f5f7fa; color: #17202a; }
     h1 { font-size: 20px; margin: 0 0 12px; }
