@@ -7,7 +7,8 @@ from zoneinfo import ZoneInfo
 
 from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from didac_app import auth, followup, orbit
+from didac_app import auth, flows, followup, orbit
+from didac_app.models import NOT_SCANNED
 
 IST = ZoneInfo("Asia/Kolkata")
 OPEN_PATHS = {"/health", "/bird/webhook"}
@@ -54,7 +55,7 @@ def register(app, get_store, get_config) -> None:
 
     @app.context_processor
     def inject_globals():
-        return {"user": g.get("user"), "csrf_token": csrf_token}
+        return {"user": g.get("user"), "csrf_token": csrf_token, "reader": get_store().reader_status() if g.get("user") else None}  # drives the reading-problem banner
 
     @app.template_filter("local_time")
     def local_time(value: str) -> str:
@@ -147,6 +148,30 @@ def register(app, get_store, get_config) -> None:
             org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
             priorities=PRIORITIES, curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )
+
+    @app.post("/leads/<int:lead_id>/read")
+    def lead_read(lead_id: int):
+        """Read the photos of a Not scanned lead again and fill in what is still blank."""
+        store = get_store()
+        lead = store.get_lead(lead_id) or abort(404)
+        photos = [{"key": row["local_path"], "ct": row["content_type"]} for row in store.list_media(lead_id) if (row["content_type"] or "").startswith("image/") and row["local_path"]]
+        if not photos:
+            flash("This lead has no photos to read.")
+            return redirect(url_for("lead_detail", lead_id=lead_id))
+        reader = next((row["reader"] for row in store.list_doc_types(lead.event_id) if row["key"] == lead.doc_type), "document") if lead.event_id else "document"
+        result = flows.read_documents(get_config(), photos, reader)
+        if result.get("failed"):
+            store.record_read_failure(result["reason"])
+            flash("Reading is still not working, so nothing was changed. Please try again in a bit.")
+        elif result.get("unclear") or not result["fields"]:
+            store.record_read_ok(result.get("ms", 0))
+            flash("The photos could not be read. Please fill the details in below.")
+        else:
+            store.record_read_ok(result.get("ms", 0))
+            store.merge_into_lead(lead_id, result["fields"], {})  # fills only what is still blank
+            store.update_lead_fields(lead_id, review_reason="; ".join(result["check"]), raw_message=flows.summary(result["fields"], []), updated_by=g.user["name"], updated_at=datetime.now(UTC).isoformat(timespec="seconds"))
+            flash("Read." + (f" {len(result['more'])} more document(s) were found in the photos; only the first was filled in." if result.get("more") else ""))
+        return redirect(url_for("lead_detail", lead_id=lead_id))
 
     @app.post("/leads/<int:lead_id>/resolve")
     def lead_resolve(lead_id: int):
@@ -279,7 +304,7 @@ def export_leads(store, args) -> tuple[list, list[str]]:
         day = created_day(lead)
         if day and ((start and day < start) or (end and day > end)):
             continue
-        if (by and name != by) or (kind and orbit.lead_org_type(lead) != kind):
+        if (by and name != by) or (kind and orbit.lead_org_type(lead) != kind) or lead.review_reason == NOT_SCANNED:  # a lead nobody has read yet is left out
             continue
         leads.append(lead)
     return leads, sorted(people)
@@ -352,6 +377,7 @@ def lead_card(lead, media: list[dict], members: dict[str, str]) -> dict:
         "photo_count": len(images),
         "note": note,
         "review_reason": lead.review_reason,
+        "unscanned": lead.review_reason == NOT_SCANNED,
         "priority": lead.priority,
         "by": by,
         "initials": initials,

@@ -353,10 +353,10 @@ def test_bird_message_bodies():
     assert listing["list"]["items"] == [{"title": "Choose an option", "actions": [{"type": "postback", "postback": {"text": "School", "payload": "School", "description": "A single school"}}]}]
 
 
-def test_reading_failure_still_gives_a_saveable_summary(monkeypatch):
+def test_a_failed_read_is_reported_as_a_failure_not_a_summary(monkeypatch):
     monkeypatch.setattr(flows.blobstore, "download", lambda config, key: (_ for _ in ()).throw(RuntimeError("bucket down")))
     result = real_read_documents(flows.DidacConfig(), [{"key": "k", "ct": "image/jpeg"}], "document")
-    assert result == {"fields": {}, "check": ["could not read the photos"]}
+    assert result["failed"] == "error" and result["fields"] == {} and result["reason"].startswith("unexpected error")
 
 
 def test_voice_note_with_no_menu_choice_goes_to_the_last_lead(store, sent):

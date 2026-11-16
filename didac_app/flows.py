@@ -20,8 +20,8 @@ from didac_app import auth, bird, blobstore, orbit
 from didac_app.config import DidacConfig
 from didac_app.dedupe import FILLABLE, fill_blanks, find_duplicate
 from didac_app.media import append_qr_details, extract_media_text, save_media, suffix_for
-from didac_app.models import Lead
-from didac_app.openai_services import lead_dict_to_text, parse_contacts, vision_read
+from didac_app.models import NOT_SCANNED, Lead
+from didac_app.openai_services import classify_failure, lead_dict_to_text, parse_contacts, vision_read
 from didac_app.parser import FIELD_ALIASES, extract_schools_count, normalize_contact_name, normalize_key, parse_message, parse_structured_lead
 from didac_app.storage import LeadStore
 
@@ -42,6 +42,9 @@ NO_EVENT_TEAM = "Hi {first}. No event is live right now, so I cannot save leads 
 NO_PHOTOS = "This channel does not accept photos. Type menu to see what I can do for you."
 NO_EVENT_VISITOR = "Thanks for getting in touch. The event has finished. Our team will reach out soon."
 SAVE, EDIT, RETAKE = "Save", "Edit", "Retake"
+TRY_AGAIN, SAVE_LATER, TYPE_DETAILS = "Try again", "Save to read later", "Type the details"
+UNCLEAR = "I could not make out this document. Try again in better light with it flat, or type the details instead."
+MANUAL_HELP = "Send the details one per line, like:\nName: Meera Nair\nOrganisation: Greenfield School\nPhone: 98450 11112"
 PRIORITIES = ("High", "Medium", "Low")
 # The model sometimes lists every empty field as a doubt ("udise_code unknown"), and flags a QR code it cannot decode from pixels; the code decodes QRs itself.
 NOT_ON_DOCUMENT = re.compile(r"\bqr\b|\b(unknown|not (printed|present|provided|given|available|mentioned|visible|found)|missing|n/?a)\b", re.I)
@@ -120,21 +123,23 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
             raw, vision_done = reading.result()
         timing.info("read photos=%d download_ms=%d vision_ms=%d qr_ms=%d total_ms=%d", len(photos), (downloaded - started) * 1000,
                     (vision_done - downloaded) * 1000, (qr_done - downloaded) * 1000, (time.perf_counter() - started) * 1000)
-    except Exception:
+    except Exception as exc:
         logger.exception("Reading the document failed")
-        return {"fields": {}, "check": ["could not read the photos"]}
+        kind_of_failure, reason = classify_failure(exc)
+        return {"fields": {}, "check": ["could not read the photos"], "failed": kind_of_failure, "reason": reason}
     finally:
         for path, _ in paths:
             Path(path).unlink(missing_ok=True)
     no_qr = ["QR code could not be scanned, retake with the QR flat and in focus"] if kind == "badge" and not qr_text else []
     contacts = parse_contacts(raw)
-    if not contacts:
-        return {"fields": {}, "check": ["could not read the photos", *no_qr]}
+    ms = int((time.perf_counter() - started) * 1000)
+    if not contacts:  # the reader answered but found nothing: a photo problem, not an outage
+        return {"fields": {}, "check": ["could not read the photos", *no_qr], "unclear": True, "ms": ms}
     # Only a visiting-card style document may hold several documents; a form or a badge is one person (a badge's QR belongs to one).
     docs = [lead_fields(contact, qr_text if index == 0 else "", no_qr if index == 0 else []) for index, contact in enumerate(contacts if kind == "document" else contacts[:1])]
     if kind != "document" and len(contacts) > 1:
         docs[0]["check"].append(f"{len(contacts)} people found, only the first is kept")
-    result = {**docs[0], "more": docs[1:]}
+    result = {**docs[0], "more": docs[1:], "ms": ms}
     per_photo = Counter(number for doc in docs for number in doc["photos"])
     if per_photo and max(per_photo.values()) > MAX_PER_PHOTO:
         number, count = per_photo.most_common(1)[0]
@@ -366,16 +371,13 @@ class Chat:
                 return self.say("Send a photo, or reply DONE when all photos are sent. Type cancel to stop.")
             if not data.get("photos"):
                 return self.say("No photos yet. Send a photo first.")
-            self.say_now(f"Reading your {len(data['photos'])} photo(s)... this takes a few seconds.")
-            result = read_documents(self.config, data["photos"], self.doc_types[flow]["reader"])
-            if result.get("too_many"):
-                number, count = result["too_many"]
-                self.store.put_session(self.number, flow, "photos", {"photos": []})
-                return self.say(f"I can see {count} documents in photo {number}. Two at most per photo, please retake with 2 or fewer. Photos cleared, send them again.")
-            data |= {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], []), "photo_ids": result.get("photos", []),
-                     "more": [{"draft": doc["fields"], "check": doc["check"], "original": summary(doc["fields"], []), "photo_ids": doc["photos"]} for doc in result.get("more", [])]}
-            self.store.put_session(self.number, flow, "confirm", data)
-            return self.confirm(data)
+            return self.read_scan(flow, data)
+        if step == "failed":
+            return self.failed_step(flow, data, low)
+        if step == "unclear":
+            return self.unclear_step(flow, data, low)
+        if step == "manual":
+            return self.manual_step(flow, data, text)
         if step == "edit":  # the Save / Edit / Retake taps from the summary stay tappable, and "back" ends the edit
             if low in ("back", "done", "stop"):
                 self.store.put_session(self.number, flow, "confirm", data)
@@ -412,6 +414,82 @@ class Chat:
                 return self.say("I could not read a correction. Use one per line, like:\nPhone: 98450 11112\nType BACK to stop editing.")
             self.store.put_session(self.number, flow, "confirm", data)
             return self.confirm(data, f"I could not use: {', '.join(unknown)}\n\n" if unknown else "")
+
+    def read_scan(self, flow: str, data: dict, retry: bool = False) -> None:
+        """Read the photos of a scan and move to the summary, or to the calm failure step when the reading service is not working."""
+        slow = " This is taking a little longer than usual, so hang tight. Your photos are safe." if self.store.reader_status()["state"] == "slow" else ""
+        self.say_now(f"Reading your {len(data['photos'])} photo(s)... this takes a few seconds.{slow}")
+        result = read_documents(self.config, data["photos"], self.doc_types[flow]["reader"])
+        if result.get("failed"):
+            self.store.record_read_failure(result["reason"])
+            return self.read_failed(flow, data, result["failed"], retry)
+        self.store.record_read_ok(result.get("ms", 0))
+        if result.get("unclear"):
+            self.store.put_session(self.number, flow, "unclear", data)
+            return self.replies.append(buttons(UNCLEAR, RETAKE, TYPE_DETAILS))
+        if result.get("too_many"):
+            number, count = result["too_many"]
+            self.store.put_session(self.number, flow, "photos", {"photos": []})
+            return self.say(f"I can see {count} documents in photo {number}. Two at most per photo, please retake with 2 or fewer. Photos cleared, send them again.")
+        data |= {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], []), "photo_ids": result.get("photos", []),
+                 "more": [{"draft": doc["fields"], "check": doc["check"], "original": summary(doc["fields"], []), "photo_ids": doc["photos"]} for doc in result.get("more", [])]}
+        self.store.put_session(self.number, flow, "confirm", data)
+        self.confirm(data)
+
+    def read_failed(self, flow: str, data: dict, kind: str, retry: bool = False) -> None:
+        """Nothing is lost and nothing technical is said: the photos are already saved, and the team picks what to do next."""
+        paused = self.store.reader_status()["state"] == "down"
+        count = len(data["photos"])
+        if retry and paused:
+            text = "Still not working. Your photos are safe. You can try once more in a bit, save them to read later, or type the details."
+        elif paused or kind != "timeout":
+            text = f"I cannot read {'these' if count > 1 else 'this'} just now, but your {count} photo(s) {'are' if count > 1 else 'is'} saved safely to {self.event['name']}. Nothing is lost.\n\nWhat would you like to do?"
+        else:
+            text = "That one took longer than I like, and I could not finish it. Your photo is safe."
+        self.store.put_session(self.number, flow, "failed", data)
+        self.replies.append(buttons(text, TRY_AGAIN, SAVE_LATER, TYPE_DETAILS))
+
+    def failed_step(self, flow: str, data: dict, low: str) -> None:
+        if low == TRY_AGAIN.lower():
+            return self.read_scan(flow, data, retry=True)
+        if low == SAVE_LATER.lower():
+            return self.save_unscanned(flow, data)
+        if low == TYPE_DETAILS.lower():
+            return self.start_manual(flow, data)
+        self.replies.append(buttons("Please tap Try again, Save to read later or Type the details.", TRY_AGAIN, SAVE_LATER, TYPE_DETAILS))
+
+    def unclear_step(self, flow: str, data: dict, low: str) -> None:
+        if low == RETAKE.lower():
+            self.store.put_session(self.number, flow, "photos", {"photos": []})
+            return self.say("Photos cleared. Send the new photos, then reply DONE.")
+        if low == TYPE_DETAILS.lower():
+            return self.start_manual(flow, data)
+        self.replies.append(buttons("Please tap Retake or Type the details.", RETAKE, TYPE_DETAILS))
+
+    def start_manual(self, flow: str, data: dict) -> None:
+        data |= {"draft": {}, "check": [], "original": "", "more": [], "photo_ids": []}
+        self.store.put_session(self.number, flow, "manual", data)
+        self.say("No problem. " + MANUAL_HELP)
+
+    def manual_step(self, flow: str, data: dict, text: str) -> None:
+        applied, unknown = apply_corrections(data["draft"], text)
+        if not applied:
+            return self.say("I could not read that. " + MANUAL_HELP)
+        data["original"] = summary(data["draft"], [])
+        self.store.put_session(self.number, flow, "confirm", data)
+        self.confirm(data, f"I could not use: {', '.join(unknown)}\n\n" if unknown else "")
+
+    def save_unscanned(self, flow: str, data: dict) -> None:
+        """Keep the lead with its photos and nothing read. It shows as Not scanned on the dashboard, where it can be read again or filled in."""
+        photos = data["photos"]
+        lead = self.store.create_lead(Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow, review_reason=NOT_SCANNED,
+                                          media_urls="; ".join(photo["url"] for photo in photos), media_local_paths="; ".join(photo["key"] for photo in photos)))
+        self.attach_photos(lead.id, photos, "")
+        self.lead_ids.append(lead.id)
+        self.store.put_session(self.number, flow, "photos", {"photos": []})
+        status = self.store.reader_status()
+        tail = f"\n\nThere is an error reading documents right now. Please tell someone to check. Reference {status['ref']}." if status["state"] == "down" else ""
+        self.say(f"Saved as lead #{lead.id} with {len(photos)} photo(s). Find it under Leads, marked \"Not scanned\". Open it to read it again later, or fill in the details yourself.{tail}")
 
     def confirm(self, data: dict, prefix: str = "") -> None:
         """The Save / Edit / Retake step, with nothing shortened. A button message holds about 1000 characters; a longer summary goes out as one plain

@@ -68,8 +68,26 @@ def vision_read(images: list[tuple[str, str]], kind: str = "document") -> str:
     # OPENAI_VISION_EFFORT (minimal, low, medium, high) trims the model's thinking time; unset keeps the model's default.
     effort = os.getenv("OPENAI_VISION_EFFORT", "").strip()
     extra = {"reasoning": {"effort": effort}} if effort else {}
-    response = OpenAI().responses.create(model=os.getenv("OPENAI_VISION_MODEL", "gpt-5-mini"), input=[{"role": "user", "content": content}], **extra)
+    # A call that hangs must end before the platform kills the whole request: one retry, and no single try longer than OPENAI_TIMEOUT seconds.
+    client = OpenAI(timeout=float(os.getenv("OPENAI_TIMEOUT", "40")), max_retries=1)
+    response = client.responses.create(model=os.getenv("OPENAI_VISION_MODEL", "gpt-5-mini"), input=[{"role": "user", "content": content}], **extra)
     return response.output_text
+
+
+def classify_failure(exc: Exception) -> tuple[str, str]:
+    """(kind, reason for admins) for an error from the reading service. kind is timeout, quota, key, outage or error; the team never sees the reason."""
+    name, code, status = type(exc).__name__, str(getattr(exc, "code", "") or ""), getattr(exc, "status_code", None)
+    if "Timeout" in name:
+        return "timeout", "reading service did not answer in time"
+    if code == "insufficient_quota" or "quota" in str(exc).lower():
+        return "quota", "reading service quota used up"
+    if status in (401, 403) or "Authentication" in name or "PermissionDenied" in name:
+        return "key", "reading service key rejected"
+    if status == 429:
+        return "outage", "reading service is rate limiting us"
+    if "Connection" in name or (isinstance(status, int) and status >= 500):
+        return "outage", "reading service is not answering"
+    return "error", f"unexpected error: {name}"
 
 
 def vision_ocr_to_lead_text(local_path: str, content_type: str = "") -> str:

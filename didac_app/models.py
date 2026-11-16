@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 
+NOT_SCANNED = "Not scanned"  # review_reason of a lead saved with its photos while reading was not working; it is read later, or filled in by hand
+
+
 @dataclass
 class Lead:
     id: int | None = None

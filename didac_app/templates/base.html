@@ -92,6 +92,9 @@
   </div>
 </header>
 <main class="page">
+  {% if reader and reader.state == 'down' %}<div class="flash" role="status"><strong>There is an error reading documents right now.</strong> Please tell someone to check. Photos and notes are still being saved.
+    {% if user.is_admin %}<div class="hint" style="margin-top:6px">For admins only: {{ reader.reason or 'reading is failing' }} · {{ reader.waiting }} not scanned · Reference {{ reader.ref }}</div>{% endif %}</div>
+  {% elif reader and reader.state == 'slow' %}<div class="flash" role="status"><strong>Reading is a little slower than usual.</strong> Keep scanning as normal. Nothing is lost.</div>{% endif %}
   {% for message in get_flashed_messages() %}<div class="flash">{{ message }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>

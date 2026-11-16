@@ -57,7 +57,12 @@
   {% endif %}
 </div>
 
-{% if lead.review_reason %}
+{% if lead.review_reason == 'Not scanned' %}
+<div class="notice" role="alert" style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between">
+  <div><strong>This document was not scanned</strong><br>Something went wrong on our side. The photos are saved.</div>
+  <form method="post" action="{{ url_for('lead_read', lead_id=lead.id) }}" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn">Read again</button></form>
+</div>
+{% elif lead.review_reason %}
 <div class="notice"><strong>Needs a quick check.</strong> We weren't fully sure about:
   <ul style="margin:6px 0 8px 18px;padding:0">{% for reason in lead.review_reason.split('; ') %}<li>{{ reason }}</li>{% endfor %}</ul>Compare them with the original, correct anything that's off, then save. If everything is fine as it is, clear the badge without changing anything:
   <form method="post" action="{{ url_for('lead_resolve', lead_id=lead.id) }}" style="margin-top:10px"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('lead_detail', lead_id=lead.id) }}"><button class="btn ghost">Mark as checked</button></form></div>

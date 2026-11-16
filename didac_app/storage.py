@@ -15,9 +15,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from didac_app.models import Lead
+from didac_app.models import NOT_SCANNED, Lead
 
 
+DOWN_AFTER = 5  # failed reads in a row before reading counts as paused
+SLOW_MS = 20_000  # a read longer than this makes the next ones show the "a little slower" line
 LEAD_FIELDS = [field.name for field in fields(Lead)]
 NOT_DELETED = "(deleted_at IS NULL OR deleted_at = '')"
 # For media/feedback joined to their lead; rows without a lead stay visible (LEFT JOIN gives NULL).
@@ -82,6 +84,11 @@ class LeadStore:
                 "CREATE TABLE IF NOT EXISTS event_photos (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_id BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE, "
                 "created_at TIMESTAMPTZ NOT NULL DEFAULT now(), from_number TEXT NOT NULL DEFAULT '', uploaded_by TEXT NOT NULL DEFAULT '', key TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '')"
             )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS reader_status (id INTEGER PRIMARY KEY CHECK (id = 1), failures INTEGER NOT NULL DEFAULT 0, last_ms INTEGER NOT NULL DEFAULT 0, "
+                "last_ok_at TIMESTAMPTZ, last_failure_at TIMESTAMPTZ, down_since TIMESTAMPTZ, last_reason TEXT NOT NULL DEFAULT '')"
+            )
+            conn.execute("INSERT INTO reader_status (id) VALUES (1) ON CONFLICT DO NOTHING")
             conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
             conn.execute(
                 f"""
@@ -210,6 +217,7 @@ class LeadStore:
     def clear(self) -> None:
         with self.connect() as conn:
             conn.execute("TRUNCATE inbound_events, feedback, media, leads, sessions, event_photos RESTART IDENTITY")
+            conn.execute("UPDATE reader_status SET failures=0, last_ms=0, last_ok_at=NULL, last_failure_at=NULL, down_since=NULL, last_reason=''")
 
     # ---- events: one is live at a time and every lead captured over WhatsApp goes into it -----------------------------
     def create_event(self, name: str, starts_on=None, ends_on=None, venue: str = "", welcome_text: str = "") -> int:
@@ -314,6 +322,26 @@ class LeadStore:
     def list_event_photos(self, event_id: int) -> list[dict]:
         with self.connect() as conn:
             return conn.execute("SELECT * FROM event_photos WHERE event_id=%s ORDER BY id DESC", (event_id,)).fetchall()
+
+    # ---- the reading service's health: paused after DOWN_AFTER failures in a row, back on the first success ------------------------
+    def record_read_ok(self, ms: int = 0) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE reader_status SET failures=0, last_ms=%s, last_ok_at=now(), down_since=NULL, last_reason='' WHERE id=1", (int(ms),))
+
+    def record_read_failure(self, reason: str) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE reader_status SET failures=failures+1, last_failure_at=now(), last_reason=%s, "
+                         "down_since=CASE WHEN failures+1 >= %s AND down_since IS NULL THEN now() ELSE down_since END WHERE id=1", (reason, DOWN_AFTER))
+
+    def reader_status(self) -> dict:
+        """{state: ok|slow|down, reason, since, ref, waiting (leads saved unread)}. Slow means the last read took over SLOW_MS."""
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM reader_status WHERE id=1").fetchone()
+            waiting = conn.execute("SELECT count(*) AS n FROM leads WHERE review_reason=%s AND (deleted_at IS NULL OR deleted_at = '')", (NOT_SCANNED,)).fetchone()["n"]
+        state = "down" if row["failures"] >= DOWN_AFTER else "slow" if row["last_ms"] > SLOW_MS else "ok"
+        since = row["down_since"] or row["last_failure_at"]
+        return {"state": state, "reason": row["last_reason"], "since": row["down_since"], "waiting": waiting, "failures": row["failures"],
+                "ref": f"RD-{int(since.timestamp()) % 65536:04X}" if since else ""}
 
     def get_setting(self, key: str, default: str = "") -> str:
         with self.connect() as conn:
