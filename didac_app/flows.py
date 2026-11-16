@@ -335,7 +335,7 @@ class Chat:
     # ---- staff: contact form / other document --------------------------------------------------------------------
     def start_scan(self, flow: str) -> None:
         self.store.put_session(self.number, flow, "photos", {"photos": []})
-        label = noun(self.doc_types[flow]["label"])
+        label = item_noun(self.doc_types[flow])
         reader = self.doc_types[flow]["reader"]
         if reader == "form":
             self.say(f"Send a photo of the filled {label}. Reply DONE when all pages are sent.")
@@ -521,7 +521,7 @@ class Chat:
             saved, outcome = self.store_lead(lead, photos, doc["original"])
             outcomes.append((saved, outcome))
         self.store.put_session(self.number, flow, "photos", {"photos": []})
-        again = f"Send the next {noun(self.doc_types[flow]['label'])}, or type menu."
+        again = f"Send the next {item_noun(self.doc_types[flow])}, or type menu."
         if len(docs) == 1:
             saved, outcome = outcomes[0]
             label = saved.org or saved.name or saved.phone or "Unnamed lead"
@@ -711,6 +711,11 @@ def apply_to_documents(data: dict, text: str) -> tuple[list[str], list[str]]:
         applied += done
         unknown += left
     return applied, unknown
+
+
+def item_noun(doc_type: dict) -> str:
+    """What to call one scan in a sentence: 'contact form', 'event badge / QR', or just 'document' for the generic type, whatever its menu name."""
+    return "document" if doc_type["reader"] == "document" else noun(doc_type["label"])
 
 
 def noun(label: str) -> str:

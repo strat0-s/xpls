@@ -23,7 +23,7 @@ def last(sent):
 def test_the_first_run_creates_one_live_event_with_todays_setup(store):
     event = store.live_event()
     assert event["name"] == "DIDAC 2026"
-    assert [row["label"] for row in store.list_doc_types(event["id"])] == ["Contact form", "Visiting card", "Event badge / QR"]
+    assert [row["label"] for row in store.list_doc_types(event["id"])] == ["Contact form", "Other docs", "Event badge / QR"]
     assert [row["name"] for row in store.list_brochures(event["id"])] == ["SIA", "TiQer", "Play Lab", "STREAM", "Lab-in-Classroom"]
     assert store.ensure_default_event(default_brochures(load_config())) is None  # never a second default
 
@@ -55,7 +55,7 @@ def test_a_lead_belongs_to_the_event_that_was_live_when_it_was_captured(store):
 
 def test_the_team_menu_follows_the_live_event(store, sent):
     say(STAFF, "menu")
-    assert last(sent) == ("Hi Test. You are at DIDAC 2026. What would you like to do?\n\nType menu any time. Type cancel to stop.", ["Contact form", "Visiting card", "Event badge / QR", "Send event photos", "Brochures", "Add a note"])
+    assert last(sent) == ("Hi Test. You are at DIDAC 2026. What would you like to do?\n\nType menu any time. Type cancel to stop.", ["Contact form", "Other docs", "Event badge / QR", "Send event photos", "Brochures", "Add a note"])
     second = store.create_event("Bett India 2027")
     store.add_doc_type(second, "Registration form", "Printed sign-up sheet", "form")
     store.start_event(second)
@@ -78,11 +78,11 @@ def test_a_deactivated_type_is_hidden_but_its_leads_stay(store, sent):
     assert store.get_lead(lead.id).doc_type == "other"  # nothing was wiped
     store.set_doc_type_active(card["id"], True)
     say(STAFF, "menu")
-    assert "Visiting card" in last(sent)[1]
+    assert "Other docs" in last(sent)[1]
 
 
 def test_a_scan_in_progress_when_its_type_is_switched_off_is_ended_politely(store, sent):
-    say(STAFF, "Visiting card")
+    say(STAFF, "Other docs")
     assert store.get_session(STAFF)["flow"] == "other"
     card = next(row for row in store.list_doc_types(store.live_event()["id"]) if row["key"] == "other")
     store.set_doc_type_active(card["id"], False)
@@ -144,7 +144,7 @@ def test_a_new_event_can_start_from_the_last_ones_setup(store):
     second = store.create_event("Bett India 2027")
     store.copy_setup(first, second)
     copied = store.list_doc_types(second)
-    assert [(row["label"], row["active"]) for row in copied] == [("Contact form", True), ("Visiting card", False), ("Event badge / QR", True)]
+    assert [(row["label"], row["active"]) for row in copied] == [("Contact form", True), ("Other docs", False), ("Event badge / QR", True)]
     assert len(store.list_brochures(second)) == 5
     assert store.list_doc_types(first)[0]["id"] != copied[0]["id"]  # copies, not shared rows
 

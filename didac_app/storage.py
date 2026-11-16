@@ -709,7 +709,7 @@ def column_type(field: str) -> str:
 # (key, label, hint, reader). The key is what a lead stores in doc_type; reader says how the photo is read: form, document or badge (QR).
 DEFAULT_DOC_TYPES = [
     ("form", "Contact form", "The printed Xperimentor form", "form"),
-    ("other", "Visiting card", "Cards, flyers and all that", "document"),
+    ("other", "Other docs", "Visiting cards, flyers, brochures and all that", "document"),
     ("badge", "Event badge / QR", "Badge or ID card with a QR code", "badge"),
 ]
 RESERVED_KEYS = {"note", "choose", "requirement", "brochure", "feedback"}  # session flow names a document type key must never collide with

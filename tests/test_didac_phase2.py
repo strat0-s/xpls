@@ -33,7 +33,7 @@ def last(sent):
 
 def scan_two(reads):
     reads["result"] = TWO
-    say(STAFF, "Visiting card")
+    say(STAFF, "Other docs")
     say(STAFF, "", photo("both"))
     say(STAFF, "DONE")
 
@@ -62,7 +62,7 @@ def test_a_correction_line_can_start_with_the_document_number(store, sent, reads
 
 def test_a_photo_with_too_many_documents_is_cleared_and_asked_again(store, sent, reads):
     reads["result"] = {**ONE, "too_many": (1, 3)}
-    say(STAFF, "Visiting card")
+    say(STAFF, "Other docs")
     say(STAFF, "", photo("crowd"))
     say(STAFF, "DONE")
     assert "I can see 3 documents in photo 1. Two at most per photo" in last(sent)[0]
@@ -70,7 +70,7 @@ def test_a_photo_with_too_many_documents_is_cleared_and_asked_again(store, sent,
 
 
 def test_a_single_document_flow_reads_exactly_as_before(store, sent, reads):
-    say(STAFF, "Visiting card")
+    say(STAFF, "Other docs")
     say(STAFF, "", photo("one"))
     say(STAFF, "DONE")
     assert last(sent)[0].startswith("I read this as:")

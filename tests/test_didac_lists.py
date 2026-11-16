@@ -53,7 +53,7 @@ def test_type_tabs_come_from_the_events_document_types_and_a_check_filter_exists
     store.create_lead(flows.Lead(name="Needs A Look", doc_type="form", review_reason="phone unclear"))
     store.create_lead(flows.Lead(name="All Fine", doc_type="form"))
     html = app.test_client().get("/dashboard").data.decode()
-    assert "Contact form · 2" in html and "Visiting card · 0" in html and "Only leads that need checking (1)" in html
+    assert "Contact form · 2" in html and "Other docs · 0" in html and "Only leads that need checking (1)" in html
     only = app.test_client().get("/dashboard?check=1").data.decode()
     assert "Needs A Look" in only and "All Fine" not in only
 

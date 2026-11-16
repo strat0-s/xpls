@@ -41,7 +41,7 @@ def last(sent):
 
 def test_staff_menu_is_a_four_row_list_and_hi_creates_no_lead(store, sent):
     say(STAFF, "menu")
-    assert last(sent) == ("Hi Test. You are at DIDAC 2026. What would you like to do?\n\nType menu any time. Type cancel to stop.", ["Contact form", "Visiting card", "Event badge / QR", "Send event photos", "Brochures", "Add a note"])
+    assert last(sent) == ("Hi Test. You are at DIDAC 2026. What would you like to do?\n\nType menu any time. Type cancel to stop.", ["Contact form", "Other docs", "Event badge / QR", "Send event photos", "Brochures", "Add a note"])
     say(VISITOR, "hi")
     assert store.list_leads() == []
 
@@ -56,7 +56,7 @@ def test_visitor_menu_is_a_list_without_demo_or_badge(sent):
 
 
 def test_document_with_two_photos_edit_then_save(store, sent, fake_io):
-    say(STAFF, "Visiting card")
+    say(STAFF, "Other docs")
     say(STAFF, "", photo("front"))
     assert "Photo 1 received" in last(sent)[0]
     say(STAFF, "", photo("back"))
@@ -81,7 +81,7 @@ def test_document_with_two_photos_edit_then_save(store, sent, fake_io):
 
 
 def test_edit_can_be_ended_with_back_or_a_button_tap(store, sent, fake_io):
-    say(STAFF, "Visiting card")
+    say(STAFF, "Other docs")
     say(STAFF, "", photo("a"))
     say(STAFF, "done")
     say(STAFF, "Edit")
@@ -95,7 +95,7 @@ def test_edit_can_be_ended_with_back_or_a_button_tap(store, sent, fake_io):
 
 
 def test_saving_with_a_check_left_shows_the_badge(store, sent):
-    say(STAFF, "Visiting card")
+    say(STAFF, "Other docs")
     say(STAFF, "", photo("a"))
     say(STAFF, "DONE")
     save_scan(STAFF)
@@ -134,11 +134,11 @@ def test_nothing_is_shortened_in_the_scan_summary(store, sent, fake_io):
 
 
 def test_a_document_type_starts_a_scan_by_its_menu_label(store, sent):
-    say(STAFF, "Visiting card")
-    assert "Send photos of the visiting card" in last(sent)[0]
+    say(STAFF, "Other docs")
+    assert "Send photos of the document" in last(sent)[0]
     say(STAFF, "cancel")
-    say(STAFF, "Visiting card")
-    assert "Send photos of the visiting card" in last(sent)[0]
+    say(STAFF, "Other docs")
+    assert "Send photos of the document" in last(sent)[0]
 
 
 def test_priority_can_be_set_in_edit_and_then_save_does_not_ask(store, sent, fake_io):
@@ -193,7 +193,7 @@ def test_all_tab_is_the_default_and_lists_every_type(store, sent):
 def test_repeat_scan_merges_and_name_org_match_is_flagged(store, sent, fake_io):
     def scan(fields):
         fake_io["result"] = {"fields": fields, "check": []}
-        say(STAFF, "Visiting card")
+        say(STAFF, "Other docs")
         say(STAFF, "", photo("p"))
         say(STAFF, "DONE")
         save_scan(STAFF)
@@ -214,7 +214,7 @@ def test_photo_without_a_choice_asks_once_then_follows_the_tap(store, sent, fake
     say(STAFF, "", photo("one"))
     say(STAFF, "", photo("two"))
     asks = [m for m in sent if m[1].startswith("What kind of document")]
-    assert len(asks) == 1 and [label for label, _ in asks[0][2]] == ["Contact form", "Visiting card", "Event badge / QR"]
+    assert len(asks) == 1 and [label for label, _ in asks[0][2]] == ["Contact form", "Other docs", "Event badge / QR"]
     say(STAFF, "Contact form")
     assert "Got 2 photo(s)" in last(sent)[0]
     say(STAFF, "DONE")
@@ -222,7 +222,7 @@ def test_photo_without_a_choice_asks_once_then_follows_the_tap(store, sent, fake
 
 
 def test_photo_limit_done_without_photos_and_menu_discards(store, sent):
-    say(STAFF, "Visiting card")
+    say(STAFF, "Other docs")
     say(STAFF, "DONE")
     assert last(sent)[0] == "No photos yet. Send a photo first."
     for index in range(11):
@@ -234,7 +234,7 @@ def test_photo_limit_done_without_photos_and_menu_discards(store, sent):
 
 
 def test_idle_session_times_out(store, sent):
-    say(STAFF, "Visiting card")
+    say(STAFF, "Other docs")
     say(STAFF, "", photo("p"))
     with store.connect() as conn:
         conn.execute("UPDATE sessions SET updated_at = now() - interval '31 minutes'")
@@ -329,7 +329,7 @@ def test_tapping_the_menu_inside_a_visitor_flow_switches_flow(store, sent):
 def test_deactivated_staff_get_the_visitor_menu_and_lose_their_scan(store, sent, admin):
     other = store.get_user(flows.auth.add_user(store, "Ravi Kumar", "9845000001", "", "long-enough-pw"))
     number = "whatsapp:+919845000001"
-    say(number, "Visiting card")
+    say(number, "Other docs")
     store.set_user_active(other["id"], False)
     say(number, "DONE")
     assert last(sent)[1][0] == "Download brochure"

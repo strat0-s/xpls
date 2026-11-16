@@ -31,7 +31,7 @@ def last(sent):
 
 
 def start_scan(photo_name="a"):
-    say("Visiting card")
+    say("Other docs")
     say("", [(f"https://media.bird.com/{photo_name}", "image/jpeg")])
     say("DONE")
 
