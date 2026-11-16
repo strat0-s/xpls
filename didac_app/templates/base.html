@@ -72,25 +72,51 @@
     dialog.ask p { margin: 0 0 18px; color: var(--mut); line-height: 1.5; }
     dialog.ask .row { display: flex; justify-content: flex-end; gap: 8px; }
 
+    /* Sidebar layout: plum column on the left, the page on the right. On a phone the column sits on top. */
+    .shell { display: flex; flex-wrap: wrap; min-height: 100vh; }
+    .side { flex: 0 0 244px; background: var(--bar); color: #fff; display: flex; flex-direction: column; gap: 18px; padding: 18px 12px; }
+    .shell > main.page { flex: 999 1 640px; min-width: 0; max-width: none; margin: 0; }
+    .side .brand { display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 17px; }
+    .side .evbox { margin: 0 2px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.3); display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 400; }
+    .side .evdot { width: 10px; height: 10px; border-radius: 50%; background: #7be0a8; flex: none; }
+    .side .evdot.off { background: #f2b84b; }
+    .side .evtext { flex: 1; min-width: 0; } .side .evtext b { display: block; font-size: 14.5px; } .side .evtext small { color: #f6eef8; font-size: 12.5px; }
+    .side nav { display: flex; flex-direction: column; gap: 2px; }
+    .side .gl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: #eadcef; padding: 0 10px 4px; font-weight: 600; }
+    .side nav a { padding: 8px 10px; border-radius: 6px; color: #f6eef8; text-decoration: none; font-weight: 600; }
+    .side nav a:hover { background: rgba(255,255,255,.12); }
+    .side nav a.on { background: rgba(255,255,255,.2); color: #fff; }
+    .side .me { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px; border-top: 1px solid rgba(255,255,255,.22); }
+    .side .me .dot { width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,.22); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .side .me .who { flex: 1; min-width: 0; } .side .me .who b { display: block; } .side .me .who small { color: #f6eef8; }
+    .side .me form { margin: 0; } .side .me .out { background: none; border: 0; padding: 4px 6px; color: #fff; opacity: .8; cursor: pointer; border-radius: 6px; } .side .me .out:hover { opacity: 1; text-decoration: underline; }
+    @media (max-width: 860px) { .side { flex-basis: 100%; } }
     @media (max-width: 860px) { header.top { padding: 10px 16px; } main.page { padding: 16px; } }
     {% block css %}{% endblock %}
   </style>
 </head>
 <body>
 {% block body %}
-<header class="top">
-  <div class="logo"><i>D</i><div><b>DIDAC</b><small>Xperimentor</small></div></div>
-  <nav>
+<div class="shell">
+<aside class="side">
+  <div class="brand"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#fff"/><g fill="#7d4a8c"><ellipse cx="11.5" cy="20" rx="3.6" ry="5.4" transform="rotate(-10 11.5 20)"/><ellipse cx="11" cy="11.2" rx="2.4" ry="2.2"/><ellipse cx="21" cy="17" rx="3.6" ry="5.4" transform="rotate(10 21 17)"/></g><circle cx="21.6" cy="8" r="2.4" fill="#f2b84b"/></svg><b>Footfall</b></div>
+  {% set evbox %}<span class="evdot {{ '' if live_event else 'off' }}" aria-hidden="true"></span><span class="evtext"><b>{{ live_event.name if live_event else 'No event is live' }}</b><small>{% if live_event %}{{ live_event.starts_on.strftime('%d %b') ~ (' to ' ~ live_event.ends_on.strftime('%d %b %Y') if live_event.ends_on else '') ~ ' · ' if live_event.starts_on }}Live{% else %}Nothing is saved on WhatsApp{% endif %}</small></span>{% endset %}
+  {% if user.is_admin %}<a class="evbox" href="{{ url_for('admin_event') }}">{{ evbox }}</a>{% else %}<div class="evbox">{{ evbox }}</div>{% endif %}
+  <nav aria-label="Main"><div class="gl">Workspace</div>
     <a href="{{ url_for('gallery') }}" class="{{ 'on' if active == 'leads' }}">Leads</a>
-    {% if user.is_admin %}<a href="{{ url_for('team') }}" class="{{ 'on' if active == 'team' }}">Team</a>{% endif %}
     {% if user.is_admin %}<a href="{{ url_for('followup_page') }}" class="{{ 'on' if active == 'followup' }}">Follow-up</a>{% endif %}
     <a href="{{ url_for('export_page') }}" class="{{ 'on' if active == 'export' }}">Export</a>
   </nav>
-  <div class="me">
-    <span class="dot">{{ user.name[:1]|upper }}</span>{{ user.name }}{% if user.is_admin %} · Admin{% endif %}
+  {% if user.is_admin %}<nav aria-label="Admin"><div class="gl">Admin</div>
+    <a href="{{ url_for('admin_event') }}" class="{{ 'on' if active == 'event' }}">Event control</a>
+    <a href="{{ url_for('admin_documents') }}" class="{{ 'on' if active == 'documents' }}">Documents and brochures</a>
+    <a href="{{ url_for('admin_messages') }}" class="{{ 'on' if active == 'messages' }}">Messages</a>
+    <a href="{{ url_for('team') }}" class="{{ 'on' if active == 'team' }}">Team access</a>
+  </nav>{% endif %}
+  <div class="me"><span class="dot">{{ user.name[:1]|upper }}</span><span class="who"><b>{{ user.name }}</b>{% if user.is_admin %}<small>Admin</small>{% endif %}</span>
     <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="out">Sign out</button></form>
   </div>
-</header>
+</aside>
 <main class="page">
   {% if reader and reader.state == 'down' %}<div class="flash" role="status"><strong>There is an error reading documents right now.</strong> Please tell someone to check. Photos and notes are still being saved.
     {% if user.is_admin %}<div class="hint" style="margin-top:6px">For admins only: {{ reader.reason or 'reading is failing' }} · {{ reader.waiting }} not scanned · Reference {{ reader.ref }}</div>{% endif %}</div>
@@ -98,6 +124,7 @@
   {% for message in get_flashed_messages() %}<div class="flash">{{ message }}</div>{% endfor %}
   {% block content %}{% endblock %}
 </main>
+</div>
 {% endblock %}
 <dialog class="ask" id="ask">
   <h2></h2><p></p>

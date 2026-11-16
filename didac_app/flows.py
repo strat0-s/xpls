@@ -49,6 +49,7 @@ PRIORITIES = ("High", "Medium", "Low")
 # The model sometimes lists every empty field as a doubt ("udise_code unknown"), and flags a QR code it cannot decode from pixels; the code decodes QRs itself.
 NOT_ON_DOCUMENT = re.compile(r"\bqr\b|\b(unknown|not (printed|present|provided|given|available|mentioned|visible|found)|missing|n/?a)\b", re.I)
 WHAT_IS_IT = "What kind of document is this?"
+DEFAULT_WELCOME = "Welcome to Xperimentor at {event}.\nPlease choose an option. Type menu at any time to see this again."
 NOT_AVAILABLE = "That option is not available any more. Here is what is available now:"
 MENU_WORDS = {"menu", "hi", "hello", "hey", "start", "info", "brochure"}
 # (label shown in the list, Orbit type code, one-line description)
@@ -243,7 +244,7 @@ class Chat:
             brochures = self.brochures()
             rows = ([(BROCHURE, ", ".join(item["name"] for item in brochures[:3]) + (" and more" if len(brochures) > 3 else ""))] if brochures else []) \
                 + [(REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo")]
-            welcome = self.event["welcome_text"] or f"Welcome to Xperimentor at {self.event['name']}.\nPlease choose an option. Type menu at any time to see this again."
+            welcome = (self.event["welcome_text"] or DEFAULT_WELCOME.format(event=self.event["name"])).replace("[event]", self.event["name"])
             self.replies.append(Reply(welcome, rows, as_list=True))
 
     def ask_kind(self) -> Reply:

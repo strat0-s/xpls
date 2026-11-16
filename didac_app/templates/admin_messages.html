@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% set active = 'messages' %}
+{% block title %}Messages · Footfall{% endblock %}
+{% block css %}
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    h2 { margin: 0; font-size: 17px; }
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    .panel { padding: 18px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+    .col { flex: 1 1 340px; display: flex; flex-direction: column; gap: 10px; }
+    .hint { color: var(--mut); font-size: 13px; }
+    .wa { flex: 1 1 300px; background: #efeae2; border-radius: 10px; padding: 12px; }
+    .wa .cap { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #6f6279; font-weight: 600; margin-bottom: 6px; }
+    .wa .bubble { background: #fff; color: #2a2030; border-radius: 0 10px 10px 10px; padding: 10px 12px; line-height: 1.45; box-shadow: 0 1px 1px rgba(0,0,0,.12); max-width: 360px; white-space: pre-line; }
+{% endblock %}
+{% block content %}
+<div class="stack">
+  <h1>Messages</h1>
+  {% if event %}
+  <section class="card panel">
+    <form class="col" method="post" action="{{ url_for('admin_welcome_save') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ event.id }}">
+      <h2>Welcome message</h2><div class="hint">Sent when a visitor says hi at {{ event.name }}. Each event can have its own wording.</div>
+      <label class="f" for="welcome">Message text</label><textarea class="t" id="welcome" name="text" rows="4" data-preview="p-welcome" data-event="{{ event.name }}">{{ welcome }}</textarea>
+      <div><button class="btn">Save message</button></div>
+    </form>
+    <div class="wa"><div class="cap">How it looks on WhatsApp</div><div class="bubble" id="p-welcome">{{ welcome }}</div></div>
+  </section>
+  {% endif %}
+  <section class="card panel">
+    <form class="col" method="post" action="{{ url_for('admin_followup_save') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <h2>Follow-up message</h2><div class="hint">The thank-you sent from the Follow-up page. It goes out as the approved template in Bird: wording saved here is for reference until the same wording is approved there.</div>
+      <label class="f" for="followup">Message text</label><textarea class="t" id="followup" name="text" rows="4" data-preview="p-followup" data-event="{{ event.name if event else 'the event' }}">{{ followup }}</textarea>
+      <div><button class="btn">Save message</button></div>
+    </form>
+    <div class="wa"><div class="cap">How it looks on WhatsApp</div><div class="bubble" id="p-followup">{{ followup }}</div></div>
+  </section>
+</div>
+<script>
+  // The preview follows what is typed: [name] shows as a sample name and [event] as this event's name.
+  document.querySelectorAll('textarea[data-preview]').forEach(function (box) {
+    var out = document.getElementById(box.dataset.preview);
+    function show() { out.textContent = box.value.split('[name]').join('Meera').split('[event]').join(box.dataset.event); }
+    box.addEventListener('input', show); show();
+  });
+</script>
+{% endblock %}

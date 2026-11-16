@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, redirect, render_template_string, request, send_file
 
-from didac_app import auth, bird, blobstore, flows, followup, ui
+from didac_app import admin, auth, bird, blobstore, flows, followup, ui
 from didac_app.config import load_config
 from didac_app.flows import Reply
 from didac_app.replies import command_reply
@@ -28,6 +28,7 @@ app.config.update(
     SESSION_COOKIE_SECURE=bool(os.getenv("VERCEL")),
 )
 ui.register(app, lambda: store, lambda: config)
+admin.register(app, lambda: store)
 
 
 @app.get("/health")

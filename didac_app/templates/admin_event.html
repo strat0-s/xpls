@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set active = 'event' %}
+{% block title %}Event control · Footfall{% endblock %}
+{% block css %}
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    .panel { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+    .head { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: center; justify-content: space-between; }
+    .head .dot { width: 12px; height: 12px; border-radius: 50%; background: #2f8f63; display: inline-block; margin-right: 10px; }
+    .head .dot.off { background: var(--warn-line); }
+    .hint { color: var(--mut); font-size: 13px; }
+    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } .grid2 .wide { grid-column: 1 / -1; }
+    .scroll { overflow-x: auto; } table { width: 100%; min-width: 640px; border-collapse: collapse; }
+    th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); padding: 8px 12px; background: var(--head); }
+    td { padding: 9px 12px; border-top: 1px solid var(--line); vertical-align: middle; } td form { display: inline; margin: 0; }
+    .sm { height: 30px; padding: 0 12px; font-size: 13px; }
+    .stats { display: flex; gap: 28px; flex-wrap: wrap; } .stats b { display: block; font-size: 22px; }
+{% endblock %}
+{% block content %}
+<div class="stack">
+  <h1>Event control</h1>
+  <section class="card panel">
+    <div class="head">
+      <div><span class="dot {{ '' if live else 'off' }}" aria-hidden="true"></span><b style="font-size:18px">{{ live.name if live else 'No event is live' }}</b>
+        <div class="hint">{% if live %}All WhatsApp leads are going into this event. Only one event can be live at a time.{% else %}Nothing is saved on WhatsApp until an event is made live.{% endif %}</div></div>
+      {% if live %}
+      <form method="post" action="{{ url_for('admin_event_stop', event_id=live.id) }}" data-title="Stop {{ live.name }}?" data-confirm="Nothing will be saved on WhatsApp until an event is live again. Leads already captured are kept." data-ok="Stop event" data-danger="1">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">Stop event</button></form>
+      {% endif %}
+    </div>
+    {% if live %}<div class="stats"><div><b>{{ (events|selectattr('id', 'equalto', live.id)|first).lead_count }}</b><span class="hint">leads</span></div><div><b>{{ photos if shown and shown.id == live.id else '–' }}</b><span class="hint">event photos</span></div></div>{% endif %}
+  </section>
+
+  {% if shown %}
+  <form class="card panel" method="post" action="{{ url_for('admin_event_save') }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ shown.id }}">
+    <div style="font-size:16px;font-weight:700">Event details: {{ shown.name }}</div>
+    <div class="grid2">
+      <div class="wide"><label class="f" for="name">Event name</label><input class="t" id="name" name="name" value="{{ shown.name }}" required></div>
+      <div><label class="f" for="starts_on">Starts</label><input class="t" type="date" id="starts_on" name="starts_on" value="{{ shown.starts_on or '' }}"></div>
+      <div><label class="f" for="ends_on">Ends</label><input class="t" type="date" id="ends_on" name="ends_on" value="{{ shown.ends_on or '' }}"></div>
+      <div class="wide"><label class="f" for="venue">Venue</label><input class="t" id="venue" name="venue" value="{{ shown.venue }}"></div>
+    </div>
+    <div><button class="btn">Save changes</button></div>
+  </form>
+  {% endif %}
+
+  <section class="card">
+    <div class="head" style="padding:16px"><div style="font-size:16px;font-weight:700">All events</div>
+      <form method="post" action="{{ url_for('admin_event_new') }}" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input class="t" name="name" placeholder="New event name" required style="width:200px">
+        <select class="t" name="copy_from" aria-label="Copy the setup of" style="width:220px"><option value="">Start with nothing</option>{% for e in events %}<option value="{{ e.id }}">Copy setup of {{ e.name }}</option>{% endfor %}</select>
+        <button class="btn">New event</button></form></div>
+    <div class="scroll"><table>
+      <tr><th>Event</th><th>Dates</th><th>Leads</th><th>Status</th><th></th></tr>
+      {% for e in events %}
+      <tr><td><b>{{ e.name }}</b>{% if e.venue %}<div class="hint">{{ e.venue }}</div>{% endif %}</td>
+        <td>{{ e.starts_on.strftime('%d %b %Y') if e.starts_on else '' }}{{ ' to ' ~ e.ends_on.strftime('%d %b %Y') if e.ends_on else '' }}</td>
+        <td>{{ e.lead_count }}</td>
+        <td><span class="chip {{ 'ok' if e.status == 'live' else 'amber' if e.status == 'draft' else 'none' }}">{{ e.status|capitalize }}</span></td>
+        <td style="white-space:nowrap">
+          <a class="btn ghost sm" href="{{ url_for('admin_event', event=e.id) }}">Details</a>
+          <a class="btn ghost sm" href="{{ url_for('admin_documents', event=e.id) }}">Set up documents</a>
+          {% if e.status != 'live' %}
+          <form method="post" action="{{ url_for('admin_event_start', event_id=e.id) }}" data-title="Make {{ e.name }} live?" data-confirm="{% if live %}{{ live.name }} will be stopped first. {% endif %}New WhatsApp leads will go to {{ e.name }}." data-ok="Make live">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn sm">Make live</button></form>
+          {% endif %}
+        </td></tr>
+      {% endfor %}
+    </table></div>
+  </section>
+</div>
+{% endblock %}

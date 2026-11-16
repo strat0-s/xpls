@@ -289,6 +289,12 @@ class LeadStore:
             return conn.execute("INSERT INTO brochures (event_id, key, name, url, for_visitors, for_team, position) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
                                 (event_id, key, name.strip(), url.strip(), for_visitors, for_team, position)).fetchone()["id"]
 
+    def update_brochure(self, brochure_id: int, **values) -> None:
+        """name, url, for_visitors and for_team only. Keys are code-owned, never request data."""
+        assignments = ", ".join(f"{column}=%s" for column in values)
+        with self.connect() as conn:
+            conn.execute(f"UPDATE brochures SET {assignments} WHERE id=%s", [*values.values(), brochure_id])
+
     def set_brochure_active(self, brochure_id: int, active: bool) -> None:
         with self.connect() as conn:
             conn.execute("UPDATE brochures SET active=%s WHERE id=%s", (active, brochure_id))
