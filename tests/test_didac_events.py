@@ -55,17 +55,17 @@ def test_a_lead_belongs_to_the_event_that_was_live_when_it_was_captured(store):
 
 def test_the_team_menu_follows_the_live_event(store, sent):
     say(STAFF, "menu")
-    assert last(sent) == ("Hi Test. You are at DIDAC 2026. What would you like to do?\n\nType menu any time. Type cancel to stop.", ["Contact form", "Visiting card", "Event badge / QR", "Add a note"])
+    assert last(sent) == ("Hi Test. You are at DIDAC 2026. What would you like to do?\n\nType menu any time. Type cancel to stop.", ["Contact form", "Visiting card", "Event badge / QR", "Send event photos", "Brochures", "Add a note"])
     second = store.create_event("Bett India 2027")
     store.add_doc_type(second, "Registration form", "Printed sign-up sheet", "form")
     store.start_event(second)
     say(STAFF, "menu")
-    assert last(sent)[0].startswith("Hi Test. You are at Bett India 2027.") and last(sent)[1] == ["Registration form", "Add a note"]
+    assert last(sent)[0].startswith("Hi Test. You are at Bett India 2027.") and last(sent)[1] == ["Registration form", "Send event photos", "Add a note"]
     say(STAFF, "Registration form")
     assert store.get_session(STAFF)["flow"] == "registration_form"  # the key made from the label
     say(STAFF, "menu")
     say(STAFF, "Contact form")  # not part of this event, so it is not a menu choice
-    assert store.get_session(STAFF) is None and last(sent)[1] == ["Registration form", "Add a note"]
+    assert store.get_session(STAFF) is None and last(sent)[1] == ["Registration form", "Send event photos", "Add a note"]
 
 
 def test_a_deactivated_type_is_hidden_but_its_leads_stay(store, sent):
@@ -74,7 +74,7 @@ def test_a_deactivated_type_is_hidden_but_its_leads_stay(store, sent):
     card = next(row for row in store.list_doc_types(event["id"]) if row["key"] == "other")
     store.set_doc_type_active(card["id"], False)
     say(STAFF, "menu")
-    assert last(sent)[1] == ["Contact form", "Event badge / QR", "Add a note"]
+    assert last(sent)[1] == ["Contact form", "Event badge / QR", "Send event photos", "Brochures", "Add a note"]
     assert store.get_lead(lead.id).doc_type == "other"  # nothing was wiped
     store.set_doc_type_active(card["id"], True)
     say(STAFF, "menu")
@@ -87,7 +87,7 @@ def test_a_scan_in_progress_when_its_type_is_switched_off_is_ended_politely(stor
     card = next(row for row in store.list_doc_types(store.live_event()["id"]) if row["key"] == "other")
     store.set_doc_type_active(card["id"], False)
     say(STAFF, "DONE")
-    assert any(m[1] == flows.NOT_AVAILABLE for m in sent) and last(sent)[1] == ["Contact form", "Event badge / QR", "Add a note"]
+    assert any(m[1] == flows.NOT_AVAILABLE for m in sent) and last(sent)[1] == ["Contact form", "Event badge / QR", "Send event photos", "Brochures", "Add a note"]
     assert store.get_session(STAFF) is None
 
 

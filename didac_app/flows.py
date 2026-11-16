@@ -10,6 +10,7 @@ import logging
 import re
 import tempfile
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -29,13 +30,16 @@ timing = logging.getLogger("didac.timing")  # same logger the webhook uses, so t
 
 SESSION_MINUTES = 30
 MAX_PHOTOS = 10
+MAX_PER_PHOTO = 2  # documents laid side by side in one photo; photos sent one by one are not limited by this
 NOTE_WINDOW_MINUTES = 30
 
 NOTE = "Add a note"
+EVENT_PHOTOS, TEAM_BROCHURES = "Send event photos", "Brochures"
 # The document types in the menu are not fixed: they come from the live event (see Chat.doc_types).
 BROCHURE, REQUIREMENT, FEEDBACK = "Download brochure", "Share my requirement", "Feedback / voice note"
-NOT_SCANS = {"note", "choose", "requirement", "brochure", "feedback"}  # session flows that are not a document scan
+NOT_SCANS = {"note", "choose", "requirement", "brochure", "feedback", "eventphotos"}  # session flows that are not a document scan
 NO_EVENT_TEAM = "Hi {first}. No event is live right now, so I cannot save leads or photos. Please ask an admin to start the next event."
+NO_PHOTOS = "This channel does not accept photos. Type menu to see what I can do for you."
 NO_EVENT_VISITOR = "Thanks for getting in touch. The event has finished. Our team will reach out soon."
 SAVE, EDIT, RETAKE = "Save", "Edit", "Retake"
 PRIORITIES = ("High", "Medium", "Low")
@@ -96,7 +100,8 @@ def fetch_media(config: DidacConfig, url: str, content_type: str, number: str) -
 
 
 def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
-    """One read over every photo of a document (kind is form, document or badge). Returns {"fields": {lead field: value}, "check": [doubtful things]}; never raises."""
+    """One read over every photo of a scan (kind is form, document or badge). Returns {"fields": {lead field: value}, "check": [doubtful things]} for the first document,
+    "photos" (which photo numbers it is on), "more" (the same for any further documents) and "too_many" (photo number, count) when a photo holds more documents than allowed; never raises."""
     paths, qr_text = [], ""
     started = time.perf_counter()
     try:
@@ -125,10 +130,23 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
     contacts = parse_contacts(raw)
     if not contacts:
         return {"fields": {}, "check": ["could not read the photos", *no_qr]}
-    contact = dict(contacts[0])
-    check = [item for item in (str(item).strip() for item in contact.pop("check", None) or []) if item and not NOT_ON_DOCUMENT.search(item)] + no_qr
-    if len(contacts) > 1:
-        check.append(f"{len(contacts)} people found, only the first is kept")
+    # Only a visiting-card style document may hold several documents; a form or a badge is one person (a badge's QR belongs to one).
+    docs = [lead_fields(contact, qr_text if index == 0 else "", no_qr if index == 0 else []) for index, contact in enumerate(contacts if kind == "document" else contacts[:1])]
+    if kind != "document" and len(contacts) > 1:
+        docs[0]["check"].append(f"{len(contacts)} people found, only the first is kept")
+    result = {**docs[0], "more": docs[1:]}
+    per_photo = Counter(number for doc in docs for number in doc["photos"])
+    if per_photo and max(per_photo.values()) > MAX_PER_PHOTO:
+        number, count = per_photo.most_common(1)[0]
+        result["too_many"] = (number, count)
+    return result
+
+
+def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None) -> dict:
+    """One document the reader found, as {"fields": lead fields, "check": doubts, "photos": the photo numbers it appears on}."""
+    contact = dict(contact)
+    photos = [number for number in (contact.pop("photos", None) or []) if isinstance(number, int)]
+    check = [item for item in (str(item).strip() for item in contact.pop("check", None) or []) if item and not NOT_ON_DOCUMENT.search(item)] + (no_qr or [])
     demo, workshop, students, remarks = (str(contact.pop(key, "") or "").strip() for key in ("demo", "workshop", "students", "remarks"))
     interest = [f"{label}: {value}" for label, value in (("Demo", demo), ("Teacher workshop", workshop)) if value]
     notes = [f"{label}: {value}" for label, value in (("Students", students), ("Remarks", remarks)) if value]
@@ -139,7 +157,7 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
     fields = {name: getattr(lead, name) for name in FILLABLE if getattr(lead, name)}
     if not fields.get("name") and not fields.get("phone"):
         check.append("no name or phone found")
-    return {"fields": fields, "check": check}
+    return {"fields": fields, "check": check, "photos": photos}
 
 
 class Chat:
@@ -174,9 +192,9 @@ class Chat:
         elif session and session["flow"] not in NOT_SCANS and session["flow"] not in self.doc_types:
             self.say(NOT_AVAILABLE)  # the admin switched that document type off, or the event changed, while this chat was open
             self.menu(session)
-        elif session and session["flow"] in (*self.doc_types, "note", "choose") and not self.user:
+        elif session and session["flow"] in (*self.doc_types, "note", "choose", "eventphotos") and not self.user:
             self.menu(session)  # deactivated mid-scan: back to the visitor menu
-        elif session and session["flow"] in ("note", "requirement", "brochure", "feedback") and low in self.menu_choices():
+        elif session and session["flow"] in ("note", "requirement", "brochure", "feedback", "eventphotos") and low in self.menu_choices():
             self.store.delete_session(self.number)
             self.no_flow(text, media)
         elif session:
@@ -186,12 +204,12 @@ class Chat:
 
     def menu_choices(self) -> set[str]:
         if self.user:
-            return {*self.by_label, NOTE.lower()}
+            return {*self.by_label, NOTE.lower(), EVENT_PHOTOS.lower(), TEAM_BROCHURES.lower()}
         return {label.lower() for label in (BROCHURE, REQUIREMENT, FEEDBACK)}
 
-    def brochures(self) -> list[dict]:
-        """The active brochures of the live event that visitors may see, as {key, name, url}."""
-        return [{"key": row["key"], "name": row["name"], "url": row["url"]} for row in self.store.list_brochures(self.event["id"], "visitors")]
+    def brochures(self, audience: str = "visitors") -> list[dict]:
+        """The active brochures of the live event that this audience ('visitors' or 'team') may see, as {key, name, url, for_visitors}."""
+        return [{"key": row["key"], "name": row["name"], "url": row["url"], "for_visitors": row["for_visitors"]} for row in self.store.list_brochures(self.event["id"], audience)]
 
     def say(self, text: str) -> None:
         self.replies.append(Reply(text))
@@ -211,7 +229,10 @@ class Chat:
             self.say(f"Discarded {lost} photo(s) that were not saved.")
         if self.user:
             first = self.user["name"].split()[0]
-            rows = [(row["label"], row["hint"]) for row in self.doc_types.values()][:9] + [(NOTE, "Voice or text note on your last lead")]  # a WhatsApp list holds 10 rows
+            rows = [(row["label"], row["hint"]) for row in self.doc_types.values()][:7] + [(EVENT_PHOTOS, "Photos of the event, saved but not read")]  # a WhatsApp list holds 10 rows
+            if self.brochures("team"):
+                rows.append((TEAM_BROCHURES, "Brochures and price lists"))
+            rows.append((NOTE, "Voice or text note on your last lead"))
             self.replies.append(Reply(f"Hi {first}. You are at {self.event['name']}. What would you like to do?\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
         else:
             brochures = self.brochures()
@@ -232,6 +253,11 @@ class Chat:
                 return self.start_scan(self.by_label[choice])
             if choice == NOTE.lower():
                 return self.start_note()
+            if choice == EVENT_PHOTOS.lower():
+                self.store.put_session(self.number, "eventphotos", "photos", {})
+                return self.say(f"Send as many event photos as you like. They are saved to {self.event['name']} and are not read. Type menu when you are done.")
+            if choice == TEAM_BROCHURES.lower():
+                return self.pick_brochure("team")
             if any(ct.startswith("image/") for _, ct in media):
                 if not self.doc_types:
                     return self.say("No document types are switched on for this event. Please ask an admin.")
@@ -252,20 +278,26 @@ class Chat:
                 return self.say(f"Lead saved: {lead.org or lead.name or 'Unnamed lead'}")
             return self.menu()
         if choice == BROCHURE.lower():
-            if not self.brochures():
-                return self.say("Our team will send you the brochures. Type menu for other options.")
-            self.store.put_session(self.number, "brochure", "pick", {})
-            return self.replies.append(Reply("Which brochure would you like?", [(item["name"], "Open the brochure") for item in self.brochures()], as_list=True))
+            return self.pick_brochure("visitors")
         if choice == REQUIREMENT.lower():
             self.store.put_session(self.number, "requirement", "name", {})
             return self.say("Happy to help. What is your name?")
         if choice == FEEDBACK.lower():
             self.store.put_session(self.number, "feedback", "collect", {})
             return self.say("Please type your feedback, or send a voice note or photo now. We will save it for the team. Type menu when you are done.")
+        if any(ct.startswith("image/") for _, ct in media):
+            return self.say(NO_PHOTOS)
         if media:
             self.collect_feedback(text, media)
             return self.say("Saved for the team. Type menu for options.")
         self.menu()
+
+    def pick_brochure(self, audience: str) -> None:
+        items = self.brochures(audience)
+        if not items:
+            return self.say("Our team will send you the brochures. Type menu for other options." if audience == "visitors" else "There are no brochures yet. Please ask an admin to add one.")
+        self.store.put_session(self.number, "brochure", "pick", {})
+        self.replies.append(Reply("Which brochure would you like?", [(item["name"], "Open the brochure") for item in items], as_list=True))
 
     def in_flow(self, session: dict, text: str, media: list[tuple[str, str]]) -> None:
         flow, step, data = session["flow"], session["step"], session["data"]
@@ -283,6 +315,8 @@ class Chat:
             return self.scan_step(flow, step, data, text, media)
         if flow == "note":
             return self.note_step(data, text, media)
+        if flow == "eventphotos":
+            return self.event_photos_step(media)
         if flow == "requirement":
             return self.requirement_step(step, data, text)
         if flow == "brochure":
@@ -334,7 +368,12 @@ class Chat:
                 return self.say("No photos yet. Send a photo first.")
             self.say_now(f"Reading your {len(data['photos'])} photo(s)... this takes a few seconds.")
             result = read_documents(self.config, data["photos"], self.doc_types[flow]["reader"])
-            data |= {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], [])}
+            if result.get("too_many"):
+                number, count = result["too_many"]
+                self.store.put_session(self.number, flow, "photos", {"photos": []})
+                return self.say(f"I can see {count} documents in photo {number}. Two at most per photo, please retake with 2 or fewer. Photos cleared, send them again.")
+            data |= {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], []), "photo_ids": result.get("photos", []),
+                     "more": [{"draft": doc["fields"], "check": doc["check"], "original": summary(doc["fields"], []), "photo_ids": doc["photos"]} for doc in result.get("more", [])]}
             self.store.put_session(self.number, flow, "confirm", data)
             return self.confirm(data)
         if step == "edit":  # the Save / Edit / Retake taps from the summary stay tappable, and "back" ends the edit
@@ -347,57 +386,76 @@ class Chat:
             pick = next((name for name in PRIORITIES if name.lower() == low), "")
             if not pick:
                 return self.replies.append(buttons("Please tap High, Medium or Low.", *PRIORITIES))
-            data["draft"]["priority"] = pick
+            for doc in scan_docs(data):
+                doc["draft"].setdefault("priority", pick)
             return self.save_scan(flow, data)
         if step == "confirm":
             choice = low
             if choice == SAVE.lower():
-                if data["draft"].get("priority"):
+                docs = scan_docs(data)
+                if all(doc["draft"].get("priority") for doc in docs):
                     return self.save_scan(flow, data)
                 self.store.put_session(self.number, flow, "priority", data)
-                return self.replies.append(buttons("How important is this lead?", *PRIORITIES))
+                return self.replies.append(buttons("How important is this lead?" if len(docs) == 1 else "How important are these leads?", *PRIORITIES))
             if choice == EDIT.lower():
                 self.store.put_session(self.number, flow, "edit", data)
+                if len(scan_docs(data)) > 1:
+                    return self.say("Reply with corrections, one per line. Start a line with 1 or 2 to say which document.\nExample:\n2 Phone: 98450 11112\n1 Priority: High\nType BACK to stop editing.")
                 return self.say("Reply with corrections, one per line.\nExample:\nPhone: 98450 11112\nPriority: High\nType BACK to stop editing.")
             if choice == RETAKE.lower():
                 self.store.put_session(self.number, flow, "photos", {"photos": []})
                 return self.say("Photos cleared. Send the new photos, then reply DONE.")
             return self.replies.append(buttons("Please choose Save, Edit or Retake.", SAVE, EDIT, RETAKE))
         if step == "edit":
-            applied, unknown = apply_corrections(data["draft"], text)
+            applied, unknown = apply_to_documents(data, text)
             if not applied:
                 return self.say("I could not read a correction. Use one per line, like:\nPhone: 98450 11112\nType BACK to stop editing.")
-            data["check"] = [item for item in data["check"] if not any(word in item.lower() for word in applied)]
             self.store.put_session(self.number, flow, "confirm", data)
             return self.confirm(data, f"I could not use: {', '.join(unknown)}\n\n" if unknown else "")
 
     def confirm(self, data: dict, prefix: str = "") -> None:
         """The Save / Edit / Retake step, with nothing shortened. A button message holds about 1000 characters; a longer summary goes out as one plain
         message (WhatsApp allows 4096) with the buttons right after it."""
-        text = prefix + summary(data["draft"], data["check"], with_check=True)
+        docs = scan_docs(data)
+        if len(docs) == 1:
+            text = prefix + summary(data["draft"], data["check"], with_check=True)
+        else:
+            parts = [f"{number}.\n" + summary(doc["draft"], doc["check"], with_check=True).removeprefix("I read this as:\n") for number, doc in enumerate(docs, 1)]
+            text = prefix + f"I read {len(docs)} documents:\n\n" + "\n\n".join(parts)
         if len(text) <= 1000:
             return self.replies.append(buttons(text, SAVE, EDIT, RETAKE))
         self.say(text[:4000])
-        self.replies.append(buttons("Save this lead, edit it, or retake the photos?", SAVE, EDIT, RETAKE))
+        self.replies.append(buttons("Save this lead, edit it, or retake the photos?" if len(docs) == 1 else "Save these leads, edit them, or retake the photos?", SAVE, EDIT, RETAKE))
 
     def save_scan(self, flow: str, data: dict) -> None:
-        lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow,
-                    raw_message=data["original"], review_reason="; ".join(data["check"]))
-        for name, value in data["draft"].items():
-            setattr(lead, name, value)
-        normalize_contact_name(lead)
-        photos = data["photos"]
-        lead.media_urls = "; ".join(photo["url"] for photo in photos)
-        lead.media_local_paths = "; ".join(photo["key"] for photo in photos)
-        saved, outcome = self.store_lead(lead, photos, data["original"])
-        label = saved.org or saved.name or saved.phone or "Unnamed lead"
+        docs, every_photo = scan_docs(data), data["photos"]
+        saved_lines, outcomes = [], []
+        for doc in docs:
+            lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow,
+                        raw_message=doc["original"], review_reason="; ".join(doc["check"]))
+            for name, value in doc["draft"].items():
+                setattr(lead, name, value)
+            normalize_contact_name(lead)
+            photos = [every_photo[number - 1] for number in doc.get("photo_ids", []) if 1 <= number <= len(every_photo)] or every_photo  # unknown photo numbers: keep them all
+            lead.media_urls = "; ".join(photo["url"] for photo in photos)
+            lead.media_local_paths = "; ".join(photo["key"] for photo in photos)
+            saved, outcome = self.store_lead(lead, photos, doc["original"])
+            outcomes.append((saved, outcome))
         self.store.put_session(self.number, flow, "photos", {"photos": []})
-        if outcome == "created":
-            badge = " It shows a Check badge on the dashboard." if saved.review_reason else ""
-            self.say(f"Saved as #{saved.id}, {label}{f' ({saved.priority} priority)' if saved.priority else ''}.{badge}\nSend the next {noun(self.doc_types[flow]['label'])}, or type menu.")
-        else:
+        again = f"Send the next {noun(self.doc_types[flow]['label'])}, or type menu."
+        if len(docs) == 1:
+            saved, outcome = outcomes[0]
+            label = saved.org or saved.name or saved.phone or "Unnamed lead"
+            if outcome == "created":
+                badge = " It shows a Check badge on the dashboard." if saved.review_reason else ""
+                return self.say(f"Saved as #{saved.id}, {label}{f' ({saved.priority} priority)' if saved.priority else ''}.{badge}\n{again}")
             added = "I added the new details to it." if outcome == "merged" else "There was nothing new to add."
-            self.say(f"Already saved as #{saved.id}, {saved.name or label}. {added}\nSend the next {noun(self.doc_types[flow]['label'])}, or type menu.")
+            return self.say(f"Already saved as #{saved.id}, {saved.name or label}. {added}\n{again}")
+        for saved, outcome in outcomes:
+            label = saved.org or saved.name or saved.phone or "Unnamed lead"
+            note = {"created": f" ({saved.priority} priority)" if saved.priority else "", "merged": ", already saved, new details added", "unchanged": ", already saved"}[outcome]
+            saved_lines.append(f"- #{saved.id}, {label}{note}")
+        self.say(f"Saved {len(docs)} documents:\n" + "\n".join(saved_lines) + f"\n{again}")
 
     def store_lead(self, lead: Lead, photos: list[dict], original_text: str = "") -> tuple[Lead, str]:
         """Create the lead, or merge into the matching one. Outcome is 'created', 'merged' (new details added) or 'unchanged'.
@@ -479,13 +537,27 @@ class Chat:
         self.lead_ids.append(lead.id)
         return lead
 
+    def event_photos_step(self, media: list[tuple[str, str]]) -> None:
+        images = [(url, content_type) for url, content_type in media if content_type.startswith("image/")]
+        if not images:
+            return self.say("Please send photos only. Type menu when you are done." if media else "Send photos, or type menu when you are done.")
+        for url, content_type in images:
+            key, _ = fetch_media(self.config, url, content_type, self.number)
+            self.store.add_event_photo(self.event["id"], self.number, self.user["name"], key, content_type, url)
+        self.say(f"{len(images)} photo{'' if len(images) == 1 else 's'} saved to {self.event['name']}.")
+
     def brochure_step(self, text: str) -> None:
         choice = text.lower()
-        selected = next((item for item in self.brochures() if item["name"].lower() == choice or item["key"] == choice), None)
+        audience = "team" if self.user else "visitors"
+        selected = next((item for item in self.brochures(audience) if item["name"].lower() == choice or item["key"] == choice), None)
         if not selected:
-            return self.replies.append(Reply("Please pick a brochure from the list.", [(item["name"], "Open the brochure") for item in self.brochures()], as_list=True))
-        self.visitor_lead(interest=f"Downloaded brochure: {selected['name']}")
+            return self.replies.append(Reply("Please pick a brochure from the list.", [(item["name"], "Open the brochure") for item in self.brochures(audience)], as_list=True))
+        if not self.user:  # a team member looking something up is not a lead
+            self.visitor_lead(interest=f"Downloaded brochure: {selected['name']}")
         self.store.delete_session(self.number)
+        if self.user and selected["url"]:
+            team_only = "\n\nThis one is for the team only." if not selected["for_visitors"] else ""
+            return self.say(f"Here is the {selected['name']} brochure:\n{selected['url']}{team_only}\n\nType menu for more.")
         if selected["url"]:
             return self.say(f"Here is the {selected['name']} brochure:\n{selected['url']}\n\nType menu to share your requirement or see other options.")
         self.say(f"The {selected['name']} brochure link is not set up yet. Our team will send it to you. Type menu for other options.")
@@ -540,6 +612,28 @@ class Chat:
 
 
 # ---- helpers ------------------------------------------------------------------------------------------------------------
+def scan_docs(data: dict) -> list[dict]:
+    """The documents of a scan as dicts with draft/check/original/photo_ids: the first one is the session data itself, the rest are in data["more"]."""
+    return [data, *data.get("more", [])]
+
+
+def apply_to_documents(data: dict, text: str) -> tuple[list[str], list[str]]:
+    """Corrections for a scan. With several documents a line may start with 1 or 2 to pick one; any other line goes to the first."""
+    docs = scan_docs(data)
+    lines: list[list[str]] = [[] for _ in docs]
+    for line in text.splitlines():
+        match = re.match(r"\s*(\d)[\s.:)-]+(\S.*)", line) if len(docs) > 1 else None
+        target = int(match[1]) - 1 if match and 1 <= int(match[1]) <= len(docs) else 0
+        lines[target].append(match[2] if match and 1 <= int(match[1]) <= len(docs) else line)
+    applied, unknown = [], []
+    for doc, doc_lines in zip(docs, lines):
+        done, left = apply_corrections(doc["draft"], "\n".join(doc_lines))
+        doc["check"] = [item for item in doc["check"] if not any(word in item.lower() for word in done)]
+        applied += done
+        unknown += left
+    return applied, unknown
+
+
 def noun(label: str) -> str:
     """'Contact form' -> 'contact form', 'Event badge / QR' -> 'event badge / QR': a label used in the middle of a sentence."""
     return " ".join(word if word.isupper() else word.lower() for word in label.split())

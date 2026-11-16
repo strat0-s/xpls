@@ -28,10 +28,18 @@ Leave organisation_type empty if the organisation is unclear.
 Use empty strings when unknown. Do not guess.
 """
 
-DOCUMENT_PROMPT = LEAD_PROMPT + """
+SINGLE_TEXT = """
 The images are the sides or pages of ONE document: read them together and return a single object, not a "contacts" array.
+"""
+MULTI_TEXT = """
+An image can show up to 2 separate documents side by side, and different images can show different documents. Return a top-level "contacts" array with ONE object per separate document.
+Sides or pages of the same document (the same person) are ONE object: merge them. Add a key "photos" to each object: the list of image numbers (the first image is 1) that the document appears in.
+"""
+CHECK_TEXT = """
 Add a key "check": a list of short phrases naming each field you could not read with confidence (for example "phone digits unclear"). List only values that ARE on the document but are hard to read or doubtful. Never list a field that is simply empty, not printed or unknown. QR codes are decoded separately by software: never read or flag a QR code.
 """
+DOCUMENT_PROMPT = LEAD_PROMPT + SINGLE_TEXT + CHECK_TEXT  # one document: the base of the form and badge prompts
+MULTI_PROMPT = LEAD_PROMPT + MULTI_TEXT + CHECK_TEXT  # any other document type: one or two separate documents per image
 
 FORM_PROMPT = DOCUMENT_PROMPT + """
 This is the printed Xperimentor contact form. Fields: Full Name, Organization, City, Phone, Email; Your Role (Management, Principal, Teacher/Coordinator, Other);
@@ -55,7 +63,7 @@ def vision_read(images: list[tuple[str, str]], kind: str = "document") -> str:
         return ""
     from openai import OpenAI
 
-    content = [{"type": "input_text", "text": {"form": FORM_PROMPT, "badge": BADGE_PROMPT}.get(kind, DOCUMENT_PROMPT)}]
+    content = [{"type": "input_text", "text": {"form": FORM_PROMPT, "badge": BADGE_PROMPT}.get(kind, MULTI_PROMPT)}]
     content += [{"type": "input_image", "image_url": image_data_url(path, content_type)} for path, content_type in images]
     # OPENAI_VISION_EFFORT (minimal, low, medium, high) trims the model's thinking time; unset keeps the model's default.
     effort = os.getenv("OPENAI_VISION_EFFORT", "").strip()

@@ -78,6 +78,10 @@ class LeadStore:
                 "key TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', for_visitors BOOLEAN NOT NULL DEFAULT TRUE, for_team BOOLEAN NOT NULL DEFAULT TRUE, "
                 "position INTEGER NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT TRUE, UNIQUE (event_id, key))"
             )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS event_photos (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_id BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE, "
+                "created_at TIMESTAMPTZ NOT NULL DEFAULT now(), from_number TEXT NOT NULL DEFAULT '', uploaded_by TEXT NOT NULL DEFAULT '', key TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '')"
+            )
             conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
             conn.execute(
                 f"""
@@ -205,7 +209,7 @@ class LeadStore:
 
     def clear(self) -> None:
         with self.connect() as conn:
-            conn.execute("TRUNCATE inbound_events, feedback, media, leads, sessions RESTART IDENTITY")
+            conn.execute("TRUNCATE inbound_events, feedback, media, leads, sessions, event_photos RESTART IDENTITY")
 
     # ---- events: one is live at a time and every lead captured over WhatsApp goes into it -----------------------------
     def create_event(self, name: str, starts_on=None, ends_on=None, venue: str = "", welcome_text: str = "") -> int:
@@ -301,6 +305,15 @@ class LeadStore:
         for key, name, url in brochures:
             self.add_brochure(event_id, name, url, key=key)
         return event_id
+
+    def add_event_photo(self, event_id: int, from_number: str, uploaded_by: str, key: str, content_type: str = "", url: str = "") -> int:
+        with self.connect() as conn:
+            return conn.execute("INSERT INTO event_photos (event_id, from_number, uploaded_by, key, content_type, url) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                                (event_id, from_number, uploaded_by, key, content_type, url)).fetchone()["id"]
+
+    def list_event_photos(self, event_id: int) -> list[dict]:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM event_photos WHERE event_id=%s ORDER BY id DESC", (event_id,)).fetchall()
 
     def get_setting(self, key: str, default: str = "") -> str:
         with self.connect() as conn:
