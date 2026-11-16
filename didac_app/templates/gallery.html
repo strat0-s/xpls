@@ -1,179 +1,92 @@
 {% extends "base.html" %}
 {% set active = 'leads' %}
+{% block title %}Leads · Footfall{% endblock %}
 {% block css %}
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
     .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
-    .grp { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+    .grp { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     .seg { display: flex; gap: 6px; flex-wrap: wrap; }
     .seg a { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surf); color: var(--mut); font-weight: 600; text-decoration: none; }
-    .seg a:hover { border-color: var(--acc); }
-    .seg a.on { background: var(--soft); color: var(--acc-text); border-color: var(--soft); }
-    .filter { position: relative; }
-    .filter summary { list-style: none; cursor: pointer; height: 34px; gap: 6px; }
-    .filter summary::-webkit-details-marker { display: none; }
-    .filter form { position: absolute; z-index: 5; top: 40px; left: 0; width: 240px; padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(42,32,48,.18); }
+    .seg a:hover { border-color: var(--acc); } .seg a.on { background: var(--soft); color: var(--acc-text); border-color: var(--soft); }
+    .filter { position: relative; } .filter summary { list-style: none; cursor: pointer; height: 34px; gap: 6px; } .filter summary::-webkit-details-marker { display: none; }
+    .filter form { position: absolute; z-index: 5; top: 40px; right: 0; width: 280px; padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(42,32,48,.18); }
     .filter .row { display: flex; gap: 8px; }
-    .search { flex: 0 1 300px; width: 100%; max-width: 300px; }
-    .search input { width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); }
-
-    .split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
-    .split.nopane { grid-template-columns: minmax(0, 1fr); }
-    @media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } }
+    .needs { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; background: var(--warn); color: var(--warn-ink); font-weight: 600; font-size: 13px; }
+    .needs input { width: 18px; height: 18px; accent-color: var(--acc); }
+    .search input, .evsel select { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); }
+    .search input { width: 260px; max-width: 100%; } .evsel { display: flex; align-items: center; gap: 8px; color: var(--mut); font-weight: 600; margin: 0; } .evsel select { font-weight: 600; color: var(--ink); }
     .scroll { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); padding: 8px 10px; background: var(--head); white-space: nowrap; }
-    td { padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: middle; }
-    tbody tr:hover { background: var(--head); }
-    tbody tr.sel { background: var(--soft); box-shadow: inset 3px 0 0 var(--acc); }
-    tbody tr.chk td:first-child { box-shadow: inset 3px 0 0 var(--warn-line); }
-    tbody tr.sel.chk td:first-child { box-shadow: inset 3px 0 0 var(--acc); }
-    .js tbody tr { cursor: pointer; }
-    tr:focus-visible { outline-offset: -3px; }
-    td.nm a { color: var(--ink); text-decoration: none; font-weight: 700; }
-    td.nm a:hover { color: var(--acc-text); text-decoration: underline; }
-    td.nm small { display: block; color: var(--mut); font-size: 12px; }
+    .grid { min-width: 820px; }
+    .hd, .lead { display: grid; grid-template-columns: 96px minmax(200px, 2.2fr) minmax(160px, 1.4fr) 130px 100px minmax(120px, 1fr) 80px; gap: 12px; align-items: center; padding: 10px 16px; }
+    .hd { background: var(--head); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); font-weight: 600; padding-top: 8px; padding-bottom: 8px; }
+    .lead { border-top: 1px solid var(--line); color: inherit; text-decoration: none; font-weight: 400; }
+    .lead:hover, .lead:focus-visible { background: var(--head); }
+    .lead.chk { box-shadow: inset 3px 0 0 var(--warn-line); }
+    .lead b { display: block; } .lead small { color: var(--mut); font-size: 12.5px; }
+    .th { display: flex; }
+    .th .ph { width: 40px; height: 52px; border-radius: 6px; background: var(--soft); border: 2px solid var(--surf); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--acc); font-size: 11px; font-weight: 700; }
+    .th .ph img { width: 100%; height: 100%; object-fit: cover; display: block; } .th .ph + .ph { margin-left: -14px; background: #e0d0e6; color: var(--acc-text); }
+    .th svg { width: 20px; height: 20px; }
     .by { display: flex; align-items: center; gap: 8px; }
     .av { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 10px; background: var(--soft); color: var(--acc-text); flex: none; }
     .av.visitor { background: var(--vis); color: var(--vis-ink); }
-    .st { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-    .st form { margin: 0; }
-    .mini { height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); font-size: 12px; font-weight: 600; color: var(--acc-text); cursor: pointer; }
-    .mini:hover { border-color: var(--acc); }
-    @media (max-width: 640px) { .hide-s { display: none; } }
-
-    /* thumbnails: the photo itself, or a small drawing for voice notes and texts */
-    .th { width: 40px; height: 52px; border-radius: 6px; background: var(--soft); overflow: hidden; display: flex; align-items: center; justify-content: center; color: var(--acc); }
-    .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .th svg { width: 20px; height: 20px; }
-
-    .pane { padding: 14px; display: flex; flex-direction: column; gap: 10px; position: sticky; top: 16px; }
-    .pane[hidden] { display: none; }
-    .shot { height: 240px; border-radius: 6px; background: var(--soft); display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; color: var(--acc); }
-    .shot img { width: 100%; height: 100%; object-fit: contain; }
-    .shot svg { width: 44px; height: 44px; }
-    .shot .bubble { width: 86%; max-height: 90%; overflow: hidden; padding: 10px 12px; background: var(--art); color: var(--ink); border-radius: 10px 10px 10px 3px; font-size: 13px; line-height: 1.5; box-shadow: 0 1px 4px rgba(40,20,50,.2); }
-    .shot .tag { position: absolute; right: 8px; bottom: 8px; padding: 1px 8px; border-radius: 999px; background: rgba(30,18,38,.75); color: #fff; font-size: 11px; font-weight: 700; }
-    .pane h2 { margin: 0; font-size: 17px; }
-    .pane .org { color: var(--mut); }
-    .pane dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; }
-    .pane dt { color: var(--mut); } .pane dd { margin: 0; font-weight: 500; }
-    .pane .notice { padding: 6px 10px; border-radius: 6px; background: var(--warn); color: var(--warn-ink); font-weight: 600; }
-    .pane .btn { width: 100%; }
     .empty { padding: 40px 16px; text-align: center; color: var(--mut); }
 {% endblock %}
 {% block content %}
-{% set keep = {'q': q or None, 'who': who or None, 'prio': prio or None} %}
-{% set active_filters = (1 if who else 0) + (1 if prio else 0) %}
+{% set keep = {'q': q or None, 'who': who or None, 'prio': prio or None, 'check': '1' if check else None, 'event': request.args.get('event') or None, 'per': request.args.get('per') or None} %}
+{% set active_filters = (1 if who else 0) + (1 if prio else 0) + (1 if check else 0) %}
 <div class="bar">
+  <div><h1>Leads</h1></div>
   <div class="grp">
-  <div class="seg">
-    <a href="{{ url_for('gallery', type='all', **keep) }}" class="{{ 'on' if tab == 'all' }}">All</a>
-    <a href="{{ url_for('gallery', type='forms', **keep) }}" class="{{ 'on' if tab == 'forms' }}">Contact forms</a>
-    <a href="{{ url_for('gallery', type='badges', **keep) }}" class="{{ 'on' if tab == 'badges' }}">Event badges</a>
-    <a href="{{ url_for('gallery', type='other', **keep) }}" class="{{ 'on' if tab == 'other' }}">Other documents</a>
+    <form class="evsel" method="get" action="{{ url_for('gallery') }}">
+      {% for k, v in request.args.items() if k not in ('event', 'page', 'type') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <label for="event">Event</label>
+      <select id="event" name="event" onchange="this.form.submit()">{% for e in events %}<option value="{{ e.id }}" {{ 'selected' if e.id == event_id }}>{{ e.name }}{{ ' (live)' if e.status == 'live' }}</option>{% endfor %}<option value="all" {{ 'selected' if not event_id }}>All events</option></select>
+    </form>
+    <form class="search" method="get" action="{{ url_for('gallery') }}">
+      {% for k, v in request.args.items() if k not in ('q', 'page') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+      <label for="q" style="position:absolute;left:-9999px">Search leads</label>
+      <input id="q" type="search" name="q" value="{{ q }}" placeholder="Search name, organisation, phone">
+    </form>
+  </div>
+</div>
+<div class="bar">
+  <div class="seg" role="group" aria-label="Document type">
+    {% for t in tabs %}<a href="{{ url_for('gallery', type=t.key if t.key != 'all' else None, **keep) }}" class="{{ 'on' if tab == t.key }}">{{ t.label }} · {{ t.count }}</a>{% endfor %}
   </div>
   <details class="filter">
-    <summary class="btn ghost">Filter{% if active_filters %} <span class="chip ok">{{ active_filters }}</span>{% endif %}</summary>
+    <summary class="btn ghost">Filters{% if active_filters %} · {{ active_filters }} active{% endif %}</summary>
     <form class="card" method="get" action="{{ url_for('gallery') }}">
-      <input type="hidden" name="type" value="{{ tab }}">
-      {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+      {% for k, v in request.args.items() if k in ('type', 'q', 'event', 'per') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
       <div><label class="f" for="fl-who">Captured by</label>
         <select class="t" id="fl-who" name="who"><option value="">Everyone</option><option value="team" {{ 'selected' if who == 'team' }}>Team</option><option value="visitors" {{ 'selected' if who == 'visitors' }}>Visitors</option></select></div>
       <div><label class="f" for="fl-prio">Priority</label>
-        <select class="t" id="fl-prio" name="prio"><option value="">Any priority</option>{% for p in priorities %}<option {{ 'selected' if prio == p }}>{{ p }}</option>{% endfor %}<option value="none" {{ 'selected' if prio == 'none' }}>Unclassified</option></select></div>
-      <div class="row"><button class="btn">Apply</button><a class="btn ghost" href="{{ url_for('gallery', type=tab, q=q or None) }}">Clear</a></div>
+        <select class="t" id="fl-prio" name="prio"><option value="">Any priority</option>{% for p in priorities %}<option {{ 'selected' if prio == p }}>{{ p }}</option>{% endfor %}<option value="none" {{ 'selected' if prio == 'none' }}>Not set</option></select></div>
+      <label class="needs"><input type="checkbox" name="check" value="1" {{ 'checked' if check }}>Only leads that need checking ({{ needs_check }})</label>
+      <div class="row"><button class="btn">Apply</button><a class="btn ghost" href="{{ url_for('gallery', type=tab if tab != 'all' else None, q=q or None, event=request.args.get('event') or None) }}">Clear</a></div>
     </form>
   </details>
-  </div>
-  <form class="search" method="get" action="{{ url_for('gallery') }}">
-    <input type="hidden" name="type" value="{{ tab }}">
-    {% if who %}<input type="hidden" name="who" value="{{ who }}">{% endif %}
-    {% if prio %}<input type="hidden" name="prio" value="{{ prio }}">{% endif %}
-    <label for="q" style="position:absolute;left:-9999px">Search leads</label>
-    <input id="q" name="q" value="{{ q }}" placeholder="Search name, school, phone">
-  </form>
 </div>
 
-{% if cards %}
+<section class="card">
+{% if pg.total %}
 {% set play = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>' %}
 {% set chat = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' %}
-<div class="split nopane" id="split">
-  <div class="card scroll">
-    <table>
-      <thead><tr><th scope="col">Photo</th><th scope="col">Name</th><th scope="col" class="hide-s">Phone</th><th scope="col" class="hide-s">Captured by</th><th scope="col">Time</th><th scope="col">Priority</th><th scope="col">Status</th></tr></thead>
-      <tbody id="rows">
-        {% for c in cards %}
-        <tr class="{{ 'chk' if c.review_reason }}" data-kind="{{ c.kind }}" data-img="{{ c.image_id or '' }}" data-photos="{{ c.photo_count }}" data-name="{{ c.name }}" data-org="{{ c.org }}" data-phone="{{ c.phone or 'Not captured' }}" data-by="{{ c.by }}" data-time="{{ c.created_at|local_time }}" data-prio="{{ c.priority or 'Unclassified' }}" data-note="{{ (c.note or '')|truncate(260) }}" data-check="{{ '1' if c.review_reason }}" data-href="{{ url_for('lead_detail', lead_id=c.id) }}">
-          <td><div class="th">{% if c.kind == 'image' %}<img src="/media/{{ c.image_id }}" alt="" loading="lazy">{% elif c.kind == 'audio' %}{{ play|safe }}{% else %}{{ chat|safe }}{% endif %}</div></td>
-          <td class="nm"><a href="{{ url_for('lead_detail', lead_id=c.id) }}">{{ c.name }}</a><small>{{ c.org }}</small></td>
-          <td class="hide-s">{{ c.phone or 'No phone' }}</td>
-          <td class="hide-s"><span class="by"><span class="av {{ '' if c.is_team else 'visitor' }}">{{ c.initials }}</span>{{ c.by }}</span></td>
-          <td>{{ c.created_at|local_time }}</td>
-          <td><span class="chip {{ c.priority|lower or 'none' }}">{{ c.priority or 'Unclassified' }}</span></td>
-          <td>
-            <div class="st">
-              {% if c.unscanned %}
-              <span class="chip amber">Not scanned</span>
-              {% elif c.review_reason %}
-              <span class="chip amber">Check</span>
-              <form method="post" action="{{ url_for('lead_resolve', lead_id=c.id) }}">
-                <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ request.full_path }}">
-                <button class="mini" title="Looks fine as it is: remove the Check badge">Mark as checked</button>
-              </form>
-              {% else %}<span class="chip ok">Saved</span>{% endif %}
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <aside class="card pane" id="pane" aria-live="polite" hidden>
-    <div class="shot" id="p-shot"></div>
-    <div><h2 id="p-name"></h2><div class="org" id="p-org"></div></div>
-    <div class="notice" id="p-check" hidden>Needs a quick check</div>
-    <dl><dt>Phone</dt><dd id="p-phone"></dd><dt>By</dt><dd id="p-by"></dd><dt>Time</dt><dd id="p-time"></dd><dt>Priority</dt><dd id="p-prio"></dd></dl>
-    <a class="btn" id="p-open" href="#">Open lead</a>
-  </aside>
-</div>
-<script>
-  // Click a row to preview its photo beside the table. Without JavaScript the rows are plain links to each lead.
-  (function () {
-    var rows = Array.prototype.slice.call(document.querySelectorAll('#rows tr'));
-    var pane = document.getElementById('pane'), shot = document.getElementById('p-shot');
-    var PLAY = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
-    function text(id, value) { document.getElementById(id).textContent = value; }
-    function select(row) {
-      rows.forEach(function (r) { r.classList.toggle('sel', r === row); });
-      var d = row.dataset;
-      shot.textContent = ''; shot.style.display = '';
-      if (d.kind === 'image') {
-        var img = document.createElement('img'); img.src = '/media/' + d.img; img.alt = 'Photo of the lead'; shot.appendChild(img);
-        if (+d.photos > 1) { var tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = d.photos + ' photos'; shot.appendChild(tag); }
-      } else if (d.kind === 'audio') {
-        shot.innerHTML = PLAY;
-        var t = document.createElement('span'); t.className = 'tag'; t.textContent = 'Voice note'; shot.appendChild(t);
-      } else if (d.note) {
-        var b = document.createElement('div'); b.className = 'bubble'; b.textContent = d.note; shot.appendChild(b);
-      } else {
-        shot.style.display = 'none';  // nothing was sent besides the number: no empty box, just the details below
-      }
-      text('p-name', d.name); text('p-org', d.org); text('p-phone', d.phone); text('p-by', d.by); text('p-time', d.time);
-      var prio = document.getElementById('p-prio'); prio.textContent = d.prio; prio.className = 'chip ' + (d.prio === 'Unclassified' ? 'none' : d.prio.toLowerCase()); prio.style.justifySelf = 'start';
-      document.getElementById('p-check').hidden = !d.check;
-      document.getElementById('p-open').href = d.href;
-    }
-    document.documentElement.classList.add('js');
-    document.getElementById('split').classList.remove('nopane');
-    pane.hidden = false;
-    rows.forEach(function (row) {
-      row.tabIndex = 0;
-      row.addEventListener('click', function (e) { if (!e.target.closest('a, button')) select(row); });
-      row.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === row) { e.preventDefault(); select(row); } });
-    });
-    select(rows[0]);
-  })();
-</script>
-{% else %}
-<div class="card empty">{{ {'forms': 'No contact forms yet.', 'badges': 'No event badges yet.'}.get(tab, 'Nothing here yet.') }}{% if q %} Try a different search.{% endif %}</div>
-{% endif %}
+<div class="scroll"><div class="grid">
+  <div class="hd"><span>Scan</span><span>Name</span><span>Event</span><span>Type</span><span>Priority</span><span>Captured by</span><span>Time</span></div>
+  {% for c in pg['items'] %}
+  <a class="lead {{ 'chk' if c.review_reason }}" href="{{ url_for('lead_detail', lead_id=c.id) }}">
+    <span class="th">{% if c.kind == 'image' %}<span class="ph"><img src="/media/{{ c.image_id }}" alt="" loading="lazy"></span>{% if c.photo_count > 1 %}<span class="ph">{{ c.photo_count }}</span>{% endif %}{% elif c.kind == 'audio' %}<span class="ph">{{ play|safe }}</span>{% else %}<span class="ph">{{ chat|safe }}</span>{% endif %}</span>
+    <span><b>{{ c.name }}</b><small>{{ c.org }}{{ ' · ' if c.org and c.phone }}{{ c.phone }}</small></span>
+    <span>{% if c.event.name %}<b style="font-weight:600">{{ c.event.name }}</b><small>{{ c.event.when }}</small>{% endif %}</span>
+    <span><span class="chip team">{{ c.type_label }}</span></span>
+    <span><span class="chip {{ c.priority|lower or 'none' }}">{{ c.priority or 'Not set' }}</span>{% if c.unscanned %}<br><span class="chip amber" style="margin-top:4px">Not scanned</span>{% elif c.review_reason %}<br><span class="chip amber" style="margin-top:4px">Check</span>{% endif %}</span>
+    <span class="by"><span class="av {{ '' if c.is_team else 'visitor' }}">{{ c.initials }}</span>{{ c.by }}</span>
+    <span style="color:var(--mut)">{{ c.created_at|local_time }}</span>
+  </a>
+  {% endfor %}
+</div></div>
+{% else %}<div class="empty">No leads match.</div>{% endif %}
+{% include "_pager.html" %}
+</section>
 {% endblock %}

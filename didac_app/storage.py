@@ -204,11 +204,15 @@ class LeadStore:
                 "SELECT phone, message_id FROM followups WHERE message_id IS NOT NULL AND status NOT IN ('delivered', 'read', 'delivery_failed', 'sending_failed') "
                 "ORDER BY sent_at LIMIT %s", (limit,)).fetchall()
 
-    def list_followups(self, limit: int = 50) -> list[dict]:
+    def list_followups(self, limit: int = 1000, event_id: int | None = None) -> list[dict]:
         with self.connect() as conn:
             return conn.execute(
-                "SELECT f.phone, f.lead_id, f.sent_at, f.status, f.reason, l.name, l.org FROM followups f LEFT JOIN leads l ON l.id = f.lead_id "
-                "WHERE NOT f.opted_out ORDER BY f.sent_at DESC LIMIT %s", (limit,)).fetchall()
+                "SELECT f.phone, f.lead_id, f.sent_at, f.status, f.reason, l.name, l.org, l.captured_by FROM followups f LEFT JOIN leads l ON l.id = f.lead_id "
+                "WHERE NOT f.opted_out AND (%s::bigint IS NULL OR l.event_id = %s) ORDER BY f.sent_at DESC LIMIT %s", (event_id, event_id, limit)).fetchall()
+
+    def opted_out_phones(self) -> set[str]:
+        with self.connect() as conn:
+            return {row["phone"] for row in conn.execute("SELECT phone FROM followups WHERE opted_out")}
 
     def opt_out(self, phone: str) -> None:
         with self.connect() as conn:
@@ -325,9 +329,16 @@ class LeadStore:
             return conn.execute("INSERT INTO event_photos (event_id, from_number, uploaded_by, key, content_type, url) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
                                 (event_id, from_number, uploaded_by, key, content_type, url)).fetchone()["id"]
 
-    def list_event_photos(self, event_id: int) -> list[dict]:
+    def list_event_photos(self, event_id: int | None = None) -> list[dict]:
+        """Newest first; every event when event_id is None."""
         with self.connect() as conn:
-            return conn.execute("SELECT * FROM event_photos WHERE event_id=%s ORDER BY id DESC", (event_id,)).fetchall()
+            if event_id is None:
+                return conn.execute("SELECT p.*, e.name AS event_name FROM event_photos p JOIN events e ON e.id = p.event_id ORDER BY p.id DESC").fetchall()
+            return conn.execute("SELECT p.*, e.name AS event_name FROM event_photos p JOIN events e ON e.id = p.event_id WHERE p.event_id=%s ORDER BY p.id DESC", (event_id,)).fetchall()
+
+    def get_event_photo(self, photo_id: int) -> dict | None:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM event_photos WHERE id=%s", (photo_id,)).fetchone()
 
     # ---- the reading service's health: paused after DOWN_AFTER failures in a row, back on the first success ------------------------
     def record_read_ok(self, ms: int = 0) -> None:

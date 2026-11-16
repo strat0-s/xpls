@@ -1,38 +1,79 @@
 {% extends "base.html" %}
 {% set active = 'followup' %}
-{% block title %}Follow-up · DIDAC Leads{% endblock %}
+{% block title %}Follow-up · Footfall{% endblock %}
 {% block css %}
     h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
-    .panel { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+    h2 { margin: 0; font-size: 16px; }
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; }
+    .panel { padding: 16px; display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-start; justify-content: space-between; }
     .hint { font-size: 13px; color: var(--mut); }
-    .scroll { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); padding: 8px 10px; background: var(--head); white-space: nowrap; }
-    td { padding: 7px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+    .tiles { display: flex; flex-wrap: wrap; gap: 12px; } .tile { flex: 1 1 150px; padding: 14px 16px; } .tile b { display: block; font-size: 24px; } .tile span { color: var(--mut); }
+    .scroll { overflow-x: auto; } .grid { min-width: 760px; }
+    .hd, .fr { display: grid; grid-template-columns: minmax(190px, 2fr) 140px minmax(130px, 1.2fr) 120px minmax(150px, 1.3fr); gap: 12px; align-items: center; padding: 10px 16px; }
+    .hd { background: var(--head); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); font-weight: 600; padding-top: 8px; padding-bottom: 8px; }
+    .fr { border-top: 1px solid var(--line); } .fr b { display: block; } .fr small { color: var(--mut); font-size: 12.5px; }
+    .evsel { display: flex; align-items: center; gap: 8px; color: var(--mut); font-weight: 600; margin: 0; } .evsel select { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--ink); font-weight: 600; }
+    .wa { background: #efeae2; border-radius: 10px; padding: 12px; flex: 1 1 320px; max-width: 460px; } .wa .cap { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #6f6279; font-weight: 600; margin-bottom: 6px; }
+    .wa .bubble { background: #fff; color: #2a2030; border-radius: 0 10px 10px 10px; padding: 10px 12px; line-height: 1.45; box-shadow: 0 1px 1px rgba(0,0,0,.12); }
 {% endblock %}
 {% block content %}
-<h1>WhatsApp follow-up</h1>
-<section class="card panel">
-  <div><b>{{ waiting }}</b> lead{{ '' if waiting == 1 else 's' }} with a mobile number waiting for the thank-you message. {{ [left, 0]|max }} of {{ cap }} left for the next 24 hours.</div>
-  {% if not ready %}<div class="flash">Not set up yet: add the approved template's id as BIRD_FOLLOWUP_TEMPLATE_ID.</div>{% endif %}
-  <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn" {{ '' if ready and waiting else 'disabled' }}>Send next batch</button></form>
-  <div class="hint">Each number gets one message, ever. Landlines, team members and anyone who replied STOP are skipped. Messages only go out 9:00 to 21:00 IST, up to 40 per click.</div>
-</section>
-{% if sent %}
-<section class="card panel">
-  <b>Sent messages</b>
-  <div class="scroll"><table>
-    <thead><tr><th scope="col">Lead</th><th scope="col">Number</th><th scope="col">Sent</th><th scope="col">Delivery</th></tr></thead>
-    <tbody>{% for row in sent %}<tr>
-      <td><a href="{{ url_for('lead_detail', lead_id=row.lead_id) }}">{{ row.name or row.org or ('Lead #' ~ row.lead_id) }}</a></td>
-      <td>{{ row.phone }}</td>
-      <td>{{ row.sent_at.astimezone(tz).strftime('%d %b, %H:%M') }}</td>
-      <td>{% if row.status in ('delivered', 'read') %}<span class="chip ok">{{ row.status|capitalize }}</span>
-        {% elif row.status in ('delivery_failed', 'sending_failed') %}<span class="chip off">Failed</span><div class="hint">{{ row.reason or 'WhatsApp did not deliver it.' }}</div>
-        {% else %}<span class="chip amber">{{ (row.status or 'sent')|replace('_', ' ')|capitalize }}</span>{% endif %}</td>
-    </tr>{% endfor %}</tbody>
-  </table></div>
-  <div class="hint">WhatsApp may refuse a message after accepting it, for example to someone who has never messaged us. Reload the page to update.</div>
-</section>
-{% endif %}
+<div class="stack">
+  <div class="bar">
+    <div><h1>WhatsApp follow-up</h1><div class="hint">The thank-you message. Below is who gets it, who is skipped and why, and what has already gone out.</div></div>
+    <form class="evsel" method="get" action="{{ url_for('followup_page') }}"><label for="event">Event</label>
+      <select id="event" name="event" onchange="this.form.submit()">{% for e in events %}<option value="{{ e.id }}" {{ 'selected' if e.id == event_id }}>{{ e.name }}{{ ' (live)' if e.status == 'live' }}</option>{% endfor %}<option value="all" {{ 'selected' if not event_id }}>All events</option></select></form>
+  </div>
+  <div class="tiles">
+    <div class="card tile"><b>{{ w.total }}</b><span>waiting for the message</span></div>
+    <div class="card tile"><b>{{ total_sent }}</b><span>already sent</span></div>
+    <div class="card tile"><b>{{ s.total }}</b><span>skipped, with reasons</span></div>
+    <div class="card tile"><b>{{ left }} of {{ cap }}</b><span>left in the next 24 hours</span></div>
+  </div>
+  <section class="card panel">
+    <div style="flex:1 1 360px;display:flex;flex-direction:column;gap:10px">
+      <div><h2>Next batch: {{ batch }} {{ 'person' if batch == 1 else 'people' }}</h2><div class="hint">Messages only go out 9:00 to 21:00 IST. Each number gets one message, ever, across all events. Landlines, team members and anyone who replied STOP are skipped.</div></div>
+      {% if not ready %}<div class="flash">Not set up yet: add the approved template's id as BIRD_FOLLOWUP_TEMPLATE_ID.</div>{% endif %}
+      <form method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn" {{ '' if ready and w.total else 'disabled' }}>Send next batch of {{ batch }}</button></form>
+    </div>
+    <div class="wa"><div class="cap">What they will see</div><div class="bubble">{{ message.replace('[name]', 'Meera').replace('[event]', (events|selectattr('id', 'equalto', event_id)|map(attribute='name')|first) or 'the event') }}</div>
+      <a href="{{ url_for('admin_messages') }}" style="display:inline-block;margin-top:8px">Edit message in Messages</a></div>
+  </section>
+
+  <section class="card">
+    <div style="padding:14px 16px"><h2>Will be sent · {{ w.total }}</h2><div class="hint">The first {{ batch }} go in the next batch.</div></div>
+    <div class="scroll"><div class="grid">
+      <div class="hd"><span>Lead</span><span>Number</span><span>Captured by</span><span>Time</span><span>Goes out</span></div>
+      {% for r in w['items'] %}<a class="fr" href="{{ url_for('lead_detail', lead_id=r.lead.id) }}" style="color:inherit;text-decoration:none;font-weight:400">
+        <span><b>{{ r.lead.name or r.lead.org or ('Lead #' ~ r.lead.id) }}</b><small>{{ r.lead.org }}</small></span><span>{{ r.phone }}</span><span>{{ r.lead.captured_by }}</span><span>{{ r.lead.created_at|local_time }}</span>
+        <span><span class="chip {{ 'team' if r.next else 'none' }}">{{ 'Next batch' if r.next else 'Later batch' }}</span></span></a>{% endfor %}
+    </div></div>
+    {% with pg = w, key = 'wpage', nosize = true %}{% include "_pager.html" %}{% endwith %}
+  </section>
+
+  <section class="card">
+    <div style="padding:14px 16px"><h2>Skipped · {{ s.total }}</h2><div class="hint">Never sent a message, and why.</div></div>
+    <div class="scroll"><div class="grid">
+      <div class="hd"><span>Lead</span><span>Number</span><span>Captured by</span><span>Time</span><span>Reason</span></div>
+      {% for r in s['items'] %}<a class="fr" href="{{ url_for('lead_detail', lead_id=r.lead.id) }}" style="color:inherit;text-decoration:none;font-weight:400">
+        <span><b>{{ r.lead.name or r.lead.org or ('Lead #' ~ r.lead.id) }}</b><small>{{ r.lead.org }}</small></span><span>{{ r.phone or '—' }}</span><span>{{ r.lead.captured_by }}</span><span>{{ r.lead.created_at|local_time }}</span>
+        <span><span class="chip none">{{ r.why }}</span></span></a>{% endfor %}
+    </div></div>
+    {% with pg = s, key = 'spage', nosize = true %}{% include "_pager.html" %}{% endwith %}
+  </section>
+
+  <section class="card">
+    <div style="padding:14px 16px"><h2>Sent · {{ total_sent }}</h2><div class="hint">WhatsApp may refuse a message after accepting it, for example to someone who has never messaged us. Reload the page to update.</div></div>
+    <div class="scroll"><div class="grid">
+      <div class="hd"><span>Lead</span><span>Number</span><span>Captured by</span><span>Sent</span><span>Delivery</span></div>
+      {% for row in d['items'] %}<div class="fr">
+        <span><b>{% if row.lead_id %}<a href="{{ url_for('lead_detail', lead_id=row.lead_id) }}">{{ row.name or row.org or ('Lead #' ~ row.lead_id) }}</a>{% else %}{{ row.phone }}{% endif %}</b><small>{{ row.org or '' }}</small></span><span>{{ row.phone }}</span><span>{{ row.captured_by or '' }}</span>
+        <span>{{ row.sent_at.astimezone(tz).strftime('%d %b, %H:%M') }}</span>
+        <span>{% if row.status in ('delivered', 'read') %}<span class="chip ok">{{ row.status|capitalize }}</span>
+          {% elif row.status in ('delivery_failed', 'sending_failed') %}<span class="chip off">Failed</span><div class="hint">{{ row.reason or 'WhatsApp did not deliver it.' }}</div>
+          {% else %}<span class="chip amber">{{ (row.status or 'sent')|replace('_', ' ')|capitalize }}</span>{% endif %}</span></div>{% endfor %}
+    </div></div>
+    {% with pg = d, key = 'dpage', nosize = true %}{% include "_pager.html" %}{% endwith %}
+  </section>
+</div>
 {% endblock %}

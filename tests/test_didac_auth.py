@@ -169,18 +169,18 @@ def test_gallery_splits_forms_from_other_documents(store):
     store.create_lead(Lead(name="Form Person", doc_type="form", phone="+919800000010"))
     store.create_lead(Lead(name="Card Person", phone="+919800000011"))
     client = app.test_client()
-    forms = client.get("/?type=forms").data.decode()
-    other = client.get("/?type=other").data.decode()
+    forms = client.get("/?type=form").data.decode()
+    other = client.get("/?type=_none").data.decode()
     assert "Form Person" in forms and "Card Person" not in forms
     assert "Card Person" in other and "Form Person" not in other
-    assert "Card Person" in client.get("/?type=other&q=person").data.decode()
-    assert "Card Person" not in client.get("/?type=other&q=zzz").data.decode()
+    assert "Card Person" in client.get("/?type=_none&q=person").data.decode()
+    assert "Card Person" not in client.get("/?type=_none&q=zzz").data.decode()
 
 
 def test_visitor_and_team_leads_are_labelled(store, admin):
     store.create_lead(Lead(name="Visitor Lead", from_number="whatsapp:+919811111112"))
     store.create_lead(Lead(name="Team Lead", from_number="whatsapp:" + admin["phone"]))
-    html = app.test_client().get("/?type=other").data.decode()
+    html = app.test_client().get("/").data.decode()
     assert "Visitor via WhatsApp" in html
     assert "Test Admin" in html
 
@@ -256,11 +256,11 @@ def test_dashboard_edit_reaches_the_orbit_row(store):
 def test_mark_as_checked_clears_the_badge_without_touching_fields(store):
     lead = store.create_lead(Lead(name="Keep Me", review_reason="district unclear", phone="+919800000014"))
     client = app.test_client()
-    html = client.get("/?type=other").data.decode()
-    assert "Mark as checked" in html and "district unclear" not in html  # the card only says Check
+    html = client.get("/").data.decode()
+    assert ">Check<" in html and "district unclear" not in html  # the list row only says Check
     assert "<li>district unclear</li>" in client.get(f"/leads/{lead.id}").data.decode()
-    response = client.post(f"/leads/{lead.id}/resolve", data={"next": "/?type=other", "csrf": csrf(client)})
-    assert response.status_code == 302 and response.headers["Location"] == "/?type=other"
+    response = client.post(f"/leads/{lead.id}/resolve", data={"next": "/?type=_none", "csrf": csrf(client)})
+    assert response.status_code == 302 and response.headers["Location"] == "/?type=_none"
     saved = store.get_lead(lead.id)
     assert (saved.name, saved.review_reason, saved.updated_by) == ("Keep Me", "", "Test Admin")
     assert client.post(f"/leads/{lead.id}/resolve", data={"next": "//evil.example", "csrf": csrf(client)}).headers["Location"] == "/"

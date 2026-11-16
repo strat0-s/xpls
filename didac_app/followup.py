@@ -9,6 +9,7 @@ import phonenumbers
 from didac_app import bird
 from didac_app.auth import normalize_phone
 from didac_app.config import DidacConfig
+from didac_app.models import NOT_SCANNED
 from didac_app.storage import LeadStore
 
 IST = ZoneInfo("Asia/Kolkata")
@@ -30,6 +31,39 @@ def eligible(store: LeadStore) -> list[tuple[str, int]]:
         if phone and phone not in skip and phone not in out and is_mobile(phone):
             out[phone] = lead.id
     return list(out.items())
+
+
+def overview(store: LeadStore, config: DidacConfig, event_id: int | None = None) -> tuple[list[dict], list[dict]]:
+    """(waiting, skipped) for the leads of one event (every event when None). Waiting rows say whether they are in the next batch; skipped rows say why."""
+    pairs = eligible(store)
+    batch = {lead_id for _, lead_id in pairs[:max(0, min(BATCH, config.followup_daily_cap - store.followups_last_day()))]}
+    leads = {lead.id: lead for lead in (store.list_leads("event_id = %s", (event_id,)) if event_id else store.list_leads())}
+    waiting_ids = {lead_id for _, lead_id in pairs}
+    waiting = [{"lead": leads[lead_id], "phone": phone, "next": lead_id in batch} for phone, lead_id in pairs if lead_id in leads]
+    messaged, opted = store.followup_phones(), store.opted_out_phones()
+    team = {normalize_phone(user["phone"]) for user in store.list_users() if user["phone"]}
+    skipped, seen = [], set()
+    for lead in leads.values():
+        phone = normalize_phone(lead.phone)
+        if lead.id in waiting_ids or (phone and phone in messaged and phone not in opted and phone not in team):
+            continue  # waiting, or already messaged (it is in the Sent list)
+        if lead.review_reason == NOT_SCANNED:
+            why = "Not scanned"
+        elif not phone:
+            why = "No phone number"
+        elif phone in team:
+            why = "Team member"
+        elif phone in opted:
+            why = "Replied STOP"
+        elif not is_mobile(phone):
+            why = "Landline"
+        elif phone in seen:
+            continue  # the same number on another lead
+        else:
+            why = "Same number as another lead"
+        seen.add(phone)
+        skipped.append({"lead": lead, "phone": lead.phone, "why": why})
+    return waiting, skipped
 
 
 def blocked(store: LeadStore, config: DidacConfig, now: datetime | None) -> str:

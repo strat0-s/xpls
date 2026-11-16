@@ -9,8 +9,8 @@ def test_dashboard_routes_load():
     assert home.status_code == 200
     assert dashboard.status_code == 200
     html = dashboard.data.decode()
-    assert "Contact forms" in html
-    assert "Other documents" in html
+    assert "Contact form" in html
+    assert "Visiting card" in html
     assert client.get("/brochures").status_code == 200
     assert client.get("/media-library").status_code == 200
     assert client.get("/api/leads").status_code == 200

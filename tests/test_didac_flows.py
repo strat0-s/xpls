@@ -174,7 +174,7 @@ def test_visitor_leads_start_unclassified_and_staff_tag_them(store, sent):
     lead = store.list_leads()[0]
     assert lead.priority == ""
     client = app.test_client()
-    assert "Unclassified" in client.get("/dashboard").data.decode()
+    assert "Not set" in client.get("/dashboard").data.decode()
     from conftest import csrf
     client.post(f"/leads/{lead.id}", data={"csrf": csrf(client), "name": "Asha", "priority": "High", "doc_type": "other"})
     assert store.get_lead(lead.id).priority == "High" and 'chip high">High' in client.get("/dashboard").data.decode()
@@ -187,7 +187,7 @@ def test_all_tab_is_the_default_and_lists_every_type(store, sent):
     client = app.test_client()
     page = client.get("/dashboard").data.decode()
     assert all(name in page for name in ("A Form", "A Badge", "A Card"))
-    assert "A Card" not in client.get("/dashboard?type=forms").data.decode()
+    assert "A Card" not in client.get("/dashboard?type=form").data.decode()
 
 
 def test_repeat_scan_merges_and_name_org_match_is_flagged(store, sent, fake_io):
@@ -377,7 +377,7 @@ def test_event_badge_is_its_own_type_and_flags_a_missing_qr(store, sent, fake_io
     lead = store.list_leads()[0]
     assert lead.doc_type == "badge" and lead.qr_page_text == "EXB0987"
     assert "Send the next event badge / QR" in last(sent)[0]
-    assert "Event badges" in app.test_client().get("/dashboard?type=badges").data.decode()
+    assert "Event badge / QR · 1" in app.test_client().get("/dashboard?type=badge").data.decode()
 
 
 def test_badge_without_a_decodable_qr_gets_a_check(monkeypatch):
@@ -472,7 +472,7 @@ def test_one_filter_controls_who_and_priority(store, sent):
         return {n for n in ("Hot Lead", "Cold Visitor", "Open Visitor") if n in page}
 
     page = client.get("/dashboard").data.decode()
-    assert 'data-prio="High"' in page and 'data-prio="Unclassified"' in page and 'id="p-prio"' in page
+    assert 'chip high">High' in page and ">Not set<" in page
     assert names("") == {"Hot Lead", "Cold Visitor", "Open Visitor"}
     assert names("prio=High") == {"Hot Lead"}
     assert names("prio=none") == {"Open Visitor"}

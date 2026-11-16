@@ -1,0 +1,20 @@
+{# Page controls under a long list. Needs `pg` (from pager.paginate); `key` names the page parameter when a page has several lists. #}
+{% set key = key or 'page' %}
+<div class="pager" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--line);background:var(--head)">
+  <span class="hint" style="color:var(--mut)">{% if pg.total %}Showing {{ pg.first }}–{{ pg.last }} of {{ pg.total }}{% else %}Nothing to show{% endif %}</span>
+  {% if pg.pages > 1 %}
+  <nav aria-label="Pages" style="display:flex;gap:6px;flex-wrap:wrap">
+    {% if pg.page > 1 %}<a class="pgb" href="{{ page_url(pg.page - 1, key) }}">Prev</a>{% endif %}
+    {% for n in pg.numbers %}{% if n is none %}<span style="align-self:center;color:var(--mut);padding:0 4px">…</span>{% else %}<a class="pgb {{ 'on' if n == pg.page }}" href="{{ page_url(n, key) }}" {{ 'aria-current=page' if n == pg.page }}>{{ n }}</a>{% endif %}{% endfor %}
+    {% if pg.page < pg.pages %}<a class="pgb" href="{{ page_url(pg.page + 1, key) }}">Next</a>{% endif %}
+  </nav>
+  {% endif %}
+  {% if not nosize %}
+  <form method="get" style="display:flex;align-items:center;gap:8px;margin:0;color:var(--mut)">
+    {% for k, v in request.args.items() if k not in ('per', key) %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+    <label for="per-{{ key }}">Rows per page</label>
+    <select id="per-{{ key }}" name="per" onchange="this.form.submit()" style="height:34px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surf)">{% for n in (25, 50, 100) %}<option {{ 'selected' if n == pg.per }}>{{ n }}</option>{% endfor %}</select>
+  </form>
+  {% endif %}
+</div>
+<style>.pgb{min-width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:6px;background:var(--surf);color:var(--ink);text-decoration:none;font-weight:600;padding:0 8px}.pgb.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}</style>

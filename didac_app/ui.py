@@ -9,6 +9,9 @@ from flask import Response, abort, flash, g, jsonify, redirect, render_template,
 
 from didac_app import auth, flows, followup, orbit
 from didac_app.models import NOT_SCANNED
+from didac_app import blobstore
+from didac_app.admin import DEFAULT_FOLLOWUP, FOLLOWUP_KEY
+from didac_app.pager import paginate
 
 IST = ZoneInfo("Asia/Kolkata")
 OPEN_PATHS = {"/health", "/bird/webhook"}
@@ -58,6 +61,11 @@ def register(app, get_store, get_config) -> None:
         return {"user": g.get("user"), "csrf_token": csrf_token, "reader": get_store().reader_status() if g.get("user") else None,  # drives the reading-problem banner
                 "live_event": get_store().live_event() if g.get("user") else None}  # shown at the top of the sidebar
 
+    @app.template_global()
+    def page_url(number: int, key: str = "page") -> str:
+        """This page's address with another page number, keeping every filter."""
+        return url_for(request.endpoint, **{**request.args.to_dict(), **(request.view_args or {}), key: number})
+
     @app.template_filter("local_time")
     def local_time(value: str) -> str:
         try:
@@ -98,24 +106,52 @@ def register(app, get_store, get_config) -> None:
     @app.get("/")
     def gallery():
         store = get_store()
-        leads = store.list_leads()
+        events = {e["id"]: e for e in store.list_events()}
+        event_id = chosen_event_id(store, events)
+        leads = store.list_leads("event_id = %s", (event_id,)) if event_id else store.list_leads()
         members = members_by_phone(store)
         media = {}
         for row in store.list_media():
             media.setdefault(row["lead_id"], []).append(row)
-        cards = [lead_card(lead, media.get(lead.id, []), members) for lead in leads]
-        tab = request.args.get("type")
+        labels = {}
+        for e in events.values():
+            for t in store.list_doc_types(e["id"]):
+                labels.setdefault((e["id"], t["key"]), t["label"])
+        cards = []
+        for lead in leads:
+            card = lead_card(lead, media.get(lead.id, []), members)
+            card["type"] = lead.doc_type or "_none"
+            card["type_label"] = labels.get((lead.event_id, lead.doc_type)) or ({"form": "Contact form", "badge": "Event badge / QR"}.get(lead.doc_type) if lead.doc_type else "No scan") or lead.doc_type
+            card["event"] = event_line(events.get(lead.event_id), lead)
+            cards.append(card)
         who = request.args.get("who") if request.args.get("who") in ("team", "visitors") else ""
+        prio = request.args.get("prio") if request.args.get("prio") in (*PRIORITIES, "none") else ""
+        check = request.args.get("check") == "1"
+        query = request.args.get("q", "").strip().lower()
         if who:
             cards = [card for card in cards if card["is_team"] == (who == "team")]
-        prio = request.args.get("prio") if request.args.get("prio") in (*PRIORITIES, "none") else ""
         if prio:
             cards = [card for card in cards if card["priority"] == ("" if prio == "none" else prio)]
-        if tab not in ("forms", "badges", "other"):
-            tab = "all"
-        query = request.args.get("q", "").strip().lower()
-        shown = [card for card in cards if tab in ("all", card["tab"]) and (not query or query in card["search"])]
-        return render_template("gallery.html", cards=shown, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, priorities=PRIORITIES)
+        if check:
+            cards = [card for card in cards if card["review_reason"]]
+        if query:
+            cards = [card for card in cards if query in card["search"]]
+        counts = {}
+        for card in cards:
+            counts[card["type"]] = counts.get(card["type"], 0) + 1
+        tabs = [{"key": "all", "label": "All", "count": len(cards)}]
+        if event_id:
+            tabs += [{"key": t["key"], "label": t["label"], "count": counts.get(t["key"], 0)} for t in store.list_doc_types(event_id) if t["active"] or counts.get(t["key"])]
+        known = {tab["key"] for tab in tabs}
+        for key, count in counts.items():  # types of other events, old leads, and leads with no scan
+            if key not in known:
+                tabs.append({"key": key, "label": "No scan" if key == "_none" else next((c["type_label"] for c in cards if c["type"] == key), key), "count": count})
+        tab = request.args.get("type") if request.args.get("type") in {t["key"] for t in tabs} else "all"
+        if tab != "all":
+            cards = [card for card in cards if card["type"] == tab]
+        page = paginate(cards, request.args.get("page", 1, type=int), request.args.get("per", 25, type=int))
+        return render_template("gallery.html", pg=page, tabs=tabs, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, check=check, priorities=PRIORITIES,
+                               events=list(events.values()), event_id=event_id, needs_check=sum(1 for lead in leads if lead.review_reason))
 
     @app.route("/leads/<int:lead_id>", methods=["GET", "POST"])
     def lead_detail(lead_id: int):
@@ -234,8 +270,15 @@ def register(app, get_store, get_config) -> None:
         rows = [orbit.orbit_row(lead) for lead in leads]
         warnings = orbit.export_warnings(rows)
         query = {key: value for key, value in request.args.items() if value and key in EXPORT_FILTERS}
+        store = get_store()
+        events = store.list_events()
+        doc_types = {}
+        for e in events:
+            for t in store.list_doc_types(e["id"]):
+                doc_types.setdefault(t["key"], t["label"])
         return render_template(
-            "export.html", rows=rows, people=people, warnings=warnings, org_types=orbit.ORG_TYPES, query=query,
+            "export.html", rows=rows, pg=paginate(rows, request.args.get("page", 1, type=int), request.args.get("per", 25, type=int)), events=events,
+            event_id=chosen_event_id(store, {e["id"]: e for e in events}), doc_types=doc_types, people=people, warnings=warnings, org_types=orbit.ORG_TYPES, query=query,
             orgs=orbit.org_count(rows), max_orgs=orbit.MAX_ORGS, args=request.args,
         )
 
@@ -247,8 +290,27 @@ def register(app, get_store, get_config) -> None:
             flash(followup.send_batch(store, config))
             return redirect(url_for("followup_page"))
         followup.refresh_statuses(store, config)
-        return render_template("followup.html", sent=store.list_followups(), tz=IST, waiting=len(followup.eligible(store)), left=config.followup_daily_cap - store.followups_last_day(),
-                               cap=config.followup_daily_cap, ready=bool(config.followup_template_id))
+        events = store.list_events()
+        event_id = chosen_event_id(store, {e["id"]: e for e in events})
+        waiting, skipped = followup.overview(store, config, event_id)
+        sent = store.list_followups(event_id=event_id)
+        left = max(0, config.followup_daily_cap - store.followups_last_day())
+        return render_template("followup.html", tz=IST, events=events, event_id=event_id, left=left, cap=config.followup_daily_cap, ready=bool(config.followup_template_id),
+                               batch=min(followup.BATCH, left, len(waiting)), message=store.get_setting(FOLLOWUP_KEY, DEFAULT_FOLLOWUP),
+                               w=paginate(waiting, request.args.get("wpage", 1, type=int), 25), s=paginate(skipped, request.args.get("spage", 1, type=int), 25),
+                               d=paginate(sent, request.args.get("dpage", 1, type=int), 25), total_sent=len(sent))
+
+    @app.get("/photos")
+    def photos():
+        store = get_store()
+        events = store.list_events()
+        event_id = chosen_event_id(store, {e["id"]: e for e in events})
+        return render_template("photos.html", events=events, event_id=event_id, pg=paginate(store.list_event_photos(event_id), request.args.get("page", 1, type=int), request.args.get("per", 25, type=int)), tz=IST)
+
+    @app.get("/event-photo/<int:photo_id>")
+    def event_photo(photo_id: int):
+        row = get_store().get_event_photo(photo_id) or abort(404)
+        return redirect(blobstore.signed_url(get_config(), row["key"]))
 
     @app.get("/export/orbit.<fmt>")
     def export_orbit(fmt: str):
@@ -284,7 +346,7 @@ def register(app, get_store, get_config) -> None:
         return redirect(url_for("team"))
 
 
-EXPORT_FILTERS = ("from", "to", "by", "type")
+EXPORT_FILTERS = ("from", "to", "by", "type", "event", "doc")
 
 
 def export_selection(store, args) -> tuple[list[dict], list[str]]:
@@ -296,19 +358,42 @@ def export_leads(store, args) -> tuple[list, list[str]]:
     """Leads matching the export filters (capture date in IST, who captured it, organisation type)
     and the capture names to offer in the filter."""
     start, end = parse_day(args.get("from")), parse_day(args.get("to"))
-    by, kind = args.get("by", ""), args.get("type", "")
+    by, kind, doc = args.get("by", ""), args.get("type", ""), args.get("doc", "")
     members = members_by_phone(store)
     leads, people = [], set()
-    for lead in store.list_leads():
+    event_id = chosen_event_id(store, {e["id"]: e for e in store.list_events()}, args)
+    for lead in (store.list_leads("event_id = %s", (event_id,)) if event_id else store.list_leads()):
         name = author(lead, members)[0]
         people.add(name)
         day = created_day(lead)
         if day and ((start and day < start) or (end and day > end)):
             continue
-        if (by and name != by) or (kind and orbit.lead_org_type(lead) != kind) or lead.review_reason == NOT_SCANNED:  # a lead nobody has read yet is left out
+        if (by and name != by) or (kind and orbit.lead_org_type(lead) != kind) or (doc and lead.doc_type != doc) or lead.review_reason == NOT_SCANNED:  # a lead nobody has read yet is left out
             continue
         leads.append(lead)
     return leads, sorted(people)
+
+
+def chosen_event_id(store, events: dict, args=None) -> int | None:
+    """The event a list is about: ?event=<id>, ?event=all (None), or by default the live one."""
+    wanted = (args if args is not None else request.args).get("event", "")
+    if wanted == "all":
+        return None
+    if wanted.isdigit() and int(wanted) in events:
+        return int(wanted)
+    live = store.live_event()
+    return live["id"] if live else None
+
+
+def event_line(event: dict | None, lead) -> dict:
+    """{name, when}: the event a lead belongs to and, when the event has dates, which day of it the lead was captured."""
+    if not event:
+        return {"name": "", "when": ""}
+    day = created_day(lead)
+    start, end = event["starts_on"], event["ends_on"]
+    span = f"{start.strftime('%d')}–{end.strftime('%d %b %Y')}" if start and end and start.month == end.month else " – ".join(d.strftime("%d %b %Y") for d in (start, end) if d)
+    number = f"Day {(day - start).days + 1} · " if day and start and day >= start else ""
+    return {"name": event["name"], "when": number + span}
 
 
 def parse_day(value: str | None) -> date | None:

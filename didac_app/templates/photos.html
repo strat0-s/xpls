@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% set active = 'photos' %}
+{% block title %}Event photos · Footfall{% endblock %}
+{% block css %}
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+    .evsel { display: flex; align-items: center; gap: 8px; color: var(--mut); font-weight: 600; margin: 0; } .evsel select { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--ink); font-weight: 600; }
+    .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; padding: 16px; }
+    .tile { text-decoration: none; color: inherit; font-weight: 400; display: block; } .tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; background: var(--soft); }
+    .tile small { color: var(--mut); display: block; margin-top: 4px; font-size: 12.5px; }
+    .empty { padding: 40px 16px; text-align: center; color: var(--mut); }
+{% endblock %}
+{% block content %}
+<div class="bar"><div><h1>Event photos</h1><div style="color:var(--mut)">Photos the team sent with Send event photos. They are stored, never read.</div></div>
+  <form class="evsel" method="get" action="{{ url_for('photos') }}"><label for="event">Event</label>
+    <select id="event" name="event" onchange="this.form.submit()">{% for e in events %}<option value="{{ e.id }}" {{ 'selected' if e.id == event_id }}>{{ e.name }}{{ ' (live)' if e.status == 'live' }}</option>{% endfor %}<option value="all" {{ 'selected' if not event_id }}>All events</option></select></form></div>
+<section class="card">
+  {% if pg.total %}<div class="tiles">{% for p in pg['items'] %}
+    <a class="tile" href="{{ url_for('event_photo', photo_id=p.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('event_photo', photo_id=p.id) }}" alt="Event photo {{ p.id }}" loading="lazy"><small>{{ p.uploaded_by or 'Team' }} · {{ p.created_at.astimezone(tz).strftime('%d %b, %H:%M') }}{{ ' · ' ~ p.event_name if not event_id }}</small></a>{% endfor %}</div>
+  {% else %}<div class="empty">No event photos yet.</div>{% endif %}
+  {% include "_pager.html" %}
+</section>
+{% endblock %}

@@ -70,7 +70,7 @@ def test_followup_page_is_admin_only_and_sends(store, templates, monkeypatch, an
     lead(store, "98450 11111")
     client = app.test_client()
     page = client.get("/followup")
-    assert page.status_code == 200 and b"1</b> lead" in page.data
+    assert page.status_code == 200 and b"<b>1</b><span>waiting" in page.data
     assert client.post("/followup", data={"csrf": csrf(client)}).status_code == 302
     assert templates == ["+919845011111"]
     assert anon_client.get("/followup").status_code == 302
