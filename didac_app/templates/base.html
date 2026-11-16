@@ -74,7 +74,7 @@
 
     /* Sidebar layout: plum column on the left, the page on the right. On a phone the column sits on top. */
     .shell { display: flex; flex-wrap: wrap; min-height: 100vh; }
-    .side { flex: 0 0 244px; background: var(--bar); color: #fff; display: flex; flex-direction: column; gap: 18px; padding: 18px 12px; }
+    .side { flex: 0 0 244px; background: var(--bar); color: #fff; display: flex; flex-direction: column; gap: 18px; padding: 18px 12px; position: sticky; top: 0; height: 100vh; align-self: flex-start; overflow-y: auto; }
     .shell > main.page { flex: 999 1 640px; min-width: 0; max-width: none; margin: 0; }
     .side .brand { display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 17px; }
     .side .evbox { margin: 0 2px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.3); display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 400; }
@@ -90,7 +90,7 @@
     .side .me .dot { width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,.22); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
     .side .me .who { flex: 1; min-width: 0; } .side .me .who b { display: block; } .side .me .who small { color: #f6eef8; }
     .side .me form { margin: 0; } .side .me .out { background: none; border: 0; padding: 4px 6px; color: #fff; opacity: .8; cursor: pointer; border-radius: 6px; } .side .me .out:hover { opacity: 1; text-decoration: underline; }
-    @media (max-width: 860px) { .side { flex-basis: 100%; } }
+    @media (max-width: 860px) { .side { flex-basis: 100%; position: static; height: auto; } }  /* on a phone the column is a normal block on top */
     @media (max-width: 860px) { header.top { padding: 10px 16px; } main.page { padding: 16px; } }
     {% block css %}{% endblock %}
   </style>
