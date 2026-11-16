@@ -237,7 +237,7 @@ def test_idle_session_times_out(store, sent):
     say(STAFF, "Other docs")
     say(STAFF, "", photo("p"))
     with store.connect() as conn:
-        conn.execute("UPDATE sessions SET updated_at = now() - interval '31 minutes'")
+        conn.execute("UPDATE sessions SET updated_at = now() - interval '25 hours'")
     say(STAFF, "DONE")
     assert last(sent)[0] == "That scan timed out and was not saved. Type menu to start again."
     assert store.get_session(STAFF) is None

@@ -28,7 +28,7 @@ from didac_app.storage import LeadStore
 logger = logging.getLogger(__name__)
 timing = logging.getLogger("didac.timing")  # same logger the webhook uses, so these lines show up in the Vercel logs too
 
-SESSION_MINUTES = 30
+SESSION_MINUTES = 24 * 60  # matches the WhatsApp 24-hour reply window
 MAX_PHOTOS = 10
 MAX_PER_PHOTO = 2  # documents laid side by side in one photo; photos sent one by one are not limited by this
 NOTE_WINDOW_MINUTES = 30
