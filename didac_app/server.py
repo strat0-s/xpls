@@ -10,7 +10,7 @@ from pathlib import Path
 from flask import Flask, jsonify, redirect, render_template_string, request, send_file
 
 from didac_app import auth, bird, blobstore, flows, followup, ui
-from didac_app.config import brochure_catalog, load_config
+from didac_app.config import load_config
 from didac_app.flows import Reply
 from didac_app.replies import command_reply
 from didac_app.storage import LeadStore
@@ -55,14 +55,21 @@ def api_inbound():
     return jsonify([dict(row) for row in store.list_inbound_events()])
 
 
+def visitor_brochures() -> dict[str, dict[str, str]]:
+    """The brochures visitors may see in the live event, numbered from 1."""
+    event = store.live_event()
+    rows = store.list_brochures(event["id"], "visitors") if event else []
+    return {str(number): {"key": row["key"], "name": row["name"], "url": row["url"]} for number, row in enumerate(rows, 1)}
+
+
 @app.get("/brochures")
 def brochures():
-    return render_template_string(BROCHURES_HTML, brochures=brochure_catalog(config))
+    return render_template_string(BROCHURES_HTML, brochures=visitor_brochures())
 
 
 @app.get("/brochure/<product_key>")
 def brochure_download(product_key: str):
-    for item in brochure_catalog(config).values():
+    for item in visitor_brochures().values():
         if item["key"] == product_key:
             if item["url"]:
                 return {"name": item["name"], "download_url": item["url"]}

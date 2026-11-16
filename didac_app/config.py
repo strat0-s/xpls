@@ -40,15 +40,12 @@ def load_config() -> DidacConfig:
     return DidacConfig()
 
 
-def brochure_catalog(config: DidacConfig) -> Dict[str, dict[str, str]]:
-    return {
-        "1": {"key": "sia", "name": "SIA", "url": config.sia_brochure_url or config.brochure_url},
-        "2": {"key": "tiqer", "name": "TiQer", "url": config.tiqer_brochure_url},
-        "3": {"key": "play_lab", "name": "Play Lab", "url": config.play_lab_brochure_url},
-        "4": {"key": "stream", "name": "STREAM", "url": config.stream_brochure_url},
-        "5": {
-            "key": "lab_in_classroom",
-            "name": "Lab-in-Classroom",
-            "url": config.lab_in_classroom_brochure_url or config.brochure_url,
-        },
-    }
+def default_brochures(config: DidacConfig) -> list[tuple[str, str, str]]:
+    """(key, name, url) for the first event only. After that, brochures are managed per event in the database."""
+    return [
+        ("sia", "SIA", config.sia_brochure_url or config.brochure_url),
+        ("tiqer", "TiQer", config.tiqer_brochure_url),
+        ("play_lab", "Play Lab", config.play_lab_brochure_url),
+        ("stream", "STREAM", config.stream_brochure_url),
+        ("lab_in_classroom", "Lab-in-Classroom", config.lab_in_classroom_brochure_url or config.brochure_url),
+    ]

@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from didac_app import auth, bird, blobstore, orbit
-from didac_app.config import DidacConfig, brochure_catalog
+from didac_app.config import DidacConfig
 from didac_app.dedupe import FILLABLE, fill_blanks, find_duplicate
 from didac_app.media import append_qr_details, extract_media_text, save_media, suffix_for
 from didac_app.models import Lead
@@ -31,17 +31,18 @@ SESSION_MINUTES = 30
 MAX_PHOTOS = 10
 NOTE_WINDOW_MINUTES = 30
 
-FORM, DOC, BADGE, NOTE = "Contact form", "Other document", "Event badge / QR", "Add a note"
-# WhatsApp shows a list row's title only (never its description) and cuts it at 24 characters, so the hint lives in the title. The 3-button question
-# ("Is this a contact form...") keeps the plain DOC label, since a button label may be 20 characters.
-DOC_ROW = "Other docs (cards, etc.)"
-SCANS = {FORM.lower(): "form", DOC.lower(): "document", DOC_ROW.lower(): "document", BADGE.lower(): "badge"}
+NOTE = "Add a note"
+# The document types in the menu are not fixed: they come from the live event (see Chat.doc_types).
 BROCHURE, REQUIREMENT, FEEDBACK = "Download brochure", "Share my requirement", "Feedback / voice note"
+NOT_SCANS = {"note", "choose", "requirement", "brochure", "feedback"}  # session flows that are not a document scan
+NO_EVENT_TEAM = "Hi {first}. No event is live right now, so I cannot save leads or photos. Please ask an admin to start the next event."
+NO_EVENT_VISITOR = "Thanks for getting in touch. The event has finished. Our team will reach out soon."
 SAVE, EDIT, RETAKE = "Save", "Edit", "Retake"
 PRIORITIES = ("High", "Medium", "Low")
 # The model sometimes lists every empty field as a doubt ("udise_code unknown"), and flags a QR code it cannot decode from pixels; the code decodes QRs itself.
 NOT_ON_DOCUMENT = re.compile(r"\bqr\b|\b(unknown|not (printed|present|provided|given|available|mentioned|visible|found)|missing|n/?a)\b", re.I)
-WHAT_IS_IT = "Is this a contact form, another document or an event badge?"
+WHAT_IS_IT = "What kind of document is this?"
+NOT_AVAILABLE = "That option is not available any more. Here is what is available now:"
 MENU_WORDS = {"menu", "hi", "hello", "hey", "start", "info", "brochure"}
 # (label shown in the list, Orbit type code, one-line description)
 TYPES = [
@@ -147,6 +148,10 @@ class Chat:
         self.user = staff_user(store, number)
         self.replies: list[Reply] = []
         self.lead_ids: list[int] = []
+        # The live event decides which document types and brochures exist right now. One query each, per message.
+        self.event = store.live_event()
+        self.doc_types = {row["key"]: row for row in store.list_doc_types(self.event["id"], active_only=True)} if self.event else {}
+        self.by_label = {row["label"].lower(): row["key"] for row in self.doc_types.values()}
 
     # ---- routing -------------------------------------------------------------------------------------------------
     def run(self, text: str, media: list[tuple[str, str]]) -> None:
@@ -156,6 +161,9 @@ class Chat:
         if expired:
             self.store.delete_session(self.number)
             session = None
+        if not self.event:  # between events nothing is saved, to anyone
+            self.store.delete_session(self.number)
+            return self.say(NO_EVENT_TEAM.format(first=self.user["name"].split()[0]) if self.user else NO_EVENT_VISITOR)
         if low == "cancel":
             self.store.delete_session(self.number)
             self.say("Cancelled. Type menu to start again.")
@@ -163,7 +171,10 @@ class Chat:
             self.menu(session)
         elif expired and not media:
             self.say("That scan timed out and was not saved. Type menu to start again.")
-        elif session and session["flow"] in (*SCANS.values(), "note", "choose") and not self.user:
+        elif session and session["flow"] not in NOT_SCANS and session["flow"] not in self.doc_types:
+            self.say(NOT_AVAILABLE)  # the admin switched that document type off, or the event changed, while this chat was open
+            self.menu(session)
+        elif session and session["flow"] in (*self.doc_types, "note", "choose") and not self.user:
             self.menu(session)  # deactivated mid-scan: back to the visitor menu
         elif session and session["flow"] in ("note", "requirement", "brochure", "feedback") and low in self.menu_choices():
             self.store.delete_session(self.number)
@@ -174,7 +185,13 @@ class Chat:
             self.no_flow(text, media)
 
     def menu_choices(self) -> set[str]:
-        return {label.lower() for label in ((FORM, DOC, DOC_ROW, BADGE, NOTE) if self.user else (BROCHURE, REQUIREMENT, FEEDBACK))}
+        if self.user:
+            return {*self.by_label, NOTE.lower()}
+        return {label.lower() for label in (BROCHURE, REQUIREMENT, FEEDBACK)}
+
+    def brochures(self) -> list[dict]:
+        """The active brochures of the live event that visitors may see, as {key, name, url}."""
+        return [{"key": row["key"], "name": row["name"], "url": row["url"]} for row in self.store.list_brochures(self.event["id"], "visitors")]
 
     def say(self, text: str) -> None:
         self.replies.append(Reply(text))
@@ -194,23 +211,33 @@ class Chat:
             self.say(f"Discarded {lost} photo(s) that were not saved.")
         if self.user:
             first = self.user["name"].split()[0]
-            rows = [(FORM, "The printed Xperimentor form"), (DOC_ROW, "Visiting cards, brochures, flyers and all that"), (BADGE, "Badge or ID card with a QR code"), (NOTE, "Voice or text note on your last lead")]
-            self.replies.append(Reply(f"Hi {first}. What would you like to do?\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
+            rows = [(row["label"], row["hint"]) for row in self.doc_types.values()][:9] + [(NOTE, "Voice or text note on your last lead")]  # a WhatsApp list holds 10 rows
+            self.replies.append(Reply(f"Hi {first}. You are at {self.event['name']}. What would you like to do?\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
         else:
-            rows = [(BROCHURE, "SIA, TiQer, Play Lab and more"), (REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo")]
-            self.replies.append(Reply("Welcome to Xperimentor at DIDAC.\nPlease choose an option. Type menu at any time to see this again.", rows, as_list=True))
+            brochures = self.brochures()
+            rows = ([(BROCHURE, ", ".join(item["name"] for item in brochures[:3]) + (" and more" if len(brochures) > 3 else ""))] if brochures else []) \
+                + [(REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo")]
+            welcome = self.event["welcome_text"] or f"Welcome to Xperimentor at {self.event['name']}.\nPlease choose an option. Type menu at any time to see this again."
+            self.replies.append(Reply(welcome, rows, as_list=True))
+
+    def ask_kind(self) -> Reply:
+        """What kind of document is this? Up to three types fit on buttons, more go in a list."""
+        options = [(row["label"], row["hint"]) for row in self.doc_types.values()][:10]
+        return Reply(WHAT_IS_IT, options if len(options) > 3 else [(label, "") for label, _ in options], as_list=len(options) > 3)
 
     def no_flow(self, text: str, media: list[tuple[str, str]]) -> None:
         choice = text.lower()
         if self.user:
-            if choice in SCANS:
-                return self.start_scan(SCANS[choice])
+            if choice in self.by_label:
+                return self.start_scan(self.by_label[choice])
             if choice == NOTE.lower():
                 return self.start_note()
             if any(ct.startswith("image/") for _, ct in media):
+                if not self.doc_types:
+                    return self.say("No document types are switched on for this event. Please ask an admin.")
                 self.store.put_session(self.number, "choose", "kind", {"photos": []}, keep_existing=True)
                 if self.take_photos(media, text) == 1:  # photos of one batch arrive as parallel messages: only the first asks
-                    self.replies.append(buttons(WHAT_IS_IT, FORM, DOC, BADGE))
+                    self.replies.append(self.ask_kind())
                 return
             if media:  # a voice note with no menu choice goes to the last lead, like Add a note
                 data = {"lead_id": self.recent_lead_id()}
@@ -225,8 +252,10 @@ class Chat:
                 return self.say(f"Lead saved: {lead.org or lead.name or 'Unnamed lead'}")
             return self.menu()
         if choice == BROCHURE.lower():
+            if not self.brochures():
+                return self.say("Our team will send you the brochures. Type menu for other options.")
             self.store.put_session(self.number, "brochure", "pick", {})
-            return self.replies.append(Reply("Which brochure would you like?", [(item["name"], "Open the brochure") for item in brochure_catalog(self.config).values()], as_list=True))
+            return self.replies.append(Reply("Which brochure would you like?", [(item["name"], "Open the brochure") for item in self.brochures()], as_list=True))
         if choice == REQUIREMENT.lower():
             self.store.put_session(self.number, "requirement", "name", {})
             return self.say("Happy to help. What is your name?")
@@ -242,15 +271,15 @@ class Chat:
         flow, step, data = session["flow"], session["step"], session["data"]
         if flow == "choose":
             choice = text.lower()
-            if choice in SCANS:
-                flow = SCANS[choice]
+            if choice in self.by_label:
+                flow = self.by_label[choice]
                 self.store.put_session(self.number, flow, "photos", data)
                 return self.say(f"Got {len(data['photos'])} photo(s). Send more or reply DONE.")
             if any(ct.startswith("image/") for _, ct in media):
                 self.take_photos(media, text)
                 return
-            return self.replies.append(buttons(WHAT_IS_IT, FORM, DOC, BADGE))
-        if flow in SCANS.values():
+            return self.replies.append(self.ask_kind())
+        if flow in self.doc_types:
             return self.scan_step(flow, step, data, text, media)
         if flow == "note":
             return self.note_step(data, text, media)
@@ -266,12 +295,14 @@ class Chat:
     # ---- staff: contact form / other document --------------------------------------------------------------------
     def start_scan(self, flow: str) -> None:
         self.store.put_session(self.number, flow, "photos", {"photos": []})
-        if flow == "form":
-            self.say("Send a photo of the filled contact form. Reply DONE when all pages are sent.")
-        elif flow == "badge":
-            self.say("Send a photo of the event badge or ID card with the QR code in view, flat and in focus. Reply DONE when all photos are sent.")
+        label = noun(self.doc_types[flow]["label"])
+        reader = self.doc_types[flow]["reader"]
+        if reader == "form":
+            self.say(f"Send a photo of the filled {label}. Reply DONE when all pages are sent.")
+        elif reader == "badge":
+            self.say(f"Send a photo of the {label} with the QR code in view, flat and in focus. Reply DONE when all photos are sent.")
         else:
-            self.say("Send photos of the document, front and back if it has two sides. Reply DONE when all photos are sent.")
+            self.say(f"Send photos of the {label}, front and back if it has two sides. Reply DONE when all photos are sent.")
 
     def take_photos(self, media: list[tuple[str, str]], caption: str = "") -> int | None:
         """Store each image in the bucket and append it to the session. Returns the photo count after the last one, None if nothing was added."""
@@ -302,7 +333,7 @@ class Chat:
             if not data.get("photos"):
                 return self.say("No photos yet. Send a photo first.")
             self.say_now(f"Reading your {len(data['photos'])} photo(s)... this takes a few seconds.")
-            result = read_documents(self.config, data["photos"], flow)
+            result = read_documents(self.config, data["photos"], self.doc_types[flow]["reader"])
             data |= {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], [])}
             self.store.put_session(self.number, flow, "confirm", data)
             return self.confirm(data)
@@ -350,7 +381,7 @@ class Chat:
         self.replies.append(buttons("Save this lead, edit it, or retake the photos?", SAVE, EDIT, RETAKE))
 
     def save_scan(self, flow: str, data: dict) -> None:
-        lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow if flow in ("form", "badge") else "other",
+        lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow,
                     raw_message=data["original"], review_reason="; ".join(data["check"]))
         for name, value in data["draft"].items():
             setattr(lead, name, value)
@@ -363,10 +394,10 @@ class Chat:
         self.store.put_session(self.number, flow, "photos", {"photos": []})
         if outcome == "created":
             badge = " It shows a Check badge on the dashboard." if saved.review_reason else ""
-            self.say(f"Saved as #{saved.id}, {label}{f' ({saved.priority} priority)' if saved.priority else ''}.{badge}\nSend the next {flow}, or type menu.")
+            self.say(f"Saved as #{saved.id}, {label}{f' ({saved.priority} priority)' if saved.priority else ''}.{badge}\nSend the next {noun(self.doc_types[flow]['label'])}, or type menu.")
         else:
             added = "I added the new details to it." if outcome == "merged" else "There was nothing new to add."
-            self.say(f"Already saved as #{saved.id}, {saved.name or label}. {added}\nSend the next {flow}, or type menu.")
+            self.say(f"Already saved as #{saved.id}, {saved.name or label}. {added}\nSend the next {noun(self.doc_types[flow]['label'])}, or type menu.")
 
     def store_lead(self, lead: Lead, photos: list[dict], original_text: str = "") -> tuple[Lead, str]:
         """Create the lead, or merge into the matching one. Outcome is 'created', 'merged' (new details added) or 'unchanged'.
@@ -450,9 +481,9 @@ class Chat:
 
     def brochure_step(self, text: str) -> None:
         choice = text.lower()
-        selected = next((item for item in brochure_catalog(self.config).values() if item["name"].lower() == choice or item["key"] == choice), None)
+        selected = next((item for item in self.brochures() if item["name"].lower() == choice or item["key"] == choice), None)
         if not selected:
-            return self.replies.append(Reply("Please pick a brochure from the list.", [(item["name"], "Open the brochure") for item in brochure_catalog(self.config).values()], as_list=True))
+            return self.replies.append(Reply("Please pick a brochure from the list.", [(item["name"], "Open the brochure") for item in self.brochures()], as_list=True))
         self.visitor_lead(interest=f"Downloaded brochure: {selected['name']}")
         self.store.delete_session(self.number)
         if selected["url"]:
@@ -509,6 +540,11 @@ class Chat:
 
 
 # ---- helpers ------------------------------------------------------------------------------------------------------------
+def noun(label: str) -> str:
+    """'Contact form' -> 'contact form', 'Event badge / QR' -> 'event badge / QR': a label used in the middle of a sentence."""
+    return " ".join(word if word.isupper() else word.lower() for word in label.split())
+
+
 def summary(fields: dict, check: list[str], with_check: bool = False) -> str:
     lines = []
     for name, label in SUMMARY:

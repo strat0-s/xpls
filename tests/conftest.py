@@ -12,6 +12,7 @@ import pytest
 from flask.testing import FlaskClient
 
 from didac_app import auth, bird
+from didac_app.config import default_brochures, load_config
 from didac_app.storage import LeadStore
 
 
@@ -21,7 +22,8 @@ def store():
     store.init_db()
     store.clear()
     with store.connect() as conn:
-        conn.execute("TRUNCATE users, login_attempts, followups RESTART IDENTITY")  # clear() leaves users alone so reset-sample can't lock everyone out
+        conn.execute("TRUNCATE users, login_attempts, followups, events RESTART IDENTITY CASCADE")  # clear() leaves users alone so reset-sample can't lock everyone out
+    store.ensure_default_event(default_brochures(load_config()))  # every test starts with DIDAC 2026 live, as a fresh install does
     yield store
     store.close()
 

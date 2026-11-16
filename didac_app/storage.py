@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import csv
 import json
+import re
 from dataclasses import asdict, fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,7 +46,7 @@ class LeadStore:
 
     def init_db(self) -> None:
         columns = ", ".join(
-            f"{field} TEXT" for field in LEAD_FIELDS if field != "id"
+            f"{field} {column_type(field)}" for field in LEAD_FIELDS if field != "id"
         )
         now = "to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')"
         with self.connect() as conn:
@@ -59,7 +60,25 @@ class LeadStore:
             )
             for field in LEAD_FIELDS:
                 if field != "id":
-                    conn.execute(f"ALTER TABLE leads ADD COLUMN IF NOT EXISTS {field} TEXT")
+                    conn.execute(f"ALTER TABLE leads ADD COLUMN IF NOT EXISTS {field} {column_type(field)}")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS events (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
+                "name TEXT NOT NULL, starts_on DATE, ends_on DATE, venue TEXT NOT NULL DEFAULT '', welcome_text TEXT NOT NULL DEFAULT '', "
+                "status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'live', 'ended')))"
+            )
+            # At most one row can be 'live': the database refuses a second one, so no code path can break the rule.
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS events_one_live ON events (status) WHERE status = 'live'")
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS doc_types (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_id BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE, "
+                "key TEXT NOT NULL, label TEXT NOT NULL, hint TEXT NOT NULL DEFAULT '', reader TEXT NOT NULL DEFAULT 'document', "
+                "position INTEGER NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT TRUE, UNIQUE (event_id, key))"
+            )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS brochures (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_id BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE, "
+                "key TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', for_visitors BOOLEAN NOT NULL DEFAULT TRUE, for_team BOOLEAN NOT NULL DEFAULT TRUE, "
+                "position INTEGER NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT TRUE, UNIQUE (event_id, key))"
+            )
+            conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
             conn.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS media (
@@ -188,7 +207,113 @@ class LeadStore:
         with self.connect() as conn:
             conn.execute("TRUNCATE inbound_events, feedback, media, leads, sessions RESTART IDENTITY")
 
+    # ---- events: one is live at a time and every lead captured over WhatsApp goes into it -----------------------------
+    def create_event(self, name: str, starts_on=None, ends_on=None, venue: str = "", welcome_text: str = "") -> int:
+        with self.connect() as conn:
+            return conn.execute("INSERT INTO events (name, starts_on, ends_on, venue, welcome_text) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                                (name.strip(), starts_on, ends_on, venue.strip(), welcome_text.strip())).fetchone()["id"]
+
+    def get_event(self, event_id: int) -> dict | None:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM events WHERE id=%s", (event_id,)).fetchone()
+
+    def live_event(self) -> dict | None:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM events WHERE status='live'").fetchone()
+
+    def list_events(self) -> list[dict]:
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT e.*, (SELECT count(*) FROM leads l WHERE l.event_id = e.id AND (l.deleted_at IS NULL OR l.deleted_at = '')) AS lead_count FROM events e ORDER BY e.id DESC").fetchall()
+
+    def update_event(self, event_id: int, **values) -> None:
+        """name, starts_on, ends_on, venue and welcome_text only. Keys are code-owned, never request data."""
+        assignments = ", ".join(f"{column}=%s" for column in values)
+        with self.connect() as conn:
+            conn.execute(f"UPDATE events SET {assignments} WHERE id=%s", [*values.values(), event_id])
+
+    def start_event(self, event_id: int) -> None:
+        """Make this event the live one. A live event is ended first, in the same transaction, so there is never a moment with two."""
+        with self.connect() as conn:
+            conn.execute("UPDATE events SET status='ended' WHERE status='live' AND id<>%s", (event_id,))
+            conn.execute("UPDATE events SET status='live' WHERE id=%s", (event_id,))
+
+    def stop_event(self, event_id: int) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE events SET status='ended' WHERE id=%s AND status='live'", (event_id,))
+
+    # ---- document types and brochures belong to an event; deactivating hides them from WhatsApp but never deletes the data --------
+    def list_doc_types(self, event_id: int, active_only: bool = False) -> list[dict]:
+        with self.connect() as conn:
+            return conn.execute(f"SELECT * FROM doc_types WHERE event_id=%s{' AND active' if active_only else ''} ORDER BY position, id", (event_id,)).fetchall()
+
+    def add_doc_type(self, event_id: int, label: str, hint: str = "", reader: str = "document", key: str = "") -> int:
+        key = key or unique_key(label, {row["key"] for row in self.list_doc_types(event_id)})
+        with self.connect() as conn:
+            position = conn.execute("SELECT COALESCE(max(position), 0) + 1 AS n FROM doc_types WHERE event_id=%s", (event_id,)).fetchone()["n"]
+            return conn.execute("INSERT INTO doc_types (event_id, key, label, hint, reader, position) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                                (event_id, key, label.strip(), hint.strip(), reader, position)).fetchone()["id"]
+
+    def update_doc_type(self, doc_type_id: int, **values) -> None:
+        """label, hint, position only. Keys are code-owned, never request data."""
+        assignments = ", ".join(f"{column}=%s" for column in values)
+        with self.connect() as conn:
+            conn.execute(f"UPDATE doc_types SET {assignments} WHERE id=%s", [*values.values(), doc_type_id])
+
+    def set_doc_type_active(self, doc_type_id: int, active: bool) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE doc_types SET active=%s WHERE id=%s", (active, doc_type_id))
+
+    def list_brochures(self, event_id: int, audience: str = "", active_only: bool = True) -> list[dict]:
+        """audience is 'visitors', 'team' or '' for both."""
+        where = "event_id=%s" + (" AND active" if active_only else "") + {"visitors": " AND for_visitors", "team": " AND for_team"}.get(audience, "")
+        with self.connect() as conn:
+            return conn.execute(f"SELECT * FROM brochures WHERE {where} ORDER BY position, id", (event_id,)).fetchall()
+
+    def add_brochure(self, event_id: int, name: str, url: str = "", for_visitors: bool = True, for_team: bool = True, key: str = "") -> int:
+        key = key or unique_key(name, {row["key"] for row in self.list_brochures(event_id, active_only=False)})
+        with self.connect() as conn:
+            position = conn.execute("SELECT COALESCE(max(position), 0) + 1 AS n FROM brochures WHERE event_id=%s", (event_id,)).fetchone()["n"]
+            return conn.execute("INSERT INTO brochures (event_id, key, name, url, for_visitors, for_team, position) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                                (event_id, key, name.strip(), url.strip(), for_visitors, for_team, position)).fetchone()["id"]
+
+    def set_brochure_active(self, brochure_id: int, active: bool) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE brochures SET active=%s WHERE id=%s", (active, brochure_id))
+
+    def copy_setup(self, from_event_id: int, to_event_id: int) -> None:
+        """Copy the document types and brochures of one event into another (a new event starts from last time's setup)."""
+        with self.connect() as conn:
+            conn.execute("INSERT INTO doc_types (event_id, key, label, hint, reader, position, active) SELECT %s, key, label, hint, reader, position, active FROM doc_types WHERE event_id=%s",
+                         (to_event_id, from_event_id))
+            conn.execute("INSERT INTO brochures (event_id, key, name, url, for_visitors, for_team, position, active) SELECT %s, key, name, url, for_visitors, for_team, position, active FROM brochures WHERE event_id=%s",
+                         (to_event_id, from_event_id))
+
+    def ensure_default_event(self, brochures: list[tuple[str, str, str]]) -> int | None:
+        """First run only: create the live DIDAC event with today's three document types and the given (key, name, url) brochures.
+        Does nothing once any event exists."""
+        if self.list_events():
+            return None
+        event_id = self.create_event("DIDAC 2026")
+        self.start_event(event_id)
+        for key, label, hint, reader in DEFAULT_DOC_TYPES:
+            self.add_doc_type(event_id, label, hint, reader, key=key)
+        for key, name, url in brochures:
+            self.add_brochure(event_id, name, url, key=key)
+        return event_id
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        with self.connect() as conn:
+            row = conn.execute("SELECT value FROM app_settings WHERE key=%s", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self.connect() as conn:
+            conn.execute("INSERT INTO app_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (key, value))
+
     def create_lead(self, lead: Lead) -> Lead:
+        if lead.event_id is None and (live := self.live_event()):
+            lead.event_id = live["id"]
         data = asdict(lead)
         data.pop("id", None)
         columns = list(data.keys())
@@ -519,7 +644,28 @@ def format_sheet(ws) -> None:
         ws.column_dimensions[get_column_letter(column_cells[0].column)].width = width
 
 
+def column_type(field: str) -> str:
+    return "BIGINT" if field == "event_id" else "TEXT"
+
+
+# (key, label, hint, reader). The key is what a lead stores in doc_type; reader says how the photo is read: form, document or badge (QR).
+DEFAULT_DOC_TYPES = [
+    ("form", "Contact form", "The printed Xperimentor form", "form"),
+    ("other", "Visiting card", "Cards, flyers and all that", "document"),
+    ("badge", "Event badge / QR", "Badge or ID card with a QR code", "badge"),
+]
+RESERVED_KEYS = {"note", "choose", "requirement", "brochure", "feedback"}  # session flow names a document type key must never collide with
+
+
+def unique_key(label: str, taken: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "type"
+    key, n = base, 2
+    while key in taken or key in RESERVED_KEYS:
+        key, n = f"{base}_{n}", n + 1
+    return key
+
+
 def row_to_lead(row) -> Lead:
-    data = {field: (row[field] if row[field] is not None else "") for field in LEAD_FIELDS if field in row.keys()}
+    data = {field: (row[field] if row[field] is not None else ("" if field != "event_id" else None)) for field in LEAD_FIELDS if field in row.keys()}
     data["id"] = row["id"]
     return Lead(**data)

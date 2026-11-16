@@ -134,7 +134,7 @@ def register(app, get_store, get_config) -> None:
                 organisation_type=org_type if (org_type := request.form.get("organisation_type", "")) in orbit.ORG_TYPES else "",
                 interest=request.form.get("interest", "").strip(),
                 priority=request.form.get("priority") if request.form.get("priority") in PRIORITIES else "",
-                doc_type=kind if (kind := request.form.get("doc_type")) in ("form", "badge") else "other",
+                doc_type=kind if (kind := request.form.get("doc_type")) in {row["key"] for row in store.list_doc_types(lead.event_id)} else lead.doc_type,
                 updated_by=g.user["name"],
                 updated_at=datetime.now(UTC).isoformat(timespec="seconds"),
                 review_reason="",
@@ -143,7 +143,7 @@ def register(app, get_store, get_config) -> None:
             return redirect(url_for("lead_detail", lead_id=lead_id))
         items = lead_items(lead, store, members_by_phone(store))
         return render_template(
-            "lead.html", lead=lead, items=items, fields=EDITABLE_FIELDS, title=display_name(lead),
+            "lead.html", lead=lead, items=items, fields=EDITABLE_FIELDS, title=display_name(lead), doc_types=store.list_doc_types(lead.event_id) if lead.event_id else [],
             org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
             priorities=PRIORITIES, curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )

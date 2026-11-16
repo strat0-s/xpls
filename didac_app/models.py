@@ -55,6 +55,7 @@ class Lead:
     review_reason: str = ""
     updated_by: str = ""
     deleted_at: str = ""
+    event_id: int | None = None  # the event that was live when the lead was captured
 
 
 @dataclass(frozen=True)
