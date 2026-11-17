@@ -178,9 +178,11 @@ def register(app, get_store, get_config) -> None:
             )
             flash("Saved.")
             return redirect(url_for("lead_detail", lead_id=lead_id))
-        items = lead_items(lead, store, members_by_phone(store))
+        members = members_by_phone(store)
+        items = lead_items(lead, store, members)
+        chat = [row | {"by": "Footfall bot" if row["direction"] == "out" else members.get(auth.normalize_phone(row["number"])) or "Visitor"} for row in store.lead_conversation(lead.id, auth.normalize_phone(lead.phone) or "")]
         return render_template(
-            "lead.html", lead=lead, items=items, fields=EDITABLE_FIELDS, title=display_name(lead), doc_types=store.list_doc_types(lead.event_id) if lead.event_id else [],
+            "lead.html", lead=lead, items=items, chat=chat, fields=EDITABLE_FIELDS, title=display_name(lead), doc_types=store.list_doc_types(lead.event_id) if lead.event_id else [],
             org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
             priorities=PRIORITIES, curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )

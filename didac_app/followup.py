@@ -88,6 +88,7 @@ def send_to(store: LeadStore, config: DidacConfig, phone: str, lead_id: int) -> 
         return str(exc)
     if message_id:
         store.set_followup_message(phone, message_id)
+    store.log_outbound(phone, "Follow-up message sent (the Bird thank-you template).\n[Share my requirement | Download brochure]", [lead_id])
     return "sent"
 
 

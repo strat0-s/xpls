@@ -153,6 +153,7 @@ def send_replies(event_id: int, to_number: str, replies: list[Reply], lead_ids: 
     try:
         for reply in replies:
             bird.send_message(config, to_number, reply.text, reply.options, reply.as_list)
+            store.log_outbound(to_number, reply.text + (f"\n[{' | '.join(label for label, _ in reply.options)}]" if reply.options else ""), lead_ids)
     except Exception as exc:
         status, error = "reply_failed", str(exc)
     sent = time.perf_counter()

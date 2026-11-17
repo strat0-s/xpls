@@ -312,6 +312,13 @@ def test_a_reply_to_the_follow_up_lands_on_the_scanned_lead(store, sent):
     assert "TiQer" in leads[0].interest and "STEM labs for 12 schools" in leads[0].interest
     assert leads[0].name == "Asha Rao" and leads[0].captured_by == "Test Admin"
     assert "STEM labs for 12 schools" in [f["body"] for f in store.list_feedback(scanned.id)]
+    chat = store.lead_conversation(scanned.id, number)
+    assert {row["direction"] for row in chat if row["number"].endswith("9845011111")} == {"in", "out"}  # they asked, the bot answered
+    assert any(row["direction"] == "in" and row["body"] == "STEM labs for 12 schools" for row in chat)
+    assert any(row["direction"] == "out" and row["body"].startswith("Thanks A.") for row in chat)
+    assert any(row["number"] == STAFF and row["direction"] == "out" for row in chat)  # the team's scan chat is on the lead too
+    page = app.test_client().get(f"/leads/{scanned.id}").data.decode()
+    assert "WhatsApp conversation" in page and "STEM labs for 12 schools" in page
 
 
 def test_visitor_can_skip_the_email(store, sent):

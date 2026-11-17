@@ -135,6 +135,10 @@ class LeadStore:
                 """
             )
             conn.execute(
+                f"CREATE TABLE IF NOT EXISTS outbound_messages (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, created_at TEXT DEFAULT {now}, "
+                "to_number TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', lead_ids TEXT NOT NULL DEFAULT '')"
+            )
+            conn.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS users (
                     id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -225,7 +229,7 @@ class LeadStore:
 
     def clear(self) -> None:
         with self.connect() as conn:
-            conn.execute("TRUNCATE inbound_events, feedback, media, leads, sessions, event_photos RESTART IDENTITY")
+            conn.execute("TRUNCATE inbound_events, outbound_messages, feedback, media, leads, sessions, event_photos RESTART IDENTITY")
             conn.execute("UPDATE reader_status SET failures=0, last_ms=0, last_ok_at=NULL, last_failure_at=NULL, down_since=NULL, last_reason=''")
 
     # ---- events: one is live at a time and every lead captured over WhatsApp goes into it -----------------------------
@@ -617,6 +621,26 @@ class LeadStore:
                 "UPDATE inbound_events SET status=%s, lead_ids=%s, error=%s WHERE id=%s",
                 (status, ",".join(str(item) for item in lead_ids or []), error, event_id),
             )
+
+    def log_outbound(self, to_number: str, body: str, lead_ids: list[int] | None = None) -> None:
+        """What we sent, kept next to inbound_events so a lead can show the whole chat."""
+        with self.connect() as conn:
+            conn.execute("INSERT INTO outbound_messages (to_number, body, lead_ids) VALUES (%s, %s, %s)", (to_number, body, ",".join(str(item) for item in lead_ids or [])))
+
+    def lead_conversation(self, lead_id: int, phone: str = "") -> list[dict]:
+        """Both directions of the chats about a lead, oldest first: everything to or from its phone (the visitor's own chat), plus every
+        exchange that touched the lead (the team's scan chat). Rows are {direction 'in'|'out', created_at, number, body, num_media}."""
+        numbers = [phone, f"whatsapp:{phone}"] if phone else [""]
+        match = "{col} = ANY(%s) OR %s = ANY(string_to_array(lead_ids, ','))"
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT * FROM ("
+                f"SELECT 'in' AS direction, id, created_at, from_number AS number, body, num_media FROM inbound_events WHERE {match.format(col='from_number')} "
+                "UNION ALL "
+                f"SELECT 'out', id, created_at, to_number, body, 0 FROM outbound_messages WHERE {match.format(col='to_number')}"
+                ") t ORDER BY created_at, direction, id",
+                (numbers, str(lead_id), numbers, str(lead_id)),
+            ).fetchall()
 
     def list_inbound_events(self) -> list[dict]:
         with self.connect() as conn:
