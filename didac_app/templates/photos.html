@@ -5,9 +5,23 @@
     h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
     .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
     .evsel { display: flex; align-items: center; gap: 8px; color: var(--mut); font-weight: 600; margin: 0; } .evsel select { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--ink); font-weight: 600; }
-    .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; padding: 16px; }
-    .tile { text-decoration: none; color: inherit; font-weight: 400; display: block; } .tile img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); display: block; background: var(--soft); }
-    .tile small { color: var(--mut); display: block; margin-top: 4px; font-size: 12.5px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; padding: 16px; }
+    .day { grid-column: 1 / -1; margin: 10px 0 0; font-weight: 700; } .day:first-child { margin-top: 0; } .day small { color: var(--mut); font-weight: 400; margin-left: 6px; }
+    .ph { position: relative; display: block; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--soft); border: 1px solid var(--line); transition: box-shadow .15s, transform .15s; }
+    .ph:hover, .ph:focus-visible { box-shadow: 0 6px 18px rgba(42,32,48,.22); transform: translateY(-1px); outline: none; }
+    .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .ph span { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 10px 8px; font-size: 12.5px; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.62)); opacity: 0; transition: opacity .15s; }
+    .ph:hover span, .ph:focus-visible span { opacity: 1; } @media (hover: none) { .ph span { opacity: 1; } }
+    dialog.lbx { border: 0; padding: 0; margin: 0; max-width: none; max-height: none; width: calc(100vw / var(--z)); height: calc(100vh / var(--z)); background: rgba(12,10,14,.96); color: #fff; }
+    dialog.lbx::backdrop { background: #000; }
+    .lbx .top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: linear-gradient(rgba(0,0,0,.6), transparent); z-index: 2; }
+    .lbx .top .t { flex: 1; min-width: 0; } .lbx .top b { display: block; } .lbx .top small { opacity: .75; }
+    .lbx .top a, .lbx button { color: #fff; text-decoration: none; background: rgba(255,255,255,.12); border: 0; border-radius: 999px; min-width: 40px; height: 40px; padding: 0 14px; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+    .lbx .top a:hover, .lbx button:hover { background: rgba(255,255,255,.24); }
+    .lbx .stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 64px 72px; }
+    .lbx .stage img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; }
+    .lbx .nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; padding: 0; font-size: 26px; z-index: 2; } .lbx .prev { left: 14px; } .lbx .next { right: 14px; }
+    @media (max-width: 600px) { .lbx .stage { padding: 64px 8px; } .grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; padding: 10px; } }
     .empty { padding: 40px 16px; text-align: center; color: var(--mut); }
 {% endblock %}
 {% block content %}
@@ -15,9 +29,38 @@
   <form class="evsel" method="get" action="{{ url_for('photos') }}"><label for="event">Event</label>
     <select id="event" name="event" onchange="this.form.submit()">{% for e in events %}<option value="{{ e.id }}" {{ 'selected' if e.id == event_id }}>{{ e.name }}{{ ' (live)' if e.status == 'live' }}</option>{% endfor %}<option value="all" {{ 'selected' if not event_id }}>All events</option></select></form></div>
 <section class="card">
-  {% if pg.total %}<div class="tiles">{% for p in pg['items'] %}
-    <a class="tile" href="{{ url_for('event_photo', photo_id=p.id) }}" target="_blank" rel="noopener"><img src="{{ url_for('event_photo', photo_id=p.id) }}" alt="Event photo {{ p.id }}" loading="lazy"><small>{{ p.uploaded_by or 'Team' }} · {{ p.created_at.astimezone(tz).strftime('%d %b, %H:%M') }}{{ ' · ' ~ p.event_name if not event_id }}</small></a>{% endfor %}</div>
+  {% if pg.total %}<div class="grid">{% set ns = namespace(day='') %}{% for p in pg['items'] %}{% set when = p.created_at.astimezone(tz) %}{% set day = when.strftime('%A, %d %b %Y') %}
+    {% if day != ns.day %}{% set ns.day = day %}<h2 class="day" style="font-size:15px">{{ day }}</h2>{% endif %}
+    <a class="ph" href="{{ url_for('event_photo', photo_id=p.id) }}" target="_blank" rel="noopener" data-who="{{ p.uploaded_by or 'Team' }}" data-when="{{ when.strftime('%d %b %Y, %H:%M') }}{{ ' · ' ~ p.event_name if not event_id }}"><img src="{{ url_for('event_photo', photo_id=p.id) }}" alt="Event photo {{ p.id }}" loading="lazy" decoding="async"><span>{{ p.uploaded_by or 'Team' }} · {{ when.strftime('%H:%M') }}</span></a>{% endfor %}</div>
   {% else %}<div class="empty">No event photos yet.</div>{% endif %}
-  {% include "_pager.html" %}
+  {% set nosize = true %}{% include "_pager.html" %}
 </section>
+<dialog id="lbx" class="lbx" aria-label="Photo viewer">
+  <div class="top"><div class="t"><b id="lb-who"></b><small id="lb-when"></small></div><span id="lb-n" style="opacity:.8"></span><a id="lb-open" href="#" target="_blank" rel="noopener">Open original</a><button type="button" id="lb-x" aria-label="Close">&times;</button></div>
+  <button type="button" class="nav prev" aria-label="Previous photo">&#8249;</button>
+  <div class="stage"><img id="lb-img" alt=""></div>
+  <button type="button" class="nav next" aria-label="Next photo">&#8250;</button>
+</dialog>
+<script>
+(() => {
+  const tiles = [...document.querySelectorAll('.ph')], box = document.getElementById('lbx'), img = document.getElementById('lb-img');
+  let at = 0;
+  const show = (i) => {
+    at = (i + tiles.length) % tiles.length;
+    const t = tiles[at];
+    img.src = t.href;
+    document.getElementById('lb-who').textContent = t.dataset.who;
+    document.getElementById('lb-when').textContent = t.dataset.when;
+    document.getElementById('lb-n').textContent = (at + 1) + ' / ' + tiles.length;
+    document.getElementById('lb-open').href = t.href;
+    [at - 1, at + 1].forEach((j) => { new Image().src = tiles[(j + tiles.length) % tiles.length].href; });
+  };
+  tiles.forEach((t, i) => t.addEventListener('click', (e) => { e.preventDefault(); show(i); box.showModal(); }));
+  box.querySelector('.prev').onclick = () => show(at - 1);
+  box.querySelector('.next').onclick = () => show(at + 1);
+  document.getElementById('lb-x').onclick = () => box.close();
+  box.addEventListener('click', (e) => { if (e.target === box || e.target.classList.contains('stage')) box.close(); });
+  box.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') show(at - 1); if (e.key === 'ArrowRight') show(at + 1); });
+})();
+</script>
 {% endblock %}

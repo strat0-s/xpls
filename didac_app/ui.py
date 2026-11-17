@@ -320,7 +320,7 @@ def register(app, get_store, get_config) -> None:
         store = get_store()
         events = store.list_events()
         event_id = chosen_event_id(store, {e["id"]: e for e in events})
-        return render_template("photos.html", events=events, event_id=event_id, pg=paginate(store.list_event_photos(event_id), request.args.get("page", 1, type=int), request.args.get("per", 10, type=int)), tz=IST)
+        return render_template("photos.html", events=events, event_id=event_id, pg=paginate(store.list_event_photos(event_id), request.args.get("page", 1, type=int), 50), tz=IST)
 
     @app.get("/event-photo/<int:photo_id>")
     def event_photo(photo_id: int):
