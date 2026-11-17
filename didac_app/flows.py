@@ -499,24 +499,37 @@ class Chat:
         message (WhatsApp allows 4096) with the buttons right after it."""
         docs = scan_docs(data)
         if len(docs) == 1:
-            text = prefix + summary(data["draft"], data["check"], with_check=True)
+            text = prefix + summary(data["draft"], data["check"], with_check=True) + self.duplicate_note(data)
         else:
-            parts = [f"{number}.\n" + summary(doc["draft"], doc["check"], with_check=True).removeprefix("I read this as:\n") for number, doc in enumerate(docs, 1)]
+            parts = [f"{number}.\n" + summary(doc["draft"], doc["check"], with_check=True).removeprefix("I read this as:\n") + self.duplicate_note(doc) for number, doc in enumerate(docs, 1)]
             text = prefix + f"I read {len(docs)} documents:\n\n" + "\n\n".join(parts)
         if len(text) <= 1000:
             return self.replies.append(buttons(text, SAVE, EDIT, RETAKE))
         self.say(text[:4000])
         self.replies.append(buttons("Save this lead, edit it, or retake the photos?" if len(docs) == 1 else "Save these leads, edit them, or retake the photos?", SAVE, EDIT, RETAKE))
 
+    def doc_lead(self, doc: dict, flow: str = "") -> Lead:
+        lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow,
+                    raw_message=doc["original"], review_reason="; ".join(doc["check"]))
+        for name, value in doc["draft"].items():
+            setattr(lead, name, value)
+        normalize_contact_name(lead)
+        return lead
+
+    def duplicate_note(self, doc: dict) -> str:
+        """Said right under the summary, so the person knows before tapping Save. Mirrors what store_lead will do."""
+        match = find_duplicate(self.store, self.doc_lead(doc))
+        if not match:
+            return ""
+        existing, certain = match
+        who = f"#{existing.id}, {existing.name or existing.org or existing.phone or 'unnamed'}"
+        return f"\n\nAlready saved as {who}. Saving adds any new details to it." if certain else f"\n\nLooks like {who}, which is already saved. Saving keeps this as its own lead marked Check."
+
     def save_scan(self, flow: str, data: dict) -> None:
         docs, every_photo = scan_docs(data), data["photos"]
         saved_lines, outcomes = [], []
         for doc in docs:
-            lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow,
-                        raw_message=doc["original"], review_reason="; ".join(doc["check"]))
-            for name, value in doc["draft"].items():
-                setattr(lead, name, value)
-            normalize_contact_name(lead)
+            lead = self.doc_lead(doc, flow)
             photos = [every_photo[number - 1] for number in doc.get("photo_ids", []) if 1 <= number <= len(every_photo)] or every_photo  # unknown photo numbers: keep them all
             lead.media_urls = "; ".join(photo["url"] for photo in photos)
             lead.media_local_paths = "; ".join(photo["key"] for photo in photos)

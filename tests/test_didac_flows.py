@@ -196,17 +196,21 @@ def test_repeat_scan_merges_and_name_org_match_is_flagged(store, sent, fake_io):
         say(STAFF, "Other docs")
         say(STAFF, "", photo("p"))
         say(STAFF, "DONE")
+        summary_text = last(sent)[0]  # the summary shown before Save
         save_scan(STAFF)
+        return summary_text
 
-    scan({"name": "Kavya Nair", "org": "Dedupe Academy", "phone": "9845033333"})
+    assert "already saved" not in scan({"name": "Kavya Nair", "org": "Dedupe Academy", "phone": "9845033333"}).lower()
     first = store.list_leads()[0]
-    scan({"name": "Kavya N", "phone": "+91 98450 33333", "email": "kavya@dedupe.edu"})
+    shown = scan({"name": "Kavya N", "phone": "+91 98450 33333", "email": "kavya@dedupe.edu"})
+    assert f"Already saved as #{first.id}" in shown and "adds any new details" in shown  # said before Save, not after
     assert f"Already saved as #{first.id}" in last(sent)[0] and "added the new details" in last(sent)[0]
     assert len(store.list_leads()) == 1 and store.get_lead(first.id).email == "kavya@dedupe.edu"
     scan({"name": "Kavya Nair", "phone": "+91 98450 33333"})  # nothing new
     assert "nothing new" in last(sent)[0] and len(store.list_leads()) == 1
     scan({"name": "Tara Menon", "org": "Flag School", "phone": "9845055555"})
-    scan({"name": "Tara Menon", "org": "Flag School", "phone": "9845066666"})
+    shown = scan({"name": "Tara Menon", "org": "Flag School", "phone": "9845066666"})
+    assert "Looks like #" in shown and "marked Check" in shown
     assert store.list_leads()[0].review_reason.startswith("possible duplicate of #")
 
 
