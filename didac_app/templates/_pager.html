@@ -13,7 +13,7 @@
   <form method="get" style="display:flex;align-items:center;gap:8px;margin:0;color:var(--mut)">
     {% for k, v in request.args.items() if k not in ('per', key) %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
     <label for="per-{{ key }}">Rows per page</label>
-    <select id="per-{{ key }}" name="per" onchange="this.form.submit()" style="height:34px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surf)">{% for n in (25, 50, 100) %}<option {{ 'selected' if n == pg.per }}>{{ n }}</option>{% endfor %}</select>
+    <select id="per-{{ key }}" name="per" onchange="this.form.submit()" style="height:34px;padding:0 8px;border:1px solid var(--line);border-radius:6px;background:var(--surf)">{% for n in (10, 25, 50, 100) %}<option {{ 'selected' if n == pg.per }}>{{ n }}</option>{% endfor %}</select>
   </form>
   {% endif %}
 </div>

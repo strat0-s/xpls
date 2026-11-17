@@ -122,18 +122,18 @@
     {% else %}
     <div class="card item hint">Nothing has been attached to this lead yet.</div>
     {% endfor %}
-    <div style="font-size:15px;font-weight:700;margin-top:8px">WhatsApp conversations <span class="hint" style="font-weight:400">· each chat is kept on its own, with the Xperimentor number on the right</span></div>
+    <div style="font-size:15px;font-weight:700;margin-top:8px">WhatsApp conversations</div>
     {% for chat in chats %}
-    <section class="card chat" aria-label="{{ chat.title }}">
-      <div style="font-weight:600">{{ chat.title }} <span class="hint" style="font-weight:400">· {{ chat.rows|length }} message{{ '' if chat.rows|length == 1 else 's' }}</span></div>
-      <div class="msgs">
+    <details class="card chat" open>
+      <summary style="font-weight:600;cursor:pointer">{{ chat.title }} <span class="hint" style="font-weight:400">· {{ chat.rows|length }} message{{ '' if chat.rows|length == 1 else 's' }}</span></summary>
+      <div class="msgs" style="margin-top:8px">
       {% for m in chat.rows %}
       <div class="bub {{ m.direction }}"><div class="who">{{ chat.who if m.direction == 'in' else 'Xperimentor' }} · {{ m.created_at|local_time }}</div>{{ m.body }}{% if m.num_media %}<div class="hint">{{ m.num_media }} attachment{{ '' if m.num_media == 1 else 's' }} (photos and voice notes are above)</div>{% endif %}</div>
       {% else %}
       <div class="hint">No messages recorded in this chat yet.</div>
       {% endfor %}
       </div>
-    </section>
+    </details>
     {% else %}
     <section class="card chat"><div class="hint">No WhatsApp chat is recorded for this lead.</div></section>
     {% endfor %}

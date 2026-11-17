@@ -154,7 +154,7 @@ def register(app, get_store, get_config) -> None:
         tab = request.args.get("type") if request.args.get("type") in {t["key"] for t in tabs} else "all"
         if tab != "all":
             cards = [card for card in cards if card["type"] == tab]
-        page = paginate(cards, request.args.get("page", 1, type=int), request.args.get("per", 25, type=int))
+        page = paginate(cards, request.args.get("page", 1, type=int), request.args.get("per", 10, type=int))
         return render_template("gallery.html", pg=page, tabs=tabs, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, check=check, reply_only=reply_only, replies_waiting=replies_waiting, priorities=PRIORITIES,
                                events=list(events.values()), event_id=event_id, needs_check=sum(1 for lead in leads if lead.review_reason))
 
@@ -293,7 +293,7 @@ def register(app, get_store, get_config) -> None:
             for t in store.list_doc_types(e["id"]):
                 doc_types.setdefault(t["key"], t["label"])
         return render_template(
-            "export.html", rows=rows, pg=paginate(rows, request.args.get("page", 1, type=int), request.args.get("per", 25, type=int)), events=events,
+            "export.html", rows=rows, pg=paginate(rows, request.args.get("page", 1, type=int), request.args.get("per", 10, type=int)), events=events,
             event_id=chosen_event_id(store, {e["id"]: e for e in events}), doc_types=doc_types, people=people, warnings=warnings, org_types=orbit.ORG_TYPES, query=query,
             orgs=orbit.org_count(rows), max_orgs=orbit.MAX_ORGS, args=request.args,
         )
@@ -313,15 +313,15 @@ def register(app, get_store, get_config) -> None:
         left = max(0, config.followup_daily_cap - store.followups_last_day())
         return render_template("followup.html", tz=IST, events=events, event_id=event_id, left=left, cap=config.followup_daily_cap, ready=bool(config.followup_template_id),
                                batch=min(followup.BATCH, left, len(waiting)),
-                               w=paginate(waiting, request.args.get("wpage", 1, type=int), 25), s=paginate(skipped, request.args.get("spage", 1, type=int), 25),
-                               d=paginate(sent, request.args.get("dpage", 1, type=int), 25), total_sent=len(sent))
+                               w=paginate(waiting, request.args.get("wpage", 1, type=int), 10), s=paginate(skipped, request.args.get("spage", 1, type=int), 10),
+                               d=paginate(sent, request.args.get("dpage", 1, type=int), 10), total_sent=len(sent))
 
     @app.get("/photos")
     def photos():
         store = get_store()
         events = store.list_events()
         event_id = chosen_event_id(store, {e["id"]: e for e in events})
-        return render_template("photos.html", events=events, event_id=event_id, pg=paginate(store.list_event_photos(event_id), request.args.get("page", 1, type=int), request.args.get("per", 25, type=int)), tz=IST)
+        return render_template("photos.html", events=events, event_id=event_id, pg=paginate(store.list_event_photos(event_id), request.args.get("page", 1, type=int), request.args.get("per", 10, type=int)), tz=IST)
 
     @app.get("/event-photo/<int:photo_id>")
     def event_photo(photo_id: int):

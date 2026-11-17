@@ -13,7 +13,7 @@ def test_paginate_shows_the_right_slice_and_numbers_with_gaps():
     assert (page["pages"], page["first"], page["last"], page["total"]) == (13, 101, 125, 312)
     assert page["numbers"] == [1, None, 4, 5, 6, None, 13] and page["items"][0] == 100
     assert paginate([], 3)["pages"] == 1 and paginate([], 3)["first"] == 0
-    assert paginate(list(range(5)), 99, 25)["page"] == 1 and paginate(list(range(30)), 1, 7)["per"] == 25  # a wild page or size falls back
+    assert paginate(list(range(5)), 99, 25)["page"] == 1 and paginate(list(range(30)), 1, 7)["per"] == 10  # a wild page or size falls back
 
 
 def test_the_leads_list_shows_every_lead_a_page_at_a_time(store):
@@ -21,11 +21,11 @@ def test_the_leads_list_shows_every_lead_a_page_at_a_time(store):
         store.create_lead(flows.Lead(name=f"Person {number:02d}", phone=f"+9198000{number:05d}"))
     client = app.test_client()
     first = client.get("/dashboard").data.decode()
-    assert "Showing 1–25 of 60" in first and "Person 59" in first and "Person 34" not in first  # newest first
+    assert "Showing 1–10 of 60" in first and "Person 59" in first and "Person 49" not in first  # newest first
     second = client.get("/dashboard?page=2").data.decode()
-    assert "Showing 26–50 of 60" in second and "Person 34" in second and 'aria-current=page' in second
+    assert "Showing 11–20 of 60" in second and "Person 49" in second and 'aria-current=page' in second
     assert "Showing 1–50 of 60" in client.get("/dashboard?per=50").data.decode()
-    assert "Person 00" in client.get("/dashboard?page=3").data.decode()
+    assert "Person 00" in client.get("/dashboard?page=6").data.decode()
 
 
 def test_a_whole_row_is_one_link_to_the_lead(store):
@@ -89,8 +89,8 @@ def test_export_filters_by_event_and_type_and_lists_every_row_in_pages(store):
         store.create_lead(flows.Lead(name=f"Exporter {number:02d}", org=f"School {number:02d}", phone=f"+9198000{number:05d}", doc_type="form" if number % 2 else "other"))
     client = app.test_client()
     page = client.get("/export").data.decode()
-    assert "Showing 1–25 of 30" in page and "Document type" in page
-    assert "Showing 1–15 of 15" in client.get("/export?doc=form").data.decode()
+    assert "Showing 1–10 of 30" in page and "Document type" in page
+    assert "Showing 1–10 of 15" in client.get("/export?doc=form").data.decode()
     other = store.create_event("Bett India 2027")
     assert "No leads match these filters." in client.get(f"/export?event={other}").data.decode()
     assert client.get("/export/orbit.csv?doc=form").status_code == 200
