@@ -284,6 +284,7 @@ def register(app, get_store, get_config) -> None:
     def export_page():
         leads, people = export_leads(get_store(), request.args)
         rows = [orbit.orbit_row(lead) for lead in leads]
+        ids = [lead.id for lead in leads]
         warnings = orbit.export_warnings(rows)
         query = {key: value for key, value in request.args.items() if value and key in EXPORT_FILTERS}
         store = get_store()
@@ -293,7 +294,7 @@ def register(app, get_store, get_config) -> None:
             for t in store.list_doc_types(e["id"]):
                 doc_types.setdefault(t["key"], t["label"])
         return render_template(
-            "export.html", rows=rows, pg=paginate(rows, request.args.get("page", 1, type=int), request.args.get("per", 10, type=int)), events=events,
+            "export.html", rows=rows, ids=ids, columns=orbit.COLUMNS, labels=orbit.LABELS, pg=paginate(list(zip(ids, rows)), request.args.get("page", 1, type=int), request.args.get("per", 10, type=int)), events=events,
             event_id=chosen_event_id(store, {e["id"]: e for e in events}), doc_types=doc_types, people=people, warnings=warnings, org_types=orbit.ORG_TYPES, query=query,
             orgs=orbit.org_count(rows), max_orgs=orbit.MAX_ORGS, args=request.args,
         )
@@ -362,12 +363,13 @@ def register(app, get_store, get_config) -> None:
         return redirect(url_for("team"))
 
 
-EXPORT_FILTERS = ("from", "to", "by", "type", "event", "doc")
+EXPORT_FILTERS = ("from", "to", "by", "type", "event", "doc", "skip")
 
 
 def export_selection(store, args) -> tuple[list[dict], list[str]]:
     leads, people = export_leads(store, args)
-    return [orbit.orbit_row(lead) for lead in leads], people
+    skip = {int(n) for n in args.get("skip", "").split(",") if n.isdigit()}  # leads unticked on the export page
+    return [orbit.orbit_row(lead) for lead in leads if lead.id not in skip], people
 
 
 def export_leads(store, args) -> tuple[list, list[str]]:

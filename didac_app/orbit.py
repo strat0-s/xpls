@@ -26,6 +26,11 @@ COLUMNS = [
     "curriculum", "mediumOfInstruction", "contact_firstName", "contact_lastName", "contact_designation",
     "contact_email", "contact_phone",
 ]
+LABELS = {
+    "name": "Organisation", "type": "Type", "state": "State", "city": "City", "district": "District", "pincode": "Pincode", "website": "Website",
+    "googleMapsUrl": "Maps link", "udiseCode": "UDISE", "curriculum": "Curriculum", "mediumOfInstruction": "Medium", "contact_firstName": "First name",
+    "contact_lastName": "Last name", "contact_designation": "Designation", "contact_email": "Email", "contact_phone": "Phone",
+}
 # Checked in order, so "school chain" wins over "school".
 TYPE_WORDS = [
     ("SCHOOL_CHAIN", ("chain", "group of schools", "franchise")),

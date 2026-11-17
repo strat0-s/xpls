@@ -91,6 +91,11 @@ def test_export_page_filters_and_download(store):
     assert [(r["name"], r["type"]) for r in rows] == [("Bright Dealers", "DISTRIBUTOR")]
     assert client.get("/export/orbit.xlsx").status_code == 200
     assert client.get("/export/orbit.csv?by=Nobody").status_code == 400
+    first = next(l for l in store.list_leads() if l.org == "Sunrise School")
+    kept = list(csv.DictReader(io.StringIO(client.get(f"/export/orbit.csv?skip={first.id}").data.decode())))
+    assert {r["name"] for r in kept} == {"Bright Dealers", "Mystery"}
+    page = client.get("/export").data.decode()
+    assert "Maps link" in page and "Designation" in page and 'class="pick-one"' in page
     assert client.get("/export/orbit.pdf").status_code == 404
 
 

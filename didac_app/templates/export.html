@@ -13,7 +13,14 @@
     .scroll { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); padding: 8px 10px; background: var(--head); white-space: nowrap; }
-    td { padding: 7px 10px; border-top: 1px solid var(--line); }
+    td { padding: 7px 10px; border-top: 1px solid var(--line); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+    td.no { color: var(--mut); opacity: .5; }
+    th.tick, td.tick { width: 34px; padding-right: 0; position: sticky; left: 0; background: var(--surf); z-index: 1; } th.tick { background: var(--head); }
+    th.first, td.first { position: sticky; left: 34px; background: var(--surf); font-weight: 600; box-shadow: 1px 0 0 var(--line); } th.first { background: var(--head); }
+    tr.off td { opacity: .45; }
+    .pick { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .pick button { background: none; border: 0; color: var(--acc-text); font: inherit; font-weight: 600; cursor: pointer; padding: 0; }
+    input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--acc); }
 {% endblock %}
 {% block content %}
 <h1>Export for Orbit</h1>
@@ -36,9 +43,10 @@
 <section class="card panel">
   <div class="sum"><b>{{ rows|length }}</b> lead{{ '' if rows|length == 1 else 's' }} in the file ({{ orgs }} organisation{{ '' if orgs == 1 else 's' }}).</div>
   {% if rows %}
+  <div class="pick"><span><b id="sel">{{ rows|length }}</b> of {{ rows|length }} ticked for the download</span><button type="button" id="all">Tick all</button><button type="button" id="none">Untick all</button><span class="hint">Scroll sideways for all {{ columns|length }} columns.</span></div>
   <div class="card"><div class="scroll"><table>
-    <thead><tr><th scope="col">Organisation</th><th scope="col">Type</th><th scope="col">Contact</th><th scope="col">Phone</th><th scope="col">City</th></tr></thead>
-    <tbody>{% for row in pg['items'] %}<tr><td>{{ row['name'] }}</td><td>{{ row['type'] or '' }}</td><td>{{ (row['contact_firstName'] ~ ' ' ~ row['contact_lastName'])|trim }}</td><td>{{ row['contact_phone'] }}</td><td>{{ row['city'] }}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th class="tick" scope="col"><input type="checkbox" id="page" aria-label="Tick this page"></th>{% for c in columns %}<th scope="col" class="{{ 'first' if loop.first }}">{{ labels[c] }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for lid, row in pg['items'] %}<tr data-id="{{ lid }}"><td class="tick"><input type="checkbox" class="pick-one" value="{{ lid }}" aria-label="Include {{ row['name'] or 'this lead' }}" checked></td>{% for c in columns %}<td class="{{ 'first' if loop.first }} {{ 'no' if not row[c] }}" title="{{ row[c] }}">{{ row[c] or '–' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
   </table></div>{% include "_pager.html" %}</div>
   {% endif %}
   {% if not rows %}<div class="flash">No leads match these filters.</div>{% endif %}
@@ -46,9 +54,37 @@
   {% if orgs > max_orgs %}<div class="flash">Orbit takes at most {{ max_orgs }} organisations per file. Narrow the dates and export in parts.</div>{% endif %}
   {% set ok = rows and orgs <= max_orgs %}
   <div class="actions">
-    <a class="btn {{ '' if ok else 'off' }}" href="{{ url_for('export_orbit', fmt='csv', **query) }}">Download CSV</a>
-    <a class="btn ghost {{ '' if ok else 'off' }}" href="{{ url_for('export_orbit', fmt='xlsx', **query) }}">Download Excel</a>
+    <a class="btn dl {{ '' if ok else 'off' }}" href="{{ url_for('export_orbit', fmt='csv', **query) }}">Download CSV</a>
+    <a class="btn ghost dl {{ '' if ok else 'off' }}" href="{{ url_for('export_orbit', fmt='xlsx', **query) }}">Download Excel</a>
   </div>
 </section>
+<script>
+  // Unticked leads are remembered while you page through, and left out of the file.
+  (function () {
+    var ids = {{ ids|tojson }}, skip = new Set(), KEY = 'footfallExportSkip';
+    try { JSON.parse(sessionStorage.getItem(KEY) || '[]').forEach(function (n) { if (ids.indexOf(n) > -1) skip.add(n); }); } catch (e) {}
+    var boxes = document.querySelectorAll('.pick-one'), sel = document.getElementById('sel'), page = document.getElementById('page');
+    if (!sel) return;
+    function paint() {
+      boxes.forEach(function (b) { b.checked = !skip.has(+b.value); b.closest('tr').classList.toggle('off', !b.checked); });
+      page.checked = Array.prototype.every.call(boxes, function (b) { return b.checked; });
+      var left = ids.length - skip.size;
+      sel.textContent = left;
+      document.querySelectorAll('a.dl').forEach(function (a) {
+        var u = new URL(a.dataset.base || (a.dataset.base = a.getAttribute('href')), location.href);
+        if (skip.size) u.searchParams.set('skip', Array.from(skip).join(','));
+        a.setAttribute('href', u.pathname + u.search);
+        if (a.dataset.ok === undefined) a.dataset.ok = a.classList.contains('off') ? '0' : '1';
+        a.classList.toggle('off', !(left && a.dataset.ok === '1'));
+      });
+      try { sessionStorage.setItem(KEY, JSON.stringify(Array.from(skip))); } catch (e) {}
+    }
+    boxes.forEach(function (b) { b.addEventListener('change', function () { b.checked ? skip.delete(+b.value) : skip.add(+b.value); paint(); }); });
+    page.addEventListener('change', function () { boxes.forEach(function (b) { page.checked ? skip.delete(+b.value) : skip.add(+b.value); }); paint(); });
+    document.getElementById('all').onclick = function () { skip.clear(); paint(); };
+    document.getElementById('none').onclick = function () { ids.forEach(function (n) { skip.add(n); }); paint(); };
+    paint();
+  })();
+</script>
 
 {% endblock %}
