@@ -244,7 +244,6 @@ def register(app, get_store, get_config) -> None:
 
     @app.post("/leads/<int:lead_id>/followup")
     def lead_followup(lead_id: int):
-        require_admin()
         lead = get_store().get_lead(lead_id) or abort(404)
         flash(followup.send_one(get_store(), get_config(), lead))
         return redirect(url_for("lead_detail", lead_id=lead_id))
@@ -301,7 +300,6 @@ def register(app, get_store, get_config) -> None:
 
     @app.route("/followup", methods=["GET", "POST"])
     def followup_page():
-        require_admin()
         store, config = get_store(), get_config()
         if request.method == "POST":
             flash(followup.send_batch(store, config))

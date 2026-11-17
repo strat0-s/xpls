@@ -4,7 +4,7 @@ from datetime import datetime
 import pytest
 
 from bird_helpers import post_bird
-from conftest import csrf
+from conftest import csrf, get_or_create_user
 from didac_app import bird, followup
 from didac_app.config import load_config
 from didac_app.models import Lead
@@ -62,7 +62,7 @@ def test_stop_reply_opts_out_and_is_never_messaged(store, templates, sent):
     assert store.list_leads()[0].phone == "98450 11111"
 
 
-def test_followup_page_is_admin_only_and_sends(store, templates, monkeypatch, anon_client):
+def test_followup_page_sends_and_needs_login(store, templates, monkeypatch, anon_client):
     import didac_app.server as server
 
     monkeypatch.setattr(server, "config", CONFIG)
@@ -113,3 +113,19 @@ def test_delivery_status_is_recorded_and_shown(store, monkeypatch):
     assert "Failed" in page and "code 131049" in page and calls == ["msg-1"]
     app.test_client().get("/followup")
     assert calls == ["msg-1"]  # a decided status is not asked about again
+
+
+def test_staff_can_follow_up_but_not_delete(store, templates, monkeypatch, anon_client):
+    import didac_app.server as server
+
+    monkeypatch.setattr(server, "config", CONFIG)
+    monkeypatch.setattr(followup, "SEND_HOURS", range(24))
+    item = lead(store, "98450 11111")
+    get_or_create_user(store, "Sam Staff", "+919800000002", "sam@example.com", "staff-password-1")
+    anon_client.post("/login", data={"login": "sam@example.com", "password": "staff-password-1", "csrf": csrf(anon_client)})
+    page = anon_client.get("/followup")
+    assert page.status_code == 200 and b"Follow-up" in anon_client.get("/").data
+    assert anon_client.post(f"/leads/{item.id}/followup", data={"csrf": csrf(anon_client)}).status_code == 302
+    assert templates == ["+919845011111"]
+    assert b"Send follow-up" in anon_client.get(f"/leads/{item.id}").data and b"Delete lead" not in anon_client.get(f"/leads/{item.id}").data
+    assert anon_client.post(f"/leads/{item.id}/delete", data={"csrf": csrf(anon_client)}).status_code == 403

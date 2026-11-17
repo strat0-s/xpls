@@ -50,16 +50,16 @@
     <h1>{{ title }}</h1>
     <div class="sub">{{ (doc_types|selectattr('key', 'equalto', lead.doc_type)|map(attribute='label')|first) or lead.doc_type or 'Document' }} · captured {{ lead.created_at|local_time }}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}</div>
   </div>
-  {% if user.is_admin %}
   <div class="admin-actions">
   <form method="post" action="{{ url_for('lead_followup', lead_id=lead.id) }}" data-title="Send follow-up?" data-confirm="This sends the thank-you WhatsApp to this lead's number. Each number can only be messaged once." data-ok="Send message">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn ghost">Send follow-up</button>
   </form>
+  {% if user.is_admin %}
   <form method="post" action="{{ url_for('lead_delete', lead_id=lead.id) }}" data-title="Delete this lead?" data-confirm="It disappears from the dashboard and from exports." data-ok="Delete lead" data-danger="1">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">Delete lead</button>
   </form>
-  </div>
   {% endif %}
+  </div>
 </div>
 
 {% if replied_at %}

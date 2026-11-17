@@ -127,7 +127,7 @@
   <nav aria-label="Main"><div class="gl">Workspace</div>
     <a href="{{ url_for('gallery') }}" class="{{ 'on' if active == 'leads' }}">{{ ico('leads') }}Leads</a>
     <a href="{{ url_for('photos') }}" class="{{ 'on' if active == 'photos' }}">{{ ico('photos') }}Event photos</a>
-    {% if user.is_admin %}<a href="{{ url_for('followup_page') }}" class="{{ 'on' if active == 'followup' }}">{{ ico('followup') }}Follow-up</a>{% endif %}
+    <a href="{{ url_for('followup_page') }}" class="{{ 'on' if active == 'followup' }}">{{ ico('followup') }}Follow-up</a>
     <a href="{{ url_for('export_page') }}" class="{{ 'on' if active == 'export' }}">{{ ico('export') }}Export</a>
   </nav>
   {% if user.is_admin %}<nav aria-label="Admin"><div class="gl">Admin</div>
