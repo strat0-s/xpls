@@ -20,11 +20,6 @@ def day(value: str | None) -> date | None:
         return None
 
 
-def web_link(value: str) -> str:
-    value = (value or "").strip()
-    return value if value.lower().startswith(("http://", "https://")) else ""
-
-
 MAX_PDF = 4 * 1024 * 1024  # Vercel rejects a request body over 4.5 MB, so a bigger file never gets here
 
 
@@ -163,14 +158,14 @@ def register(app, get_store, get_config) -> None:
     @app.post("/admin/documents/brochure/add")
     def admin_brochure_add():
         store, event = get_store(), chosen_event(get_store()) or abort(404)
-        name, link = request.form.get("name", "").strip(), web_link(request.form.get("url", ""))
+        name = request.form.get("name", "").strip()
         file, problem = brochure_upload(get_config(), event["id"], name)
         if problem:
             flash(problem)
-        elif not name or not (link or file):
-            flash("A brochure needs a name and either a PDF or a link that starts with https://.")
+        elif not name or not file:
+            flash("A brochure needs a name and a PDF.")
         else:
-            store.add_brochure(event["id"], name, link, for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")), **file)
+            store.add_brochure(event["id"], name, "", for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")), **file)
             flash(f"Added {name}.")
         return back("admin_documents", event)
 
@@ -178,14 +173,14 @@ def register(app, get_store, get_config) -> None:
     def admin_brochure_edit(brochure_id: int):
         store = get_store()
         row = next((r for e in store.list_events() for r in store.list_brochures(e["id"], active_only=False) if r["id"] == brochure_id), None) or abort(404)
-        name, link = request.form.get("name", "").strip(), web_link(request.form.get("url", ""))
+        name = request.form.get("name", "").strip()
         file, problem = brochure_upload(get_config(), row["event_id"], name)
         if problem:
             flash(problem)
-        elif not name or not (link or file or row["file_key"]):
-            flash("A brochure needs a name and either a PDF or a link that starts with https://.")
+        elif not name or not (file or row["file_key"] or row["url"]):
+            flash("A brochure needs a name and a PDF.")
         else:
-            store.update_brochure(brochure_id, name=name, url=link, for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")), **file)
+            store.update_brochure(brochure_id, name=name, **({"url": ""} if file else {}), for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")), **file)
             flash("Saved.")
         return back("admin_documents", store.get_event(row["event_id"]))
 

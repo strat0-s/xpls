@@ -15,6 +15,10 @@
     .edit label { font-size: 13px; display: inline-flex; gap: 4px; align-items: center; }
     .bro { padding: 12px 14px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
     .bro.off { background: var(--head); } .bro form { margin: 0; }
+    .head { flex-direction: row; justify-content: space-between; align-items: flex-start; }
+    .plus { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 24px; line-height: 1; flex: none; }
+    .addform { display: flex; flex-direction: column; gap: 10px; } .addform .t { height: 38px; width: 100%; }
+    .addform .row2 { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; } .addform .row3 { display: flex; gap: 16px; }
     .events { display: flex; gap: 6px; flex-wrap: wrap; } .events a { padding: 4px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surf); color: var(--mut); font-weight: 600; text-decoration: none; } .events a.on { background: var(--soft); color: var(--acc-text); border-color: var(--soft); }
 {% endblock %}
 {% block content %}
@@ -23,7 +27,8 @@
   <div class="events" role="group" aria-label="Event">{% for e in events %}<a href="{{ url_for('admin_documents', event=e.id) }}" class="{{ 'on' if e.id == event.id }}">{{ e.name }}{{ ' (live)' if e.status == 'live' }}</a>{% endfor %}</div>
 
   <section class="card">
-    <div class="panel"><h2>Document types for {{ event.name }}</h2><div class="hint">Each active type is a row in the team's WhatsApp menu. Drag to change the order. Switching one off hides it from the menu and keeps every lead already captured with it.</div></div>
+    <div class="panel head"><div><h2>Document types for {{ event.name }}</h2><div class="hint">Each active type is a row in the team's WhatsApp menu. Drag to change the order. Switching one off hides it from the menu and keeps every lead already captured with it.</div></div>
+      <button type="button" class="btn plus" data-open="add-type" aria-label="Add a document type" title="Add a document type">+</button></div>
     <div id="types">
       {% for t in doc_types %}
       <div class="row {{ '' if t.active else 'off' }}" data-id="{{ t.id }}" draggable="true">
@@ -39,34 +44,47 @@
       </div>
       {% endfor %}
     </div>
-    <form method="post" action="{{ url_for('admin_type_add') }}" class="panel edit" style="border-top:1px solid var(--line);flex-direction:row">
-      <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ event.id }}">
-      <input class="t" name="label" placeholder="New document type, e.g. Registration form" required style="width:260px"><input class="t" name="hint" placeholder="Hint under the name">
-      <select class="t" name="reader" aria-label="How it is read" style="width:260px;height:32px">{% for key, label in readers.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
-      <button class="btn sm">Add document type</button></form>
   </section>
 
   <section class="card">
-    <div class="panel"><h2>Brochures for {{ event.name }}</h2><div class="hint">Upload a PDF (up to 4 MB) and WhatsApp sends the file itself, or paste a link instead. A new PDF replaces the old one. Turn off Visitors for team-only files.</div></div>
+    <div class="panel head"><div><h2>Brochures for {{ event.name }}</h2><div class="hint">Upload a PDF (up to 4 MB) and WhatsApp sends the file itself. A new PDF replaces the old one. Turn off Visitors for team-only files.</div></div>
+      <button type="button" class="btn plus" data-open="add-brochure" aria-label="Add a brochure" title="Add a brochure">+</button></div>
     {% for b in brochures %}
     <div class="bro {{ '' if b.active else 'off' }}">
       <form method="post" action="{{ url_for('admin_brochure_edit', brochure_id=b.id) }}" class="edit" enctype="multipart/form-data">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ event.id }}">
-        <input class="t" name="name" value="{{ b.name }}" aria-label="Name" required><input class="t link" name="url" value="{{ b.url }}" aria-label="Link" placeholder="Link (optional when a PDF is uploaded)"><label class="hint">{% if b.file_key %}PDF: {{ b.file_name }}. Replace: {% else %}PDF: {% endif %}<input type="file" name="file" accept="application/pdf"></label>
+        <input class="t" name="name" value="{{ b.name }}" aria-label="Name" required><label class="hint">{% if b.file_key %}PDF: {{ b.file_name }}. Replace: {% elif b.url %}Old link in use. Upload a PDF to replace it: {% else %}PDF: {% endif %}<input type="file" name="file" accept="application/pdf"></label>
         <label><input type="checkbox" name="for_visitors" {{ 'checked' if b.for_visitors }}> Visitors</label><label><input type="checkbox" name="for_team" {{ 'checked' if b.for_team }}> Team</label>
         <button class="btn ghost sm">Save</button></form>
       <form method="post" action="{{ url_for('admin_brochure_active', brochure_id=b.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="active" value="{{ '0' if b.active else '1' }}">
         <button class="btn {{ 'ghost' if b.active else '' }} sm">{{ 'Deactivate' if b.active else 'Activate' }}</button></form>
     </div>
     {% endfor %}
-    <form method="post" action="{{ url_for('admin_brochure_add') }}" class="panel edit" style="border-top:1px solid var(--line);flex-direction:row" enctype="multipart/form-data">
-      <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ event.id }}">
-      <input class="t" name="name" placeholder="Brochure name" required><input class="t link" name="url" placeholder="Link, or upload a PDF"><label class="hint">PDF: <input type="file" name="file" accept="application/pdf"></label>
-      <label><input type="checkbox" name="for_visitors" checked> Visitors</label><label><input type="checkbox" name="for_team" checked> Team</label>
-      <button class="btn sm">Add brochure</button></form>
   </section>
 </div>
+<dialog class="ask" id="add-type">
+  <h2>Add a document type</h2>
+  <form method="post" action="{{ url_for('admin_type_add') }}" class="addform">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ event.id }}">
+    <input class="t" name="label" placeholder="Name, e.g. Registration form" aria-label="Name" required><input class="t" name="hint" placeholder="Hint under the name" aria-label="Hint">
+    <select class="t" name="reader" aria-label="How it is read">{% for key, label in readers.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+    <div class="row2"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn">Add document type</button></div>
+  </form>
+</dialog>
+<dialog class="ask" id="add-brochure">
+  <h2>Add a brochure</h2>
+  <form method="post" action="{{ url_for('admin_brochure_add') }}" class="addform" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ event.id }}">
+    <input class="t" name="name" placeholder="Brochure name" aria-label="Name" required>
+    <label class="hint">PDF (up to 4 MB): <input type="file" name="file" accept="application/pdf" required></label>
+    <div class="row3"><label><input type="checkbox" name="for_visitors" checked> Visitors</label><label><input type="checkbox" name="for_team" checked> Team</label></div>
+    <div class="row2"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn">Add brochure</button></div>
+  </form>
+</dialog>
 <script>
+  // The + buttons open their form in a box.
+  document.querySelectorAll('[data-open]').forEach(function (b) { b.onclick = function () { document.getElementById(b.dataset.open).showModal(); }; });
+  document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = function () { b.closest('dialog').close(); }; });
   // Drag a document type to a new place; the new order is saved straight away.
   (function () {
     var list = document.getElementById('types'), dragging = null;

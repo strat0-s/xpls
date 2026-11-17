@@ -69,12 +69,12 @@ def test_a_document_type_can_be_added_renamed_ordered_and_switched_off(store, se
     assert "Raffle ticket" not in flows_menu and "Contact form" in flows_menu
 
 
-def test_a_brochure_needs_a_real_link(store):
+def test_a_brochure_needs_a_pdf_not_a_link(store):
     client = app.test_client()
     event = store.live_event()
-    html = post(client, "/admin/documents/brochure/add", event=event["id"], name="Bad", url="javascript:alert(1)", for_visitors="1").data.decode()
-    assert "starts with https://" in html and not any(b["name"] == "Bad" for b in store.list_brochures(event["id"], active_only=False))
-    post(client, "/admin/documents/brochure/add", event=event["id"], name="Flyer", url="https://drive.google.com/file/d/abc/view", for_team="1")
+    html = post(client, "/admin/documents/brochure/add", event=event["id"], name="Bad", url="https://drive.google.com/file/d/abc/view", for_visitors="1").data.decode()
+    assert "needs a name and a PDF" in html and not any(b["name"] == "Bad" for b in store.list_brochures(event["id"], active_only=False))
+    store.add_brochure(event["id"], "Flyer", file_key="brochures/1/x.pdf", file_name="Flyer.pdf", for_visitors=False)
     flyer = next(b for b in store.list_brochures(event["id"]) if b["name"] == "Flyer")
     assert flyer["for_team"] and not flyer["for_visitors"]
     post(client, f"/admin/documents/brochure/{flyer['id']}/active", active="0")
