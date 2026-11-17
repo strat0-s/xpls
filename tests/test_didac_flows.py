@@ -321,7 +321,7 @@ def test_a_reply_to_the_follow_up_lands_on_the_scanned_lead(store, sent):
     page = app.test_client().get(f"/leads/{scanned.id}").data.decode()
     assert "Team chat" in page and "Visitor chat" in page and "STEM labs for 12 schools" in page
     assert store.reply_flags().keys() == {scanned.id}  # they texted back: it is flagged until someone answers
-    assert "texted back and needs an answer" in page and "Texted back" in app.test_client().get("/").data.decode()
+    assert "This visitor texted back" in page and "Texted back" in app.test_client().get("/").data.decode()
     from conftest import csrf
     client = app.test_client()
     client.post(f"/leads/{scanned.id}/replied", data={"csrf": csrf(client)})

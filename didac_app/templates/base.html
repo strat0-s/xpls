@@ -5,14 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237d4a8c'/%3E%3Cg fill='%23fff'%3E%3Cellipse cx='11.5' cy='20' rx='3.6' ry='5.4' transform='rotate%28-10 11.5 20%29'/%3E%3Cellipse cx='11' cy='11.2' rx='2.4' ry='2.2'/%3E%3Cellipse cx='21' cy='17' rx='3.6' ry='5.4' transform='rotate%2810 21 17%29'/%3E%3C/g%3E%3Ccircle cx='21.6' cy='8' r='2.4' fill='%23f2b84b'/%3E%3C/svg%3E">
   <title>{% block title %}Footfall{% endblock %}</title>
+  <script>try { if (localStorage.getItem('theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap">
   <style>
-    /* Plum Ledger: plum top bar on pale lilac, dense tables, deliberately unlike Orbit's blue and zinc. Light only. */
+    /* Plum Ledger: plum top bar on pale lilac, dense tables, deliberately unlike Orbit's blue and zinc. Light by default, dark from the toggle in the sidebar. */
     :root { --bg: #f4f1f6; --surf: #ffffff; --ink: #2a2030; --mut: #6f6279; --line: #e4dde9; --head: #faf8fb;
             --acc: #7d4a8c; --acc-dark: #653a72; --acc-ink: #ffffff; --soft: #eddff1; --acc-text: #7d4a8c; --bar: #7d4a8c;
             --warn: #fbecd0; --warn-ink: #74500f; --warn-line: #e0a93b; --ok: #dcefe3; --ok-ink: #256040;
-            --bad: #f6e3e0; --bad-ink: #a12d1f; --vis: #e0f0ea; --vis-ink: #1d6b52; --art: #fff; color-scheme: light; }
+            --bad: #f6e3e0; --bad-ink: #a12d1f; --vis: #e0f0ea; --vis-ink: #1d6b52; --art: #fff; --z: 1; color-scheme: light; }
+    :root[data-theme=dark] { --bg: #16111a; --surf: #211a27; --ink: #efe9f3; --mut: #a99bb4; --line: #3a2f45; --head: #1b1520;
+            --acc: #a56db7; --acc-dark: #8a559c; --acc-ink: #ffffff; --soft: #35263f; --acc-text: #d3a4e0; --bar: #2e1c37;
+            --warn: #3b2c10; --warn-ink: #f3cb7e; --warn-line: #b98425; --ok: #1b3a29; --ok-ink: #92d3ae;
+            --bad: #43201c; --bad-ink: #f3a79d; --vis: #16372e; --vis-ink: #92dac0; --art: #fff; color-scheme: dark; }
+    /* The whole app 30% bigger on a desktop screen; a little less on a tablet; a phone is left alone. --z also keeps full-height boxes the right height. */
+    @media (min-width: 1100px) { :root { --z: 1.3; } }
+    @media (min-width: 700px) and (max-width: 1099px) { :root { --z: 1.15; } }
+    html { zoom: var(--z); }
     * { box-sizing: border-box; }
     div, article, span, section { min-width: 0; }
     html { height: 100%; }
@@ -61,6 +70,13 @@
     .chip.none { background: var(--line); color: var(--mut); }
     .chip.staff { background: var(--line); color: var(--mut); }
 
+    .alert { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 12px; background: var(--warn); color: var(--warn-ink); border: 1px solid var(--warn-line); border-left: 6px solid var(--warn-line); box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+    .alert .bell { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--warn-line); color: #fff; display: flex; align-items: center; justify-content: center; }
+    .alert .msg { flex: 1; min-width: 0; line-height: 1.4; } .alert .msg b { display: block; font-size: 16px; } .alert .msg span { opacity: .85; }
+    .alert .btn, .alert a.btn { flex: none; background: var(--warn-line); color: #fff; }
+    @media (max-width: 600px) { .alert { flex-wrap: wrap; } }
+    .theme { display: flex; align-items: center; gap: 8px; margin: 0 2px; padding: 8px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,.3); background: none; color: #f6eef8; cursor: pointer; font-weight: 600; }
+    .theme:hover { background: rgba(255,255,255,.12); }
     .pw { position: relative; display: inline-flex; align-items: center; max-width: 100%; }
     .pw.full { display: flex; width: 100%; }
     .pw input { padding-right: 54px !important; }
@@ -73,8 +89,8 @@
     dialog.ask .row { display: flex; justify-content: flex-end; gap: 8px; }
 
     /* Sidebar layout: plum column on the left, the page on the right. On a phone the column sits on top. */
-    .shell { display: flex; flex-wrap: wrap; min-height: 100vh; }
-    .side { flex: 0 0 244px; background: var(--bar); color: #fff; display: flex; flex-direction: column; gap: 18px; padding: 18px 12px; position: sticky; top: 0; height: 100vh; align-self: flex-start; overflow-y: auto; }
+    .shell { display: flex; flex-wrap: wrap; min-height: calc(100vh / var(--z)); }
+    .side { flex: 0 0 244px; background: var(--bar); color: #fff; display: flex; flex-direction: column; gap: 18px; padding: 18px 12px; position: sticky; top: 0; height: calc(100vh / var(--z)); align-self: flex-start; overflow-y: auto; }
     .shell > main.page { flex: 999 1 640px; min-width: 0; max-width: none; margin: 0; }
     .side .brand { display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 17px; }
     .side .evbox { margin: 0 2px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.3); display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-weight: 400; }
@@ -117,6 +133,7 @@
     <a href="{{ url_for('admin_messages') }}" class="{{ 'on' if active == 'messages' }}">{{ ico('messages') }}Messages</a>
     <a href="{{ url_for('team') }}" class="{{ 'on' if active == 'team' }}">{{ ico('team') }}Team access</a>
   </nav>{% endif %}
+  <button type="button" class="theme" id="theme-toggle" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span>Dark mode</span></button>
   <div class="me"><span class="dot">{{ user.name[:1]|upper }}</span><span class="who"><b>{{ user.name }}</b>{% if user.is_admin %}<small>Admin</small>{% endif %}</span>
     <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="out">Sign out</button></form>
   </div>
@@ -135,6 +152,19 @@
   <div class="row"><button type="button" class="btn ghost" data-no>Cancel</button><button type="button" class="btn" data-yes></button></div>
 </dialog>
 <script>
+  // Dark mode: remembered in this browser.
+  (function () {
+    var button = document.getElementById('theme-toggle');
+    if (!button) return;
+    function show() { var dark = document.documentElement.dataset.theme === 'dark'; button.setAttribute('aria-pressed', dark); button.querySelector('span').textContent = dark ? 'Light mode' : 'Dark mode'; }
+    button.onclick = function () {
+      var dark = document.documentElement.dataset.theme !== 'dark';
+      if (dark) document.documentElement.dataset.theme = 'dark'; else delete document.documentElement.dataset.theme;
+      try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch (e) {}
+      show();
+    };
+    show();
+  })();
   // Every password box gets a Show / Hide button.
   document.querySelectorAll('input[type=password]').forEach(function (input) {
     var wrap = document.createElement('span'), toggle = document.createElement('button');

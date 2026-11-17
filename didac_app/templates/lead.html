@@ -63,8 +63,7 @@
 </div>
 
 {% if replied_at %}
-<div class="notice" role="alert" style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin-bottom:12px">
-  <div><strong>This visitor texted back and needs an answer.</strong><br>Last message {{ replied_at|local_time }}. Read the WhatsApp conversation below, then reply to them.</div>
+<div class="alert" role="alert"><span class="bell" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></span><div class="msg"><b>This visitor texted back. Reply to them.</b><span>Last message {{ replied_at|local_time }}. Read the WhatsApp conversation below. This stays until you mark it as replied.</span></div>
   <form method="post" action="{{ url_for('lead_replied', lead_id=lead.id) }}" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn">Mark as replied</button></form>
 </div>
 {% endif %}
