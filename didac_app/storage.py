@@ -80,6 +80,8 @@ class LeadStore:
                 "key TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', for_visitors BOOLEAN NOT NULL DEFAULT TRUE, for_team BOOLEAN NOT NULL DEFAULT TRUE, "
                 "position INTEGER NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT TRUE, UNIQUE (event_id, key))"
             )
+            for column in ("file_key", "file_name"):  # a brochure is either a pasted link or a PDF kept in the bucket and sent as a document
+                conn.execute(f"ALTER TABLE brochures ADD COLUMN IF NOT EXISTS {column} TEXT NOT NULL DEFAULT ''")
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS event_photos (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, event_id BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE, "
                 "created_at TIMESTAMPTZ NOT NULL DEFAULT now(), from_number TEXT NOT NULL DEFAULT '', uploaded_by TEXT NOT NULL DEFAULT '', key TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '')"
@@ -296,15 +298,15 @@ class LeadStore:
         with self.connect() as conn:
             return conn.execute(f"SELECT * FROM brochures WHERE {where} ORDER BY position, id", (event_id,)).fetchall()
 
-    def add_brochure(self, event_id: int, name: str, url: str = "", for_visitors: bool = True, for_team: bool = True, key: str = "") -> int:
+    def add_brochure(self, event_id: int, name: str, url: str = "", for_visitors: bool = True, for_team: bool = True, key: str = "", file_key: str = "", file_name: str = "") -> int:
         key = key or unique_key(name, {row["key"] for row in self.list_brochures(event_id, active_only=False)})
         with self.connect() as conn:
             position = conn.execute("SELECT COALESCE(max(position), 0) + 1 AS n FROM brochures WHERE event_id=%s", (event_id,)).fetchone()["n"]
-            return conn.execute("INSERT INTO brochures (event_id, key, name, url, for_visitors, for_team, position) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
-                                (event_id, key, name.strip(), url.strip(), for_visitors, for_team, position)).fetchone()["id"]
+            return conn.execute("INSERT INTO brochures (event_id, key, name, url, for_visitors, for_team, position, file_key, file_name) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                                (event_id, key, name.strip(), url.strip(), for_visitors, for_team, position, file_key, file_name)).fetchone()["id"]
 
     def update_brochure(self, brochure_id: int, **values) -> None:
-        """name, url, for_visitors and for_team only. Keys are code-owned, never request data."""
+        """name, url, file_key, file_name, for_visitors and for_team only. Keys are code-owned, never request data."""
         assignments = ", ".join(f"{column}=%s" for column in values)
         with self.connect() as conn:
             conn.execute(f"UPDATE brochures SET {assignments} WHERE id=%s", [*values.values(), brochure_id])
@@ -318,7 +320,7 @@ class LeadStore:
         with self.connect() as conn:
             conn.execute("INSERT INTO doc_types (event_id, key, label, hint, reader, position, active) SELECT %s, key, label, hint, reader, position, active FROM doc_types WHERE event_id=%s",
                          (to_event_id, from_event_id))
-            conn.execute("INSERT INTO brochures (event_id, key, name, url, for_visitors, for_team, position, active) SELECT %s, key, name, url, for_visitors, for_team, position, active FROM brochures WHERE event_id=%s",
+            conn.execute("INSERT INTO brochures (event_id, key, name, url, for_visitors, for_team, position, active, file_key, file_name) SELECT %s, key, name, url, for_visitors, for_team, position, active, file_key, file_name FROM brochures WHERE event_id=%s",
                          (to_event_id, from_event_id))
 
     def ensure_default_event(self, brochures: list[tuple[str, str, str]]) -> int | None:

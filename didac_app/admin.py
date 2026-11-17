@@ -1,10 +1,13 @@
 """The admin pages: event control, documents and brochures, and the message wording. Admins only."""
 from __future__ import annotations
 
+import re
+import secrets
 from datetime import date
 
 from flask import abort, flash, g, redirect, render_template, request, url_for
 
+from didac_app import blobstore
 from didac_app.flows import DEFAULT_WELCOME
 
 READERS = {"document": "Other document (up to 2 per photo)", "form": "Form (one person, several pages)", "badge": "Badge with a QR code"}
@@ -22,7 +25,25 @@ def web_link(value: str) -> str:
     return value if value.lower().startswith(("http://", "https://")) else ""
 
 
-def register(app, get_store) -> None:
+MAX_PDF = 4 * 1024 * 1024  # Vercel rejects a request body over 4.5 MB, so a bigger file never gets here
+
+
+def brochure_upload(config, event_id: int, name: str) -> tuple[dict, str]:
+    """Store the PDF picked on the form in the bucket. Returns ({file_key, file_name} or {} when no file was picked, an error text or empty)."""
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        return {}, ""
+    data = upload.read(MAX_PDF + 1)
+    if not upload.filename.lower().endswith(".pdf") or not data.startswith(b"%PDF"):
+        return {}, "The brochure file has to be a PDF."
+    if len(data) > MAX_PDF:
+        return {}, "That PDF is over 4 MB. Make it smaller, or paste a link instead."
+    key = f"brochures/{event_id}/{secrets.token_hex(6)}.pdf"
+    blobstore.upload(config, key, data, "application/pdf")
+    return {"file_key": key, "file_name": (re.sub(r"[^\w .-]", "", name).strip() or "Brochure")[:90] + ".pdf"}, ""
+
+
+def register(app, get_store, get_config) -> None:
     @app.before_request
     def admin_only():
         if request.path.startswith("/admin") and g.get("user") and not g.user["is_admin"]:
@@ -143,10 +164,13 @@ def register(app, get_store) -> None:
     def admin_brochure_add():
         store, event = get_store(), chosen_event(get_store()) or abort(404)
         name, link = request.form.get("name", "").strip(), web_link(request.form.get("url", ""))
-        if not name or not link:
-            flash("A brochure needs a name and a link that starts with https://.")
+        file, problem = brochure_upload(get_config(), event["id"], name)
+        if problem:
+            flash(problem)
+        elif not name or not (link or file):
+            flash("A brochure needs a name and either a PDF or a link that starts with https://.")
         else:
-            store.add_brochure(event["id"], name, link, for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")))
+            store.add_brochure(event["id"], name, link, for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")), **file)
             flash(f"Added {name}.")
         return back("admin_documents", event)
 
@@ -155,10 +179,13 @@ def register(app, get_store) -> None:
         store = get_store()
         row = next((r for e in store.list_events() for r in store.list_brochures(e["id"], active_only=False) if r["id"] == brochure_id), None) or abort(404)
         name, link = request.form.get("name", "").strip(), web_link(request.form.get("url", ""))
-        if not name or not link:
-            flash("A brochure needs a name and a link that starts with https://.")
+        file, problem = brochure_upload(get_config(), row["event_id"], name)
+        if problem:
+            flash(problem)
+        elif not name or not (link or file or row["file_key"]):
+            flash("A brochure needs a name and either a PDF or a link that starts with https://.")
         else:
-            store.update_brochure(brochure_id, name=name, url=link, for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")))
+            store.update_brochure(brochure_id, name=name, url=link, for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")), **file)
             flash("Saved.")
         return back("admin_documents", store.get_event(row["event_id"]))
 

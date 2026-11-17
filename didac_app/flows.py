@@ -76,6 +76,7 @@ class Reply:
     text: str
     options: list[tuple[str, str]] = field(default_factory=list)  # (label, description); description is only shown in lists
     as_list: bool = False
+    document: tuple[str, str] | None = None  # (public url, file name): the text goes with it as the caption
 
 
 def buttons(text: str, *labels: str) -> Reply:
@@ -215,7 +216,7 @@ class Chat:
 
     def brochures(self, audience: str = "visitors") -> list[dict]:
         """The active brochures of the live event that this audience ('visitors' or 'team') may see, as {key, name, url, for_visitors}."""
-        return [{"key": row["key"], "name": row["name"], "url": row["url"], "for_visitors": row["for_visitors"]} for row in self.store.list_brochures(self.event["id"], audience)]
+        return [{"key": row["key"], "name": row["name"], "url": row["url"], "file_key": row["file_key"], "file_name": row["file_name"], "for_visitors": row["for_visitors"]} for row in self.store.list_brochures(self.event["id"], audience)]
 
     def say(self, text: str) -> None:
         self.replies.append(Reply(text))
@@ -638,11 +639,17 @@ class Chat:
         if not self.user:  # a team member looking something up is not a lead
             self.visitor_lead(interest=f"Downloaded brochure: {selected['name']}")
         self.store.delete_session(self.number)
-        if self.user and selected["url"]:
-            team_only = "\n\nThis one is for the team only." if not selected["for_visitors"] else ""
-            return self.say(f"Here is the {selected['name']} brochure:\n{selected['url']}{team_only}\n\nType menu for more.")
+        team_only = "\n\nThis one is for the team only." if self.user and not selected["for_visitors"] else ""
+        more = "Type menu for more." if self.user else "Type menu to share your requirement or see other options."
+        if selected["file_key"]:
+            try:
+                link = blobstore.signed_url(self.config, selected["file_key"], 3600)
+            except Exception:
+                logger.exception("Could not sign the brochure file")
+                return self.say(f"We could not fetch the {selected['name']} brochure just now. Our team will send it to you. Type menu for other options.")
+            return self.replies.append(Reply(f"Here is the {selected['name']} brochure.{team_only}\n\n{more}", document=(link, selected["file_name"] or f"{selected['name']}.pdf")))
         if selected["url"]:
-            return self.say(f"Here is the {selected['name']} brochure:\n{selected['url']}\n\nType menu to share your requirement or see other options.")
+            return self.say(f"Here is the {selected['name']} brochure:\n{selected['url']}{team_only}\n\n{more}")
         self.say(f"The {selected['name']} brochure link is not set up yet. Our team will send it to you. Type menu for other options.")
 
     def requirement_step(self, step: str, data: dict, text: str) -> None:

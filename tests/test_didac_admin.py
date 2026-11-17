@@ -81,6 +81,28 @@ def test_a_brochure_needs_a_real_link(store):
     assert all(b["name"] != "Flyer" for b in store.list_brochures(event["id"]))
 
 
+def test_a_brochure_pdf_is_stored_and_sent_to_visitors_as_a_file(store, sent, monkeypatch):
+    import io
+    from didac_app import bird, blobstore
+    stored, files = {}, []
+    monkeypatch.setattr(blobstore, "upload", lambda config, key, data, content_type="": stored.update({key: data}))
+    monkeypatch.setattr(blobstore, "signed_url", lambda config, key, expires_in=3600: f"https://signed/{key}")
+    monkeypatch.setattr(bird, "send_document", lambda config, to, url, filename, caption="": files.append((to, url, filename, caption)))
+    client = app.test_client()
+    event = store.live_event()
+    for row in store.list_brochures(event["id"]):
+        store.set_brochure_active(row["id"], False)
+    bad = client.post("/admin/documents/brochure/add", data={"csrf": csrf(client), "event": event["id"], "name": "Fake", "for_visitors": "1", "file": (io.BytesIO(b"not a pdf"), "x.pdf")}, content_type="multipart/form-data", follow_redirects=True)
+    assert "has to be a PDF" in bad.data.decode() and not stored
+    client.post("/admin/documents/brochure/add", data={"csrf": csrf(client), "event": event["id"], "name": "TiQer", "for_visitors": "1", "file": (io.BytesIO(b"%PDF-1.4 hi"), "t.pdf")}, content_type="multipart/form-data", follow_redirects=True)
+    brochure = store.list_brochures(event["id"])[0]
+    assert brochure["file_key"] in stored and brochure["file_name"] == "TiQer.pdf" and brochure["url"] == ""
+    post_bird = __import__("bird_helpers").post_bird
+    post_bird(client, "whatsapp:+919811111111", "Download brochure")
+    post_bird(client, "whatsapp:+919811111111", "TiQer")
+    assert files == [("whatsapp:+919811111111", f"https://signed/{brochure['file_key']}", "TiQer.pdf", files[0][3])] and "TiQer brochure" in files[0][3]
+
+
 def test_the_welcome_message_is_per_event_and_the_default_is_not_stored(store, sent):
     client = app.test_client()
     event = store.live_event()

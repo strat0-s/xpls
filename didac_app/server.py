@@ -28,7 +28,7 @@ app.config.update(
     SESSION_COOKIE_SECURE=bool(os.getenv("VERCEL")),
 )
 ui.register(app, lambda: store, lambda: config)
-admin.register(app, lambda: store)
+admin.register(app, lambda: store, lambda: config)
 
 
 @app.get("/health")
@@ -154,8 +154,15 @@ def send_replies(event_id: int, to_number: str, replies: list[Reply], lead_ids: 
     error = ""
     try:
         for reply in replies:
-            bird.send_message(config, to_number, reply.text, reply.options, reply.as_list)
-            store.log_outbound(to_number, reply.text + (f"\n[{' | '.join(label for label, _ in reply.options)}]" if reply.options else ""), lead_ids)
+            if reply.document:
+                try:
+                    bird.send_document(config, to_number, reply.document[0], reply.document[1], reply.text)
+                except Exception:  # Bird or WhatsApp refused the file: the visitor still gets the brochure, as a link
+                    logging.getLogger("didac").exception("Could not send the brochure file")
+                    bird.send_message(config, to_number, f"{reply.text}\n{reply.document[0]}")
+            else:
+                bird.send_message(config, to_number, reply.text, reply.options, reply.as_list)
+            store.log_outbound(to_number, (f"[File sent: {reply.document[1]}]\n" if reply.document else "") + reply.text + (f"\n[{' | '.join(label for label, _ in reply.options)}]" if reply.options else ""), lead_ids)
     except Exception as exc:
         status, error = "reply_failed", str(exc)
     sent = time.perf_counter()

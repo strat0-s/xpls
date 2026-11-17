@@ -54,6 +54,11 @@ def message_body(text: str, options: list[tuple[str, str]] | None = None, as_lis
     return {"type": "text", "text": {"text": text}}
 
 
+def send_document(config: DidacConfig, to_number: str, url: str, filename: str, caption: str = "") -> None:
+    """A file (PDF) in the chat. WhatsApp fetches the URL when it delivers, so it must still work then."""
+    post_message(config, to_number, {"body": {"type": "file", "file": {"files": [{"mediaUrl": url, "contentType": "application/pdf", "filename": filename}], **({"text": caption} if caption else {})}}})
+
+
 def post_message(config: DidacConfig, to_number: str, content: dict) -> dict:
     response = session.post(
         f"{API_BASE}/workspaces/{config.bird_workspace_id}/channels/{config.bird_channel_id}/messages",
