@@ -20,22 +20,21 @@ def day(value: str | None) -> date | None:
         return None
 
 
-MAX_PDF = 4 * 1024 * 1024  # Vercel rejects a request body over 4.5 MB, so a bigger file never gets here
+MAX_PDF_MB = 50  # the bucket's own limit; WhatsApp itself allows 100 MB
 
 
-def brochure_upload(config, event_id: int, name: str) -> tuple[dict, str]:
-    """Store the PDF picked on the form in the bucket. Returns ({file_key, file_name} or {} when no file was picked, an error text or empty)."""
-    upload = request.files.get("file")
-    if not upload or not upload.filename:
-        return {}, ""
-    data = upload.read(MAX_PDF + 1)
-    if not upload.filename.lower().endswith(".pdf") or not data.startswith(b"%PDF"):
-        return {}, "The brochure file has to be a PDF."
-    if len(data) > MAX_PDF:
-        return {}, "That PDF is over 4 MB. Make it smaller, or paste a link instead."
-    key = f"brochures/{event_id}/{secrets.token_hex(6)}.pdf"
-    blobstore.upload(config, key, data, "application/pdf")
-    return {"file_key": key, "file_name": (re.sub(r"[^\w .-]", "", name).strip() or "Brochure")[:90] + ".pdf"}, ""
+def brochure_file(event_id: int, name: str) -> dict:
+    """The file the browser already put in the bucket (see /admin/documents/upload-url), or {} when none was picked."""
+    key = request.form.get("file_key", "")
+    if not re.fullmatch(rf"brochures/{event_id}/[0-9a-f]{{12}}\.pdf", key):
+        return {}
+    return {"file_key": key, "file_name": (re.sub(r"[^\w .-]", "", name).strip() or "Brochure")[:90] + ".pdf"}
+
+
+def autosaved(error: str = ""):
+    """The page saves a field as soon as it changes and asks for JSON back; returns None for an ordinary form post."""
+    if request.headers.get("X-Autosave"):
+        return ({"error": error}, 400) if error else {"ok": True}
 
 
 def register(app, get_store, get_config) -> None:
@@ -112,7 +111,7 @@ def register(app, get_store, get_config) -> None:
             flash("Create an event first.")
             return redirect(url_for("admin_event"))
         return render_template("admin_documents.html", event=event, events=store.list_events(), doc_types=store.list_doc_types(event["id"]),
-                               brochures=store.list_brochures(event["id"], active_only=False), readers=READERS)
+                               brochures=store.list_brochures(event["id"], active_only=False), readers=READERS, max_pdf_mb=MAX_PDF_MB)
 
     @app.post("/admin/documents/type/add")
     def admin_type_add():
@@ -136,7 +135,7 @@ def register(app, get_store, get_config) -> None:
             flash("Saved.")
         else:
             flash("The document type needs a name.")
-        return back("admin_documents", store.get_event(row["event_id"]))
+        return autosaved("" if label else "Needs a name") or back("admin_documents", store.get_event(row["event_id"]))
 
     @app.post("/admin/documents/type/<int:type_id>/active")
     def admin_type_active(type_id: int):
@@ -145,7 +144,7 @@ def register(app, get_store, get_config) -> None:
         on = request.form.get("active") == "1"
         store.set_doc_type_active(type_id, on)
         flash(f"{row['label']} is {'on' if on else 'off'} in the WhatsApp menu." + ("" if on else " Leads captured with it are kept."))
-        return back("admin_documents", store.get_event(row["event_id"]))
+        return autosaved() or back("admin_documents", store.get_event(row["event_id"]))
 
     @app.post("/admin/documents/type/order")
     def admin_type_order():
@@ -155,14 +154,18 @@ def register(app, get_store, get_config) -> None:
             store.update_doc_type(type_id, position=position)
         return {"ok": True}
 
+    @app.post("/admin/documents/upload-url")
+    def admin_upload_url():
+        event = chosen_event(get_store()) or abort(404)
+        key = f"brochures/{event['id']}/{secrets.token_hex(6)}.pdf"
+        return {"url": blobstore.signed_upload_url(get_config(), key), "key": key}
+
     @app.post("/admin/documents/brochure/add")
     def admin_brochure_add():
         store, event = get_store(), chosen_event(get_store()) or abort(404)
         name = request.form.get("name", "").strip()
-        file, problem = brochure_upload(get_config(), event["id"], name)
-        if problem:
-            flash(problem)
-        elif not name or not file:
+        file = brochure_file(event["id"], name)
+        if not name or not file:
             flash("A brochure needs a name and a PDF.")
         else:
             store.add_brochure(event["id"], name, "", for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")), **file)
@@ -174,22 +177,20 @@ def register(app, get_store, get_config) -> None:
         store = get_store()
         row = next((r for e in store.list_events() for r in store.list_brochures(e["id"], active_only=False) if r["id"] == brochure_id), None) or abort(404)
         name = request.form.get("name", "").strip()
-        file, problem = brochure_upload(get_config(), row["event_id"], name)
-        if problem:
-            flash(problem)
-        elif not name or not (file or row["file_key"] or row["url"]):
+        file = brochure_file(row["event_id"], name)
+        if not name or not (file or row["file_key"] or row["url"]):
             flash("A brochure needs a name and a PDF.")
         else:
             store.update_brochure(brochure_id, name=name, **({"url": ""} if file else {}), for_visitors=bool(request.form.get("for_visitors")), for_team=bool(request.form.get("for_team")), **file)
             flash("Saved.")
-        return back("admin_documents", store.get_event(row["event_id"]))
+        return autosaved("" if name else "Needs a name") or back("admin_documents", store.get_event(row["event_id"]))
 
     @app.post("/admin/documents/brochure/<int:brochure_id>/active")
     def admin_brochure_active(brochure_id: int):
         store = get_store()
         row = next((r for e in store.list_events() for r in store.list_brochures(e["id"], active_only=False) if r["id"] == brochure_id), None) or abort(404)
         store.set_brochure_active(brochure_id, request.form.get("active") == "1")
-        return back("admin_documents", store.get_event(row["event_id"]))
+        return autosaved() or back("admin_documents", store.get_event(row["event_id"]))
 
     # ---- message wording -------------------------------------------------------------------------------------------------------
     @app.get("/admin/messages")

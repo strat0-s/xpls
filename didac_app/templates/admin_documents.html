@@ -19,6 +19,11 @@
     .plus { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 24px; line-height: 1; flex: none; }
     .addform { display: flex; flex-direction: column; gap: 10px; } .addform .t { height: 38px; width: 100%; }
     .addform .row2 { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; } .addform .row3 { display: flex; gap: 16px; }
+    .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex: none; } .switch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+    .switch span { position: absolute; inset: 0; background: var(--line); border-radius: 999px; transition: background .15s; } .switch span::after { content: ''; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+    .switch input:checked + span { background: var(--acc); } .switch input:checked + span::after { transform: translateX(18px); } .switch input:focus-visible + span { outline: 3px solid #4c8bf5; outline-offset: 2px; }
+    .state { font-size: 12px; color: var(--mut); min-width: 64px; } .state.bad { color: var(--bad-ink); }
+    .filebtn { cursor: pointer; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-flex; }
     .events { display: flex; gap: 6px; flex-wrap: wrap; } .events a { padding: 4px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surf); color: var(--mut); font-weight: 600; text-decoration: none; } .events a.on { background: var(--soft); color: var(--acc-text); border-color: var(--soft); }
 {% endblock %}
 {% block content %}
@@ -27,37 +32,36 @@
   <div class="events" role="group" aria-label="Event">{% for e in events %}<a href="{{ url_for('admin_documents', event=e.id) }}" class="{{ 'on' if e.id == event.id }}">{{ e.name }}{{ ' (live)' if e.status == 'live' }}</a>{% endfor %}</div>
 
   <section class="card">
-    <div class="panel head"><div><h2>Document types for {{ event.name }}</h2><div class="hint">Each active type is a row in the team's WhatsApp menu. Drag to change the order. Switching one off hides it from the menu and keeps every lead already captured with it.</div></div>
+    <div class="panel head"><div><h2>Document types</h2><div class="hint">Shown in the team's WhatsApp menu. Drag to reorder.</div></div>
       <button type="button" class="btn plus" data-open="add-type" aria-label="Add a document type" title="Add a document type">+</button></div>
     <div id="types">
       {% for t in doc_types %}
       <div class="row {{ '' if t.active else 'off' }}" data-id="{{ t.id }}" draggable="true">
         <span class="grip" aria-label="Drag to reorder" role="img"><svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor"><circle cx="3" cy="3" r="1.5"/><circle cx="9" cy="3" r="1.5"/><circle cx="3" cy="9" r="1.5"/><circle cx="9" cy="9" r="1.5"/><circle cx="3" cy="15" r="1.5"/><circle cx="9" cy="15" r="1.5"/></svg></span>
-        <form method="post" action="{{ url_for('admin_type_edit', type_id=t.id) }}" class="edit">
+        <form method="post" action="{{ url_for('admin_type_edit', type_id=t.id) }}" class="edit auto">
           <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ event.id }}">
           <input class="t" name="label" value="{{ t.label }}" aria-label="Name in WhatsApp" required><input class="t" name="hint" value="{{ t.hint }}" aria-label="Hint under the name" placeholder="Hint under the name">
-          <button class="btn ghost sm">Save</button>{% if not t.active %}<span class="hint">Hidden on WhatsApp</span>{% endif %}</form>
-        <span class="chip {{ 'ok' if t.active else 'none' }}">{{ 'Active' if t.active else 'Inactive' }}</span>
-        <form method="post" action="{{ url_for('admin_type_active', type_id=t.id) }}" style="margin:0">
-          <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="active" value="{{ '0' if t.active else '1' }}">
-          <button class="btn {{ 'ghost' if t.active else '' }} sm">{{ 'Deactivate' if t.active else 'Activate' }}</button></form>
+          <span class="state" aria-live="polite"></span></form>
+        <form method="post" action="{{ url_for('admin_type_active', type_id=t.id) }}" class="auto" style="margin:0">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}"><label class="switch" title="Show in the WhatsApp menu"><input type="checkbox" role="switch" name="active" value="1" {{ 'checked' if t.active }} aria-label="Active"><span></span></label></form>
       </div>
       {% endfor %}
     </div>
   </section>
 
   <section class="card">
-    <div class="panel head"><div><h2>Brochures for {{ event.name }}</h2><div class="hint">Upload a PDF (up to 4 MB) and WhatsApp sends the file itself. A new PDF replaces the old one. Turn off Visitors for team-only files.</div></div>
+    <div class="panel head"><div><h2>Brochures</h2><div class="hint">PDFs people can download on WhatsApp.</div></div>
       <button type="button" class="btn plus" data-open="add-brochure" aria-label="Add a brochure" title="Add a brochure">+</button></div>
     {% for b in brochures %}
     <div class="bro {{ '' if b.active else 'off' }}">
-      <form method="post" action="{{ url_for('admin_brochure_edit', brochure_id=b.id) }}" class="edit" enctype="multipart/form-data">
+      <form method="post" action="{{ url_for('admin_brochure_edit', brochure_id=b.id) }}" class="edit auto" data-brochure>
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ event.id }}">
-        <input class="t" name="name" value="{{ b.name }}" aria-label="Name" required><label class="hint">{% if b.file_key %}PDF: {{ b.file_name }}. Replace: {% elif b.url %}Old link in use. Upload a PDF to replace it: {% else %}PDF: {% endif %}<input type="file" name="file" accept="application/pdf"></label>
+        <input class="t" name="name" value="{{ b.name }}" aria-label="Name" required>
+        <label class="btn ghost sm filebtn" title="{{ 'Replace the PDF' if b.file_key else 'Add a PDF' }}">{{ b.file_name if b.file_key else 'Add PDF' }}<input type="file" data-file accept="application/pdf" hidden></label>{% if not b.file_key and b.url %}<span class="chip amber">Link only</span>{% endif %}
         <label><input type="checkbox" name="for_visitors" {{ 'checked' if b.for_visitors }}> Visitors</label><label><input type="checkbox" name="for_team" {{ 'checked' if b.for_team }}> Team</label>
-        <button class="btn ghost sm">Save</button></form>
-      <form method="post" action="{{ url_for('admin_brochure_active', brochure_id=b.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="active" value="{{ '0' if b.active else '1' }}">
-        <button class="btn {{ 'ghost' if b.active else '' }} sm">{{ 'Deactivate' if b.active else 'Activate' }}</button></form>
+        <span class="state" aria-live="polite"></span></form>
+      <form method="post" action="{{ url_for('admin_brochure_active', brochure_id=b.id) }}" class="auto" style="margin:0">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><label class="switch" title="Offer on WhatsApp"><input type="checkbox" role="switch" name="active" value="1" {{ 'checked' if b.active }} aria-label="Active"><span></span></label></form>
     </div>
     {% endfor %}
   </section>
@@ -73,15 +77,68 @@
 </dialog>
 <dialog class="ask" id="add-brochure">
   <h2>Add a brochure</h2>
-  <form method="post" action="{{ url_for('admin_brochure_add') }}" class="addform" enctype="multipart/form-data">
+  <form method="post" action="{{ url_for('admin_brochure_add') }}" class="addform" data-upload>
     <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="event" value="{{ event.id }}">
     <input class="t" name="name" placeholder="Brochure name" aria-label="Name" required>
-    <label class="hint">PDF (up to 4 MB): <input type="file" name="file" accept="application/pdf" required></label>
+    <label class="hint">PDF: <input type="file" data-file accept="application/pdf" required></label>
     <div class="row3"><label><input type="checkbox" name="for_visitors" checked> Visitors</label><label><input type="checkbox" name="for_team" checked> Team</label></div>
     <div class="row2"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn">Add brochure</button></div>
   </form>
 </dialog>
 <script>
+  // A PDF goes straight from the browser to the bucket (the app only hands out the upload address), so size is not limited by the app server.
+  async function uploadPdf(form, file) {
+    if (!/\.pdf$/i.test(file.name)) throw new Error('The brochure file has to be a PDF.');
+    if (file.size > {{ max_pdf_mb }} * 1048576) throw new Error('That PDF is over {{ max_pdf_mb }} MB.');
+    var body = new FormData(); body.append('csrf', form.querySelector('[name=csrf]').value); body.append('event', form.querySelector('[name=event]').value);
+    var signed = await (await fetch('{{ url_for("admin_upload_url") }}', { method: 'POST', body: body })).json();
+    var put = await fetch(signed.url, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: file });
+    if (!put.ok) throw new Error('The upload failed.');
+    return signed.key;
+  }
+  // The add boxes: upload the chosen PDF first, then send the form.
+  document.querySelectorAll('form[data-upload]').forEach(function (form) {
+    form.addEventListener('submit', async function (e) {
+      var input = form.querySelector('[data-file]'), file = input && input.files[0];
+      if (!file || form.dataset.done) return;
+      e.preventDefault();
+      var button = form.querySelector('button:not([type=button])'), label = button.textContent;
+      try {
+        button.disabled = true; button.textContent = 'Uploading…';
+        var key = document.createElement('input'); key.type = 'hidden'; key.name = 'file_key'; key.value = await uploadPdf(form, file); form.appendChild(key);
+        input.disabled = true; form.dataset.done = '1'; form.submit();
+      } catch (err) { alert(err.message); button.disabled = false; button.textContent = label; }
+    });
+  });
+  // Rows save themselves: a change is sent as soon as it is made, like a Drive doc. The small note beside the row says what happened.
+  document.querySelectorAll('form.auto').forEach(function (form) {
+    var note = form.querySelector('.state'), timer, fade;
+    function say(text, bad) { if (!note) return; note.textContent = text; note.className = 'state' + (bad ? ' bad' : ''); clearTimeout(fade); if (!bad && text === 'Saved') fade = setTimeout(function () { note.textContent = ''; }, 2000); }
+    async function save(extra) {
+      say('Saving…');
+      try {
+        var body = new FormData(form); if (extra) body.append('file_key', extra);
+        var r = await fetch(form.action, { method: 'POST', body: body, headers: { 'X-Autosave': '1' } });
+        var data = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(data.error || 'Not saved');
+        say('Saved'); return true;
+      } catch (err) { say(err.message, true); return false; }
+    }
+    form.addEventListener('input', function (e) { if (e.target.type === 'text') { clearTimeout(timer); timer = setTimeout(save, 700); } });
+    form.addEventListener('change', async function (e) {
+      clearTimeout(timer);
+      var t = e.target;
+      if (t.dataset.file !== undefined) {
+        if (!t.files[0]) return;
+        say('Uploading…');
+        try { if (await save(await uploadPdf(form, t.files[0]))) location.reload(); } catch (err) { say(err.message, true); }
+        return;
+      }
+      if (t.name === 'active') { var row = form.closest('.row, .bro'); if (row) row.classList.toggle('off', !t.checked); }
+      save();
+    });
+    form.addEventListener('submit', function (e) { e.preventDefault(); clearTimeout(timer); save(); });
+  });
   // The + buttons open their form in a box.
   document.querySelectorAll('[data-open]').forEach(function (b) { b.onclick = function () { document.getElementById(b.dataset.open).showModal(); }; });
   document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = function () { b.closest('dialog').close(); }; });

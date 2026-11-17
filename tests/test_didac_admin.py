@@ -81,26 +81,39 @@ def test_a_brochure_needs_a_pdf_not_a_link(store):
     assert all(b["name"] != "Flyer" for b in store.list_brochures(event["id"]))
 
 
-def test_a_brochure_pdf_is_stored_and_sent_to_visitors_as_a_file(store, sent, monkeypatch):
-    import io
+def test_a_brochure_pdf_goes_to_the_bucket_from_the_browser_and_is_sent_to_visitors_as_a_file(store, sent, monkeypatch):
     from didac_app import bird, blobstore
-    stored, files = {}, []
-    monkeypatch.setattr(blobstore, "upload", lambda config, key, data, content_type="": stored.update({key: data}))
+    files = []
+    monkeypatch.setattr(blobstore, "signed_upload_url", lambda config, key: f"https://upload/{key}")
     monkeypatch.setattr(blobstore, "signed_url", lambda config, key, expires_in=3600: f"https://signed/{key}")
     monkeypatch.setattr(bird, "send_document", lambda config, to, url, filename, caption="": files.append((to, url, filename, caption)))
     client = app.test_client()
     event = store.live_event()
     for row in store.list_brochures(event["id"]):
         store.set_brochure_active(row["id"], False)
-    bad = client.post("/admin/documents/brochure/add", data={"csrf": csrf(client), "event": event["id"], "name": "Fake", "for_visitors": "1", "file": (io.BytesIO(b"not a pdf"), "x.pdf")}, content_type="multipart/form-data", follow_redirects=True)
-    assert "has to be a PDF" in bad.data.decode() and not stored
-    client.post("/admin/documents/brochure/add", data={"csrf": csrf(client), "event": event["id"], "name": "TiQer", "for_visitors": "1", "file": (io.BytesIO(b"%PDF-1.4 hi"), "t.pdf")}, content_type="multipart/form-data", follow_redirects=True)
+    slot = client.post("/admin/documents/upload-url", data={"csrf": csrf(client), "event": event["id"]}).get_json()
+    assert slot["key"].startswith(f"brochures/{event['id']}/") and slot["url"] == f"https://upload/{slot['key']}"
+    bad = post(client, "/admin/documents/brochure/add", event=event["id"], name="Fake", for_visitors="1", file_key="brochures/999/evil.pdf").data.decode()  # not a slot we handed out
+    assert "needs a name and a PDF" in bad and not store.list_brochures(event["id"])
+    post(client, "/admin/documents/brochure/add", event=event["id"], name="TiQer", for_visitors="1", file_key=slot["key"])
     brochure = store.list_brochures(event["id"])[0]
-    assert brochure["file_key"] in stored and brochure["file_name"] == "TiQer.pdf" and brochure["url"] == ""
+    assert brochure["file_key"] == slot["key"] and brochure["file_name"] == "TiQer.pdf" and brochure["url"] == ""
     post_bird = __import__("bird_helpers").post_bird
     post_bird(client, "whatsapp:+919811111111", "Download brochure")
     post_bird(client, "whatsapp:+919811111111", "TiQer")
     assert files == [("whatsapp:+919811111111", f"https://signed/{brochure['file_key']}", "TiQer.pdf", files[0][3])] and "TiQer brochure" in files[0][3]
+
+
+def test_rows_save_themselves_and_say_what_went_wrong(store):
+    client = app.test_client()
+    event = store.live_event()
+    kind = store.list_doc_types(event["id"])[0]
+    saved = client.post(f"/admin/documents/type/{kind['id']}", data={"csrf": csrf(client), "label": "Registration", "hint": "x"}, headers={"X-Autosave": "1"})
+    assert saved.get_json() == {"ok": True} and store.list_doc_types(event["id"])[0]["label"] == "Registration"
+    empty = client.post(f"/admin/documents/type/{kind['id']}", data={"csrf": csrf(client), "label": "", "hint": "x"}, headers={"X-Autosave": "1"})
+    assert empty.status_code == 400 and empty.get_json() == {"error": "Needs a name"}
+    off = client.post(f"/admin/documents/type/{kind['id']}/active", data={"csrf": csrf(client)}, headers={"X-Autosave": "1"})  # an unticked switch sends nothing
+    assert off.get_json() == {"ok": True} and not store.list_doc_types(event["id"])[0]["active"]
 
 
 def test_the_welcome_message_is_per_event_and_the_default_is_not_stored(store, sent):

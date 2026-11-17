@@ -27,6 +27,13 @@ def upload(config: DidacConfig, key: str, data: bytes, content_type: str = "") -
     response.raise_for_status()
 
 
+def signed_upload_url(config: DidacConfig, key: str) -> str:
+    """A one-time URL the browser can PUT a file to, so a big file goes straight to the bucket and not through the app."""
+    response = requests.post(f"{_base(config)}/object/upload/sign/{config.supabase_bucket}/{quote(key)}", headers=_headers(config), json={}, timeout=15)
+    response.raise_for_status()
+    return f"{_base(config)}{response.json()['url']}"
+
+
 def signed_url(config: DidacConfig, key: str, expires_in: int = 3600) -> str:
     response = requests.post(
         f"{_base(config)}/object/sign/{config.supabase_bucket}/{quote(key)}",
