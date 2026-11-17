@@ -63,11 +63,14 @@ This adds lead fit score, priority, segment, recommended channel, outreach readi
 
 Footfall runs one event at a time. Whichever event is **live** decides the document types in the team's WhatsApp menu, the brochures, the welcome message, and which event every new lead belongs to. Between events nothing is saved.
 
-- **Admin pages** (admins only, sidebar): *Event control* (create, copy the setup of a past event, make live, stop), *Documents and brochures* (add, rename, drag to reorder, activate or deactivate a type; brochures are pasted links, so a Google Drive file can be updated without touching the app), *Messages* (welcome message per event), *Team access*.
+- **Admin pages** (admins only, sidebar): *Event control* (create, copy the setup of a past event, make live, stop), *Documents and brochures* (add, rename, drag to reorder, activate or deactivate a type; brochures are PDFs uploaded straight to the storage bucket and sent to visitors on WhatsApp as a document; every row saves itself), *Messages* (welcome message per event), *Team access*.
+- **Lead page:** shows the whole WhatsApp conversation as two collapsible chats, *Team chat* (the person who scanned the card) and *Visitor chat* (the visitor, including follow-up replies). A visitor who texts back is flagged on the lead and in the gallery until someone clicks **Mark as replied**. Replies and requirements sent after the follow-up are added to the lead that was scanned.
+- **Export:** every Orbit column is shown on the Export page, and leads can be unticked to leave them out of the CSV or Excel file.
+- **Look:** the app is sized up on desktop, and the moon icon beside the logo switches between light and dark.
 - **Deactivating** a document type hides it from WhatsApp straight away and never deletes leads captured with it.
 - **Team on WhatsApp:** scan documents (up to 2 documents in one photo for the generic "document" type), send event photos, get team-only brochures, add notes.
 - **Reading trouble:** if the reading service fails, photos are kept and the team gets calm messages; a lead can be saved as *Not scanned* and read again from its page. After 5 failures in a row the dashboard shows a banner (admins also see the reason).
-- **Command line** (`python -m didac_app.cli ...`): `init-db` (creates tables, and on first run the live DIDAC event), `events`, `new-event --event-name "..." [--copy-from N]`, `start-event --id N`, `stop-event --id N`.
+- **Command line** (`python -m didac_app.cli ...`): `init-db` (creates tables, and on first run the first live event, "DIDAC 2026"), `events`, `new-event --event-name "..." [--copy-from N]`, `start-event --id N`, `stop-event --id N`.
 
 Visitors and staff talk to a WhatsApp number on Bird. Bird posts each message to the Flask app, which saves leads in Postgres and photos/voice notes in a private storage bucket.
 
