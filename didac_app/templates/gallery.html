@@ -34,7 +34,7 @@
 {% endblock %}
 {% block content %}
 {% set keep = {'q': q or None, 'who': who or None, 'prio': prio or None, 'check': '1' if check else None, 'event': request.args.get('event') or None, 'per': request.args.get('per') or None} %}
-{% set active_filters = (1 if who else 0) + (1 if prio else 0) + (1 if check else 0) %}
+{% set active_filters = (1 if who else 0) + (1 if prio else 0) + (1 if check else 0) + (1 if reply_only else 0) %}
 <div class="bar">
   <div><h1>Leads</h1></div>
   <div class="grp">
@@ -62,12 +62,16 @@
         <select class="t" id="fl-who" name="who"><option value="">Everyone</option><option value="team" {{ 'selected' if who == 'team' }}>Team</option><option value="visitors" {{ 'selected' if who == 'visitors' }}>Visitors</option></select></div>
       <div><label class="f" for="fl-prio">Priority</label>
         <select class="t" id="fl-prio" name="prio"><option value="">Any priority</option>{% for p in priorities %}<option {{ 'selected' if prio == p }}>{{ p }}</option>{% endfor %}<option value="none" {{ 'selected' if prio == 'none' }}>Not set</option></select></div>
+      <label class="needs"><input type="checkbox" name="reply" value="1" {{ 'checked' if reply_only }}>Only leads that texted back ({{ replies_waiting }})</label>
       <label class="needs"><input type="checkbox" name="check" value="1" {{ 'checked' if check }}>Only leads that need checking ({{ needs_check }})</label>
       <div class="row"><button class="btn">Apply</button><a class="btn ghost" href="{{ url_for('gallery', type=tab if tab != 'all' else None, q=q or None, event=request.args.get('event') or None) }}">Clear</a></div>
     </form>
   </details>
 </div>
 
+{% if replies_waiting and not reply_only %}
+<div class="notice" role="alert" style="margin-bottom:12px"><strong>{{ replies_waiting }} lead{{ '' if replies_waiting == 1 else 's' }} texted back and need{{ 's' if replies_waiting == 1 }} an answer.</strong> <a href="{{ url_for('gallery', reply=1, event=request.args.get('event') or None) }}">Show them</a></div>
+{% endif %}
 <section class="card">
 {% if pg.total %}
 {% set play = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>' %}
@@ -75,12 +79,12 @@
 <div class="scroll"><div class="grid">
   <div class="hd"><span>Scan</span><span>Name</span><span>Event</span><span>Type</span><span>Priority</span><span>Captured by</span><span>Time</span></div>
   {% for c in pg['items'] %}
-  <a class="lead {{ 'chk' if c.review_reason }}" href="{{ url_for('lead_detail', lead_id=c.id) }}">
+  <a class="lead {{ 'chk' if c.review_reason or c.replied_at }}" href="{{ url_for('lead_detail', lead_id=c.id) }}">
     <span class="th">{% if c.kind == 'image' %}<span class="ph"><img src="/media/{{ c.image_id }}" alt="" loading="lazy"></span>{% if c.photo_count > 1 %}<span class="ph">{{ c.photo_count }}</span>{% endif %}{% elif c.kind == 'audio' %}<span class="ph">{{ play|safe }}</span>{% else %}<span class="ph">{{ chat|safe }}</span>{% endif %}</span>
     <span><b>{{ c.name }}</b><small>{{ c.org }}{{ ' · ' if c.org and c.phone }}{{ c.phone }}</small></span>
     <span>{% if c.event.name %}<b style="font-weight:600">{{ c.event.name }}</b><small>{{ c.event.when }}</small>{% endif %}</span>
     <span><span class="chip team">{{ c.type_label }}</span></span>
-    <span><span class="chip {{ c.priority|lower or 'none' }}">{{ c.priority or 'Not set' }}</span>{% if c.unscanned %}<br><span class="chip amber" style="margin-top:4px">Not scanned</span>{% elif c.review_reason %}<br><span class="chip amber" style="margin-top:4px">Check</span>{% endif %}</span>
+    <span><span class="chip {{ c.priority|lower or 'none' }}">{{ c.priority or 'Not set' }}</span>{% if c.unscanned %}<br><span class="chip amber" style="margin-top:4px">Not scanned</span>{% elif c.review_reason %}<br><span class="chip amber" style="margin-top:4px">Check</span>{% endif %}{% if c.replied_at %}<br><span class="chip amber" style="margin-top:4px">Texted back</span>{% endif %}</span>
     <span class="by"><span class="av {{ '' if c.is_team else 'visitor' }}">{{ c.initials }}</span>{{ c.by }}</span>
     <span style="color:var(--mut)">{{ c.created_at|local_time }}</span>
   </a>

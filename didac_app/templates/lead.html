@@ -18,6 +18,7 @@
     .item .meta { font-size: 12px; color: var(--mut); margin-top: 2px; }
     .item audio { width: 100%; }
     .chat { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .chat .msgs { display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow-y: auto; }
     .bub { max-width: 82%; padding: 8px 12px; border-radius: 12px; background: var(--soft); white-space: pre-wrap; overflow-wrap: anywhere; }
     .bub.out { align-self: flex-end; background: var(--warn); color: var(--warn-ink); }
     .bub .who { font-size: 11px; color: var(--mut); margin-bottom: 2px; }
@@ -61,6 +62,12 @@
   {% endif %}
 </div>
 
+{% if replied_at %}
+<div class="notice" role="alert" style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;margin-bottom:12px">
+  <div><strong>This visitor texted back and needs an answer.</strong><br>Last message {{ replied_at|local_time }}. Read the WhatsApp conversation below, then reply to them.</div>
+  <form method="post" action="{{ url_for('lead_replied', lead_id=lead.id) }}" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn">Mark as replied</button></form>
+</div>
+{% endif %}
 {% if lead.review_reason == 'Not scanned' %}
 <div class="notice" role="alert" style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between">
   <div><strong>This document was not scanned</strong><br>Something went wrong on our side. The photos are saved.</div>
@@ -115,14 +122,21 @@
     {% else %}
     <div class="card item hint">Nothing has been attached to this lead yet.</div>
     {% endfor %}
-    <div style="font-size:15px;font-weight:700;margin-top:8px">WhatsApp conversation <span class="hint" style="font-weight:400">· {{ chat|length }} message{{ '' if chat|length == 1 else 's' }}, both directions</span></div>
-    <section class="card chat">
-      {% for m in chat %}
-      <div class="bub {{ m.direction }}"><div class="who">{{ m.by }} · {{ m.created_at|local_time }}</div>{{ m.body }}{% if m.num_media %}<div class="hint">{{ m.num_media }} attachment{{ '' if m.num_media == 1 else 's' }} (photos and voice notes are above)</div>{% endif %}</div>
+    <div style="font-size:15px;font-weight:700;margin-top:8px">WhatsApp conversations <span class="hint" style="font-weight:400">· each chat is kept on its own, with the Xperimentor number on the right</span></div>
+    {% for chat in chats %}
+    <section class="card chat" aria-label="{{ chat.title }}">
+      <div style="font-weight:600">{{ chat.title }} <span class="hint" style="font-weight:400">· {{ chat.rows|length }} message{{ '' if chat.rows|length == 1 else 's' }}</span></div>
+      <div class="msgs">
+      {% for m in chat.rows %}
+      <div class="bub {{ m.direction }}"><div class="who">{{ chat.who if m.direction == 'in' else 'Xperimentor' }} · {{ m.created_at|local_time }}</div>{{ m.body }}{% if m.num_media %}<div class="hint">{{ m.num_media }} attachment{{ '' if m.num_media == 1 else 's' }} (photos and voice notes are above)</div>{% endif %}</div>
       {% else %}
-      <div class="hint">No WhatsApp messages are recorded for this lead yet.</div>
+      <div class="hint">No messages recorded in this chat yet.</div>
       {% endfor %}
+      </div>
     </section>
+    {% else %}
+    <section class="card chat"><div class="hint">No WhatsApp chat is recorded for this lead.</div></section>
+    {% endfor %}
   </section>
 
   <form class="card right" method="post">

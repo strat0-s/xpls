@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
@@ -117,8 +117,10 @@ def register(app, get_store, get_config) -> None:
             for t in store.list_doc_types(e["id"]):
                 labels.setdefault((e["id"], t["key"]), t["label"])
         cards = []
+        waiting = store.reply_flags()
         for lead in leads:
             card = lead_card(lead, media.get(lead.id, []), members)
+            card["replied_at"] = waiting.get(lead.id, "")
             card["type"] = lead.doc_type or "_none"
             card["type_label"] = labels.get((lead.event_id, lead.doc_type)) or ({"form": "Contact form", "badge": "Event badge / QR"}.get(lead.doc_type) if lead.doc_type else "No scan") or lead.doc_type
             card["event"] = event_line(events.get(lead.event_id), lead)
@@ -126,6 +128,8 @@ def register(app, get_store, get_config) -> None:
         who = request.args.get("who") if request.args.get("who") in ("team", "visitors") else ""
         prio = request.args.get("prio") if request.args.get("prio") in (*PRIORITIES, "none") else ""
         check = request.args.get("check") == "1"
+        reply_only = request.args.get("reply") == "1"
+        replies_waiting = sum(1 for card in cards if card["replied_at"])
         query = request.args.get("q", "").strip().lower()
         if who:
             cards = [card for card in cards if card["is_team"] == (who == "team")]
@@ -133,6 +137,8 @@ def register(app, get_store, get_config) -> None:
             cards = [card for card in cards if card["priority"] == ("" if prio == "none" else prio)]
         if check:
             cards = [card for card in cards if card["review_reason"]]
+        if reply_only:
+            cards = [card for card in cards if card["replied_at"]]
         if query:
             cards = [card for card in cards if query in card["search"]]
         counts = {}
@@ -149,7 +155,7 @@ def register(app, get_store, get_config) -> None:
         if tab != "all":
             cards = [card for card in cards if card["type"] == tab]
         page = paginate(cards, request.args.get("page", 1, type=int), request.args.get("per", 25, type=int))
-        return render_template("gallery.html", pg=page, tabs=tabs, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, check=check, priorities=PRIORITIES,
+        return render_template("gallery.html", pg=page, tabs=tabs, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, check=check, reply_only=reply_only, replies_waiting=replies_waiting, priorities=PRIORITIES,
                                events=list(events.values()), event_id=event_id, needs_check=sum(1 for lead in leads if lead.review_reason))
 
     @app.route("/leads/<int:lead_id>", methods=["GET", "POST"])
@@ -180,9 +186,9 @@ def register(app, get_store, get_config) -> None:
             return redirect(url_for("lead_detail", lead_id=lead_id))
         members = members_by_phone(store)
         items = lead_items(lead, store, members)
-        chat = [row | {"by": "Footfall bot" if row["direction"] == "out" else members.get(auth.normalize_phone(row["number"])) or "Visitor"} for row in store.lead_conversation(lead.id, auth.normalize_phone(lead.phone) or "")]
+        chats = lead_chats(store, lead, members)
         return render_template(
-            "lead.html", lead=lead, items=items, chat=chat, fields=EDITABLE_FIELDS, title=display_name(lead), doc_types=store.list_doc_types(lead.event_id) if lead.event_id else [],
+            "lead.html", lead=lead, items=items, chats=chats, replied_at=store.reply_flags().get(lead.id, ""), fields=EDITABLE_FIELDS, title=display_name(lead), doc_types=store.list_doc_types(lead.event_id) if lead.event_id else [],
             org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
             priorities=PRIORITIES, curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )
@@ -220,6 +226,15 @@ def register(app, get_store, get_config) -> None:
         flash("Marked as checked.")
         target = request.form.get("next", "")
         return redirect(target if target.startswith("/") and not target.startswith("//") else url_for("gallery"))
+
+    @app.post("/leads/<int:lead_id>/replied")
+    def lead_replied(lead_id: int):
+        store = get_store()
+        if not store.get_lead(lead_id):
+            abort(404)
+        store.clear_reply(lead_id)
+        flash("Marked as replied.")
+        return redirect(url_for("lead_detail", lead_id=lead_id))
 
     @app.post("/media/<int:media_id>/rotate")
     def media_rotate(media_id: int):
@@ -472,6 +487,21 @@ def lead_card(lead, media: list[dict], members: dict[str, str]) -> dict:
         "created_at": lead.created_at,
         "search": " ".join([name, org, lead.phone, lead.email, note]).lower(),
     }
+
+
+def lead_chats(store, lead, members: dict[str, str]) -> list[dict]:
+    """The separate WhatsApp chats behind a lead, each with our number on one side: the visitor's own chat, and the team member's scan chat
+    (only the stretch since their previous lead, so another lead's scan is not mixed in)."""
+    chats = []
+    visitor = auth.normalize_phone(lead.phone)
+    staff = auth.normalize_phone(lead.from_number)
+    if staff and staff != visitor:
+        since = datetime.fromisoformat(store.previous_lead_time(lead.from_number, lead.id) or "1970-01-01T00:00:00+00:00")
+        since = max(since, datetime.fromisoformat(lead.created_at) - timedelta(hours=24))
+        chats.append({"title": f"Team chat: {members.get(staff) or staff}", "who": members.get(staff) or staff, "rows": store.chat_with(staff, lead.id, since, datetime.fromisoformat(lead.created_at) + timedelta(seconds=1))})
+    if visitor:
+        chats.append({"title": f"Visitor chat: {lead.name or visitor}", "who": lead.name or visitor, "rows": store.chat_with(visitor, lead.id)})
+    return chats
 
 
 def lead_items(lead, store, members: dict[str, str]) -> list[dict]:

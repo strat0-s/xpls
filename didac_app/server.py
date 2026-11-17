@@ -133,6 +133,8 @@ def bird_webhook():
     if body.strip(" .!").lower() in followup.STOP_WORDS and not flows.staff_user(store, from_number):
         store.opt_out(auth.normalize_phone(from_number) or from_number)
         return send_replies(event_id, from_number, [Reply("You will not get any more follow-up messages from us. Type menu if you want our brochures.")], [], "opted_out", started)
+    if not flows.staff_user(store, from_number) and (known := flows.lead_for_visitor(store, from_number)):
+        store.flag_reply(known.id)  # they texted back: the team has to answer
     replies, lead_ids = flows.handle(store, config, from_number, body, media)
     return send_replies(event_id, from_number, replies, lead_ids, "processed", started)
 

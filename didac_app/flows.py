@@ -224,6 +224,7 @@ class Chat:
         """Send right away, before the slow work that follows. A failure is ignored: the normal replies still go out afterwards."""
         try:
             bird.send_message(self.config, self.number, text)
+            self.store.log_outbound(self.number, text)
         except Exception:
             logger.exception("Could not send the progress message")
 
@@ -610,12 +611,7 @@ class Chat:
 
     # ---- visitors ----------------------------------------------------------------------------------------------------
     def known_lead(self) -> Lead | None:
-        """The lead this visitor was captured as: the one we sent the follow-up for, else any lead with their number, else one they started themselves."""
-        phone = auth.normalize_phone(self.number)
-        lead = self.store.get_lead(self.store.followup_lead_id(phone) or 0) if phone else None
-        if not lead and phone:
-            lead = next((item for item in self.store.list_leads() if auth.normalize_phone(item.phone) == phone), None)  # ponytail: scans every live lead, like find_duplicate
-        return lead or self.store.latest_lead_for_number(self.number)
+        return lead_for_visitor(self.store, self.number)
 
     def visitor_lead(self, interest: str = "") -> Lead:
         lead = self.known_lead() or self.store.create_lead(Lead(from_number=self.number, phone=self.number.replace("whatsapp:", "")))
@@ -704,6 +700,15 @@ class Chat:
 
 
 # ---- helpers ------------------------------------------------------------------------------------------------------------
+def lead_for_visitor(store: LeadStore, number: str) -> Lead | None:
+    """The lead this visitor was captured as: the one we sent the follow-up for, else any lead with their number, else one they started themselves."""
+    phone = auth.normalize_phone(number)
+    lead = store.get_lead(store.followup_lead_id(phone) or 0) if phone else None
+    if not lead and phone:
+        lead = next((item for item in store.list_leads() if auth.normalize_phone(item.phone) == phone), None)  # ponytail: scans every live lead, like find_duplicate
+    return lead or store.latest_lead_for_number(number)
+
+
 def scan_docs(data: dict) -> list[dict]:
     """The documents of a scan as dicts with draft/check/original/photo_ids: the first one is the session data itself, the rest are in data["more"]."""
     return [data, *data.get("more", [])]

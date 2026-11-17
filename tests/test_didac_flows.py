@@ -312,13 +312,22 @@ def test_a_reply_to_the_follow_up_lands_on_the_scanned_lead(store, sent):
     assert "TiQer" in leads[0].interest and "STEM labs for 12 schools" in leads[0].interest
     assert leads[0].name == "Asha Rao" and leads[0].captured_by == "Test Admin"
     assert "STEM labs for 12 schools" in [f["body"] for f in store.list_feedback(scanned.id)]
-    chat = store.lead_conversation(scanned.id, number)
-    assert {row["direction"] for row in chat if row["number"].endswith("9845011111")} == {"in", "out"}  # they asked, the bot answered
-    assert any(row["direction"] == "in" and row["body"] == "STEM labs for 12 schools" for row in chat)
-    assert any(row["direction"] == "out" and row["body"].startswith("Thanks A.") for row in chat)
-    assert any(row["number"] == STAFF and row["direction"] == "out" for row in chat)  # the team's scan chat is on the lead too
+    visitor_chat = store.chat_with(number, scanned.id)
+    assert {row["direction"] for row in visitor_chat} == {"in", "out"}  # they asked, the bot answered
+    assert any(row["direction"] == "in" and row["body"] == "STEM labs for 12 schools" for row in visitor_chat)
+    assert any(row["direction"] == "out" and row["body"].startswith("Thanks A.") for row in visitor_chat)
+    team_chat = store.chat_with("+919800000001", scanned.id)
+    assert any(row["direction"] == "out" for row in team_chat) and not any(row["body"] == "STEM labs for 12 schools" for row in team_chat)  # two separate chats
     page = app.test_client().get(f"/leads/{scanned.id}").data.decode()
-    assert "WhatsApp conversation" in page and "STEM labs for 12 schools" in page
+    assert "Team chat" in page and "Visitor chat" in page and "STEM labs for 12 schools" in page
+    assert store.reply_flags().keys() == {scanned.id}  # they texted back: it is flagged until someone answers
+    assert "texted back and needs an answer" in page and "Texted back" in app.test_client().get("/").data.decode()
+    from conftest import csrf
+    client = app.test_client()
+    client.post(f"/leads/{scanned.id}/replied", data={"csrf": csrf(client)})
+    assert store.reply_flags() == {}
+    say(STAFF, "menu")  # the team chatting is not a visitor texting back
+    assert store.reply_flags() == {}
 
 
 def test_visitor_can_skip_the_email(store, sent):

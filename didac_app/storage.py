@@ -138,6 +138,7 @@ class LeadStore:
                 f"CREATE TABLE IF NOT EXISTS outbound_messages (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, created_at TEXT DEFAULT {now}, "
                 "to_number TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', lead_ids TEXT NOT NULL DEFAULT '')"
             )
+            conn.execute(f"CREATE TABLE IF NOT EXISTS reply_flags (lead_id BIGINT PRIMARY KEY, at TEXT NOT NULL DEFAULT {now})")  # a visitor texted this lead and nobody has answered yet
             conn.execute(
                 f"""
                 CREATE TABLE IF NOT EXISTS users (
@@ -229,7 +230,7 @@ class LeadStore:
 
     def clear(self) -> None:
         with self.connect() as conn:
-            conn.execute("TRUNCATE inbound_events, outbound_messages, feedback, media, leads, sessions, event_photos RESTART IDENTITY")
+            conn.execute("TRUNCATE inbound_events, outbound_messages, reply_flags, feedback, media, leads, sessions, event_photos RESTART IDENTITY")
             conn.execute("UPDATE reader_status SET failures=0, last_ms=0, last_ok_at=NULL, last_failure_at=NULL, down_since=NULL, last_reason=''")
 
     # ---- events: one is live at a time and every lead captured over WhatsApp goes into it -----------------------------
@@ -622,25 +623,44 @@ class LeadStore:
                 (status, ",".join(str(item) for item in lead_ids or []), error, event_id),
             )
 
+    def flag_reply(self, lead_id: int) -> None:
+        with self.connect() as conn:
+            conn.execute("INSERT INTO reply_flags (lead_id) VALUES (%s) ON CONFLICT (lead_id) DO UPDATE SET at = to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')", (lead_id,))
+
+    def clear_reply(self, lead_id: int) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM reply_flags WHERE lead_id = %s", (lead_id,))
+
+    def reply_flags(self) -> dict[int, str]:
+        """{lead id: when the visitor last texted} for the leads still waiting for an answer."""
+        with self.connect() as conn:
+            return {row["lead_id"]: row["at"] for row in conn.execute("SELECT f.lead_id, f.at FROM reply_flags f JOIN leads l ON l.id = f.lead_id WHERE (l.deleted_at IS NULL OR l.deleted_at = '')")}
+
     def log_outbound(self, to_number: str, body: str, lead_ids: list[int] | None = None) -> None:
         """What we sent, kept next to inbound_events so a lead can show the whole chat."""
         with self.connect() as conn:
             conn.execute("INSERT INTO outbound_messages (to_number, body, lead_ids) VALUES (%s, %s, %s)", (to_number, body, ",".join(str(item) for item in lead_ids or [])))
 
-    def lead_conversation(self, lead_id: int, phone: str = "") -> list[dict]:
-        """Both directions of the chats about a lead, oldest first: everything to or from its phone (the visitor's own chat), plus every
-        exchange that touched the lead (the team's scan chat). Rows are {direction 'in'|'out', created_at, number, body, num_media}."""
-        numbers = [phone, f"whatsapp:{phone}"] if phone else [""]
-        match = "{col} = ANY(%s) OR %s = ANY(string_to_array(lead_ids, ','))"
+    def chat_with(self, number: str, lead_id: int, since: datetime | None = None, until: datetime | None = None) -> list[dict]:
+        """One WhatsApp chat, both directions, oldest first: everything to or from `number`. With since/until only that stretch of it,
+        plus any exchange tagged with the lead (a team member's chat covers many leads). Rows are {direction 'in'|'out', created_at, body, num_media}."""
+        numbers = [number, f"whatsapp:{number}"]
+        window = "(created_at::timestamptz > %s AND created_at::timestamptz <= %s OR %s = ANY(string_to_array(lead_ids, ',')))" if since else "TRUE"
+        extra = [since, until, str(lead_id)] if since else []
         with self.connect() as conn:
             return conn.execute(
                 "SELECT * FROM ("
-                f"SELECT 'in' AS direction, id, created_at, from_number AS number, body, num_media FROM inbound_events WHERE {match.format(col='from_number')} "
+                f"SELECT 'in' AS direction, id, created_at, body, num_media FROM inbound_events WHERE from_number = ANY(%s) AND {window} "
                 "UNION ALL "
-                f"SELECT 'out', id, created_at, to_number, body, 0 FROM outbound_messages WHERE {match.format(col='to_number')}"
+                f"SELECT 'out', id, created_at, body, 0 FROM outbound_messages WHERE to_number = ANY(%s) AND {window}"
                 ") t ORDER BY created_at, direction, id",
-                (numbers, str(lead_id), numbers, str(lead_id)),
+                (numbers, *extra, numbers, *extra),
             ).fetchall()
+
+    def previous_lead_time(self, from_number: str, lead_id: int) -> str:
+        with self.connect() as conn:
+            row = conn.execute("SELECT max(created_at) AS at FROM leads WHERE from_number = %s AND id < %s", (from_number, lead_id)).fetchone()
+        return row["at"] or ""
 
     def list_inbound_events(self) -> list[dict]:
         with self.connect() as conn:
