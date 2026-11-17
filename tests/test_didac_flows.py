@@ -292,6 +292,28 @@ def test_visitor_requirement_becomes_an_orbit_ready_lead(store, sent):
     assert [f["body"] for f in store.list_feedback(lead.id)] == ["STEM labs for 12 schools"]
 
 
+def test_a_reply_to_the_follow_up_lands_on_the_scanned_lead(store, sent):
+    say(STAFF, "Contact form")
+    say(STAFF, "", photo("card"))
+    say(STAFF, "DONE")
+    save_scan(STAFF)
+    scanned = store.list_leads()[0]
+    number = "+919845011111"  # CARD's phone, so the visitor replies from the number on the card
+    store.claim_followup(number, scanned.id)
+    visitor = f"whatsapp:{number}"
+    event = store.live_event()
+    store.add_brochure(event["id"], "TiQer", "https://x/tiqer.pdf")
+    say(visitor, "Download brochure")
+    say(visitor, "TiQer")
+    for answer in ("Share my requirement", "A. Rao", "skip", "Sunrise", "School", "Pune, Maharashtra", "STEM labs for 12 schools"):
+        say(visitor, answer)
+    leads = store.list_leads()
+    assert len(leads) == 1 and leads[0].id == scanned.id
+    assert "TiQer" in leads[0].interest and "STEM labs for 12 schools" in leads[0].interest
+    assert leads[0].name == "Asha Rao" and leads[0].captured_by == "Test Admin"
+    assert "STEM labs for 12 schools" in [f["body"] for f in store.list_feedback(scanned.id)]
+
+
 def test_visitor_can_skip_the_email(store, sent):
     for answer in ("Share my requirement", "Anil", "skip", "Org", "School", "Pune, Maharashtra", "Labs"):
         say(VISITOR, answer)

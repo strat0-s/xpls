@@ -609,8 +609,16 @@ class Chat:
         self.say(f"Added to #{lead.id}. Send another, or type menu.")
 
     # ---- visitors ----------------------------------------------------------------------------------------------------
+    def known_lead(self) -> Lead | None:
+        """The lead this visitor was captured as: the one we sent the follow-up for, else any lead with their number, else one they started themselves."""
+        phone = auth.normalize_phone(self.number)
+        lead = self.store.get_lead(self.store.followup_lead_id(phone) or 0) if phone else None
+        if not lead and phone:
+            lead = next((item for item in self.store.list_leads() if auth.normalize_phone(item.phone) == phone), None)  # ponytail: scans every live lead, like find_duplicate
+        return lead or self.store.latest_lead_for_number(self.number)
+
     def visitor_lead(self, interest: str = "") -> Lead:
-        lead = self.store.latest_lead_for_number(self.number) or self.store.create_lead(Lead(from_number=self.number, phone=self.number.replace("whatsapp:", "")))
+        lead = self.known_lead() or self.store.create_lead(Lead(from_number=self.number, phone=self.number.replace("whatsapp:", "")))
         if interest and interest.lower() not in lead.interest.lower():
             self.store.update_lead_fields(lead.id, interest="; ".join(filter(None, [lead.interest, interest])))
         self.lead_ids.append(lead.id)
@@ -669,9 +677,14 @@ class Chat:
         lead = Lead(from_number=self.number, phone=self.number.replace("whatsapp:", ""), name=data["name"], email=data.get("email", ""), org=data["org"], organisation_type=data["type"],
                     city=city.strip(), state=state.strip(), interest=text, schools_count=extract_schools_count(text))
         normalize_contact_name(lead)
-        saved, outcome = self.store_lead(lead, [])
-        if outcome != "created":
-            self.store.merge_into_lead(saved.id, {}, {"interest": text})
+        if saved := self.known_lead():  # a follow-up reply goes on the lead we scanned, even if they spell their name differently
+            filled = fill_blanks(saved, lead)
+            self.store.merge_into_lead(saved.id, {name: getattr(saved, name) for name in filled}, {"interest": text})
+            self.lead_ids.append(saved.id)
+        else:
+            saved, outcome = self.store_lead(lead, [])
+            if outcome != "created":
+                self.store.merge_into_lead(saved.id, {}, {"interest": text})
         self.store.add_feedback(self.number, text, saved.id, feedback_type="text_message")
         self.store.delete_session(self.number)
         self.say(f"Thanks {data['name'].split()[0]}. We saved your details. Our team will be in touch.\nType menu for brochures.")

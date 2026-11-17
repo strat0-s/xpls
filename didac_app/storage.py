@@ -178,6 +178,11 @@ class LeadStore:
         with self.connect() as conn:
             return {row["phone"] for row in conn.execute("SELECT phone FROM followups")}
 
+    def followup_lead_id(self, phone: str) -> int | None:
+        with self.connect() as conn:
+            row = conn.execute("SELECT lead_id FROM followups WHERE phone = %s", (phone,)).fetchone()
+        return row["lead_id"] if row else None
+
     def followups_last_day(self) -> int:
         with self.connect() as conn:
             return conn.execute("SELECT count(*) AS n FROM followups WHERE NOT opted_out AND sent_at > now() - interval '24 hours'").fetchone()["n"]
