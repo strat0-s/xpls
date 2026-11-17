@@ -471,6 +471,10 @@ class LeadStore:
         with self.connect() as conn:
             conn.execute("UPDATE users SET is_active=%s WHERE id=%s", (active, user_id))
 
+    def update_user(self, user_id: int, name: str, phone: str, email: str) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE users SET name=%s, phone=%s, email=%s WHERE id=%s", (name, phone, email or None, user_id))
+
     def set_user_password(self, user_id: int, password_hash: str) -> None:
         with self.connect() as conn:
             conn.execute("UPDATE users SET password_hash=%s, session_version=session_version+1 WHERE id=%s", (password_hash, user_id))

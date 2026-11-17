@@ -18,8 +18,6 @@
     th.tick, td.tick { width: 34px; padding-right: 0; position: sticky; left: 0; background: var(--surf); z-index: 1; } th.tick { background: var(--head); }
     th.first, td.first { position: sticky; left: 34px; background: var(--surf); font-weight: 600; box-shadow: 1px 0 0 var(--line); } th.first { background: var(--head); }
     tr.off td { opacity: .45; }
-    .pick { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-    .pick button { background: none; border: 0; color: var(--acc-text); font: inherit; font-weight: 600; cursor: pointer; padding: 0; }
     input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--acc); }
 {% endblock %}
 {% block content %}
@@ -43,9 +41,8 @@
 <section class="card panel">
   <div class="sum"><b>{{ rows|length }}</b> lead{{ '' if rows|length == 1 else 's' }} in the file ({{ orgs }} organisation{{ '' if orgs == 1 else 's' }}).</div>
   {% if rows %}
-  <div class="pick"><span><b id="sel">{{ rows|length }}</b> of {{ rows|length }} ticked for the download</span><button type="button" id="all">Tick all</button><button type="button" id="none">Untick all</button><span class="hint">Scroll sideways for all {{ columns|length }} columns.</span></div>
   <div class="card"><div class="scroll"><table>
-    <thead><tr><th class="tick" scope="col"><input type="checkbox" id="page" aria-label="Tick this page"></th>{% for c in columns %}<th scope="col" class="{{ 'first' if loop.first }}">{{ labels[c] }}</th>{% endfor %}</tr></thead>
+    <thead><tr><th class="tick" scope="col"><input type="checkbox" id="page" aria-label="Tick or untick all leads"></th>{% for c in columns %}<th scope="col" class="{{ 'first' if loop.first }}">{{ labels[c] }}</th>{% endfor %}</tr></thead>
     <tbody>{% for lid, row in pg['items'] %}<tr data-id="{{ lid }}"><td class="tick"><input type="checkbox" class="pick-one" value="{{ lid }}" aria-label="Include {{ row['name'] or 'this lead' }}" checked></td>{% for c in columns %}<td class="{{ 'first' if loop.first }} {{ 'no' if not row[c] }}" title="{{ row[c] }}">{{ row[c] or '–' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
   </table></div>{% include "_pager.html" %}</div>
   {% endif %}
@@ -63,13 +60,12 @@
   (function () {
     var ids = {{ ids|tojson }}, skip = new Set(), KEY = 'footfallExportSkip';
     try { JSON.parse(sessionStorage.getItem(KEY) || '[]').forEach(function (n) { if (ids.indexOf(n) > -1) skip.add(n); }); } catch (e) {}
-    var boxes = document.querySelectorAll('.pick-one'), sel = document.getElementById('sel'), page = document.getElementById('page');
-    if (!sel) return;
+    var boxes = document.querySelectorAll('.pick-one'), page = document.getElementById('page');
+    if (!page) return;
     function paint() {
       boxes.forEach(function (b) { b.checked = !skip.has(+b.value); b.closest('tr').classList.toggle('off', !b.checked); });
-      page.checked = Array.prototype.every.call(boxes, function (b) { return b.checked; });
       var left = ids.length - skip.size;
-      sel.textContent = left;
+      page.checked = !skip.size; page.indeterminate = skip.size > 0 && skip.size < ids.length;
       document.querySelectorAll('a.dl').forEach(function (a) {
         var u = new URL(a.dataset.base || (a.dataset.base = a.getAttribute('href')), location.href);
         if (skip.size) u.searchParams.set('skip', Array.from(skip).join(','));
@@ -80,9 +76,7 @@
       try { sessionStorage.setItem(KEY, JSON.stringify(Array.from(skip))); } catch (e) {}
     }
     boxes.forEach(function (b) { b.addEventListener('change', function () { b.checked ? skip.delete(+b.value) : skip.add(+b.value); paint(); }); });
-    page.addEventListener('change', function () { boxes.forEach(function (b) { page.checked ? skip.delete(+b.value) : skip.add(+b.value); }); paint(); });
-    document.getElementById('all').onclick = function () { skip.clear(); paint(); };
-    document.getElementById('none').onclick = function () { ids.forEach(function (n) { skip.add(n); }); paint(); };
+    page.addEventListener('change', function () { page.checked ? skip.clear() : ids.forEach(function (n) { skip.add(n); }); paint(); });
     paint();
   })();
 </script>

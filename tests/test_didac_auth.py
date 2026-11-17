@@ -264,3 +264,19 @@ def test_mark_as_checked_clears_the_badge_without_touching_fields(store):
     saved = store.get_lead(lead.id)
     assert (saved.name, saved.review_reason, saved.updated_by) == ("Keep Me", "", "Test Admin")
     assert client.post(f"/leads/{lead.id}/resolve", data={"next": "//evil.example", "csrf": csrf(client)}).headers["Location"] == "/"
+
+
+def test_admin_can_edit_a_member_and_clear_the_email(store):
+    from conftest import csrf
+    from didac_app.server import app
+
+    staff = get_or_create_user(store, "Ravi", "+919811111111", "ravi@example.com", "long-enough-pass")
+    client = app.test_client()
+    token = csrf(client)
+    client.post(f"/team/{staff['id']}/edit", data={"name": "Ravi K", "phone": "98111 22222", "email": "", "csrf": token})
+    row = store.get_user(staff["id"])
+    assert (row["name"], row["phone"], row["email"]) == ("Ravi K", "+919811122222", None)
+    client.post(f"/team/{staff['id']}/edit", data={"name": "Ravi K", "phone": "+919800000001", "email": "x@y.com", "csrf": token})  # the admin's own number
+    assert store.get_user(staff["id"])["phone"] == "+919811122222"
+    client.post(f"/team/{staff['id']}/edit", data={"name": "Ravi K", "phone": "12", "email": "", "csrf": token})
+    assert store.get_user(staff["id"])["phone"] == "+919811122222"

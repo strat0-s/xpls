@@ -78,6 +78,21 @@ def add_user(store: LeadStore, name: str, phone: str, email: str, password: str,
         raise ValueError("Someone with that phone number or email already exists.") from None
 
 
+def edit_user(store: LeadStore, user_id: int, name: str, phone: str, email: str) -> None:
+    """Same checks as add_user. An empty email clears it. Raises ValueError with a message that is safe to show."""
+    name, phone_e164, email_clean = name.strip(), normalize_phone(phone) if phone.strip() else "", normalize_email(email) if email.strip() else ""
+    if not name:
+        raise ValueError("Name is required.")
+    if not phone_e164:
+        raise ValueError("Enter a valid phone number.")
+    if email.strip() and not email_clean:
+        raise ValueError("Enter a valid email or leave it empty.")
+    try:
+        store.update_user(user_id, name, phone_e164, email_clean)
+    except psycopg.errors.UniqueViolation:
+        raise ValueError("Someone with that phone number or email already exists.") from None
+
+
 def change_password(store: LeadStore, user_id: int, password: str) -> None:
     if len(password) < MIN_PASSWORD_LENGTH:
         raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")

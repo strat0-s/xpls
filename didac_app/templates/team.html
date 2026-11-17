@@ -2,63 +2,97 @@
 {% set active = 'team' %}
 {% block title %}Team · Footfall{% endblock %}
 {% block css %}
-    .cols { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
-    @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
-    .list { display: flex; flex-direction: column; gap: 12px; }
-    .list h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
-    .list p { margin: 2px 0 0; color: var(--mut); line-height: 1.5; }
+    .stack { display: flex; flex-direction: column; gap: 14px; }
+    .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+    .top h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .top p { margin: 2px 0 0; color: var(--mut); line-height: 1.5; }
+    .plus { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 24px; line-height: 1; flex: none; }
     .wrap { overflow-x: auto; }
-    table { width: 100%; min-width: 620px; border-collapse: collapse; }
-    th { text-align: left; color: var(--mut); font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 8px 12px; background: var(--head); }
-    td { padding: 9px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; color: var(--mut); font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 8px 16px; background: var(--head); white-space: nowrap; }
+    td { padding: 12px 16px; border-top: 1px solid var(--line); vertical-align: middle; }
     td small { color: var(--mut); display: block; }
-    .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-    .row input { height: 30px; width: 140px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); }
-    .mini { height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); font-weight: 600; color: var(--acc-text); cursor: pointer; }
+    th.act, td.act { text-align: right; white-space: nowrap; }
+    .mini { height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: transparent; font: inherit; font-weight: 600; color: var(--acc-text); cursor: pointer; }
     .mini:hover { border-color: var(--acc); }
-    .add { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-    .add h2 { margin: 0; font-size: 16px; }
+    td.act form { display: inline; margin: 0; } td.act .mini { margin-left: 6px; }
+    .addform { display: flex; flex-direction: column; gap: 12px; }
+    .addform .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+    .addform .adm { display: flex; gap: 8px; align-items: center; }
 {% endblock %}
 {% block content %}
-<div class="cols">
-  <section class="list">
+<div class="stack">
+  <div class="top">
     <div><h1>Team</h1><p>People here can sign in to the dashboard, and their phone numbers get the internal menu on WhatsApp.</p></div>
-    <div class="card wrap">
-      <table>
-        <tr><th>Member</th><th>Phone</th><th>Access</th><th>Status</th><th>Actions</th></tr>
-        {% for m in members %}
-        <tr>
-          <td><strong>{{ m.name }}</strong><small>{{ m.email or '' }}</small></td>
-          <td style="white-space:nowrap">{{ m.phone or '' }}</td>
-          <td><span class="chip {{ 'team' if m.is_admin else 'staff' }}">{{ 'Admin' if m.is_admin else 'Staff' }}</span></td>
-          <td><span class="chip {{ 'ok' if m.is_active else 'off' }}">{{ 'Active' if m.is_active else 'Deactivated' }}</span></td>
-          <td>
-            <div class="row">
-              <form class="row" method="post" action="{{ url_for('team_password', user_id=m.id) }}">
-                <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-                <input type="password" name="password" placeholder="New password" aria-label="New password for {{ m.name }}" autocomplete="new-password">
-                <button class="mini">Reset password</button>
-              </form>
-              {% if m.id != user.id %}
-              <form method="post" action="{{ url_for('team_active', user_id=m.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="mini">{{ 'Deactivate' if m.is_active else 'Reactivate' }}</button></form>
-              {% endif %}
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </table>
-    </div>
-  </section>
-
-  <form class="card add" method="post">
-    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-    <h2>Add a member</h2>
-    <div><label class="f" for="a-name">Name</label><input class="t" id="a-name" name="name" required></div>
-    <div><label class="f" for="a-phone">Phone (WhatsApp)</label><input class="t" id="a-phone" name="phone" placeholder="+91" required></div>
-    <div><label class="f" for="a-email">Email (optional)</label><input class="t" id="a-email" name="email" type="email"></div>
-    <div><label class="f" for="a-password">Temporary password</label><input class="t" id="a-password" name="password" type="password" minlength="8" required autocomplete="new-password"></div>
-    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="is_admin" style="width:18px;height:18px"> Can manage the team (admin)</label>
-    <button class="btn">Add member</button>
-  </form>
+    <button type="button" class="btn plus" data-open="add-member" aria-label="Add a member" title="Add a member">+</button>
+  </div>
+  <div class="card wrap">
+    <table>
+      <tr><th>Member</th><th>Phone</th><th>Access</th><th>Status</th><th class="act">Actions</th></tr>
+      {% for m in members %}
+      <tr>
+        <td><strong>{{ m.name }}</strong>{% if m.email %}<small>{{ m.email }}</small>{% endif %}</td>
+        <td style="white-space:nowrap">{{ m.phone or '' }}</td>
+        <td><span class="chip {{ 'team' if m.is_admin else 'staff' }}">{{ 'Admin' if m.is_admin else 'Staff' }}</span></td>
+        <td><span class="chip {{ 'ok' if m.is_active else 'off' }}">{{ 'Active' if m.is_active else 'Deactivated' }}</span></td>
+        <td class="act">
+          <button type="button" class="mini" data-edit="{{ url_for('team_edit', user_id=m.id) }}" data-name="{{ m.name }}" data-phone="{{ m.phone or '' }}" data-email="{{ m.email or '' }}">Edit</button>
+          <button type="button" class="mini" data-reset="{{ url_for('team_password', user_id=m.id) }}" data-name="{{ m.name }}">Reset password</button>
+          {% if m.id != user.id %}<form method="post" action="{{ url_for('team_active', user_id=m.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="mini">{{ 'Deactivate' if m.is_active else 'Reactivate' }}</button></form>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
 </div>
+
+<dialog class="ask" id="add-member">
+  <h2>Add a member</h2>
+  <form class="addform" method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <input class="t" name="name" placeholder="Name" aria-label="Name" required>
+    <input class="t" name="phone" placeholder="Phone (WhatsApp), +91…" aria-label="Phone" required>
+    <input class="t" name="email" type="email" placeholder="Email (optional)" aria-label="Email">
+    <input class="t" name="password" type="password" minlength="8" placeholder="Temporary password" aria-label="Temporary password" required autocomplete="new-password">
+    <label class="adm"><input type="checkbox" name="is_admin" style="width:18px;height:18px"> Can manage the team (admin)</label>
+    <div class="btns"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn">Add member</button></div>
+  </form>
+</dialog>
+<dialog class="ask" id="edit">
+  <h2>Edit member</h2>
+  <form class="addform" method="post" id="edit-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <input class="t" name="name" id="e-name" placeholder="Name" aria-label="Name" required>
+    <input class="t" name="phone" id="e-phone" placeholder="Phone (WhatsApp), +91…" aria-label="Phone" required>
+    <input class="t" name="email" id="e-email" type="email" placeholder="Email (optional)" aria-label="Email">
+    <div class="btns"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn">Save</button></div>
+  </form>
+</dialog>
+<dialog class="ask" id="reset">
+  <h2>Reset password</h2>
+  <p id="reset-name"></p>
+  <form class="addform" method="post" id="reset-form">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <input class="t" name="password" type="password" minlength="8" placeholder="New password" aria-label="New password" required autocomplete="new-password">
+    <div class="btns"><button type="button" class="btn ghost" data-close>Cancel</button><button class="btn">Reset password</button></div>
+  </form>
+</dialog>
+<script>
+  document.querySelectorAll('[data-open]').forEach(function (b) { b.onclick = function () { document.getElementById(b.dataset.open).showModal(); }; });
+  document.querySelectorAll('[data-close]').forEach(function (b) { b.onclick = function () { b.closest('dialog').close(); }; });
+  document.querySelectorAll('[data-edit]').forEach(function (b) {
+    b.onclick = function () {
+      document.getElementById('edit-form').action = b.dataset.edit;
+      document.getElementById('e-name').value = b.dataset.name; document.getElementById('e-phone').value = b.dataset.phone; document.getElementById('e-email').value = b.dataset.email;
+      document.getElementById('edit').showModal();
+    };
+  });
+  document.querySelectorAll('[data-reset]').forEach(function (b) {
+    b.onclick = function () {
+      document.getElementById('reset-form').action = b.dataset.reset;
+      document.getElementById('reset-name').textContent = b.dataset.name;
+      document.getElementById('reset').showModal();
+    };
+  });
+</script>
 {% endblock %}

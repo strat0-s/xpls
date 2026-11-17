@@ -351,6 +351,17 @@ def register(app, get_store, get_config) -> None:
             get_store().set_user_active(user_id, not member["is_active"])
         return redirect(url_for("team"))
 
+    @app.post("/team/<int:user_id>/edit")
+    def team_edit(user_id: int):
+        require_admin()
+        get_store().get_user(user_id) or abort(404)
+        try:
+            auth.edit_user(get_store(), user_id, request.form.get("name", ""), request.form.get("phone", ""), request.form.get("email", ""))
+            flash("Member saved.")
+        except ValueError as exc:
+            flash(str(exc))
+        return redirect(url_for("team"))
+
     @app.post("/team/<int:user_id>/password")
     def team_password(user_id: int):
         require_admin()
