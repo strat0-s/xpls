@@ -60,6 +60,7 @@ class Lead:
     updated_by: str = ""
     deleted_at: str = ""
     event_id: int | None = None  # the event that was live when the lead was captured
+    event_no: int | None = None  # the lead's number within its event (1, 2, 3...), the one people see and say; id is only for links
 
 
 @dataclass(frozen=True)

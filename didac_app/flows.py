@@ -564,7 +564,7 @@ class Chat:
         self.store.close_convo(self.number)
         status = self.store.reader_status()
         tail = f"\n\nThere is an error reading documents right now. Please tell someone to check. Reference {status['ref']}." if status["state"] == "down" else ""
-        self.say(f"Saved as lead #{lead.id} with {len(photos)} photo(s). Find it under Leads, marked \"Not scanned\". Open it to read it again later, or fill in the details yourself.{tail}")
+        self.say(f"Saved as lead #{lead.event_no} with {len(photos)} photo(s). Find it under Leads, marked \"Not scanned\". Open it to read it again later, or fill in the details yourself.{tail}")
 
     def confirm(self, data: dict, prefix: str = "") -> None:
         """The Save / Edit / Retake step, with nothing shortened. A button message holds about 1000 characters; a longer summary goes out as one plain
@@ -594,7 +594,7 @@ class Chat:
         if not match:
             return ""
         existing, certain = match
-        who = f"#{existing.id}, {existing.name or existing.org or existing.phone or 'unnamed'}"
+        who = f"#{existing.event_no}, {existing.name or existing.org or existing.phone or 'unnamed'}"
         return f"\n\nAlready saved as {who}. Saving adds any new details to it." if certain else f"\n\nLooks like {who}, which is already saved. Saving keeps this as its own lead marked Check."
 
     def save_scan(self, flow: str, data: dict) -> None:
@@ -615,13 +615,13 @@ class Chat:
             label = saved.org or saved.name or saved.phone or "Unnamed lead"
             if outcome == "created":
                 badge = " It shows a Check badge on the dashboard." if saved.review_reason else ""
-                return self.say(f"Saved as #{saved.id}, {label}{f' ({saved.priority} priority)' if saved.priority else ''}.{badge}\n{again}")
+                return self.say(f"Saved as #{saved.event_no}, {label}{f' ({saved.priority} priority)' if saved.priority else ''}.{badge}\n{again}")
             added = "I added the new details to it." if outcome == "merged" else "There was nothing new to add."
-            return self.say(f"Already saved as #{saved.id}, {saved.name or label}. {added}\n{again}")
+            return self.say(f"Already saved as #{saved.event_no}, {saved.name or label}. {added}\n{again}")
         for saved, outcome in outcomes:
             label = saved.org or saved.name or saved.phone or "Unnamed lead"
             note = {"created": f" ({saved.priority} priority)" if saved.priority else "", "merged": ", already saved, new details added", "unchanged": ", already saved"}[outcome]
-            saved_lines.append(f"- #{saved.id}, {label}{note}")
+            saved_lines.append(f"- #{saved.event_no}, {label}{note}")
         self.say(f"Saved {len(docs)} documents:\n" + "\n".join(saved_lines) + f"\n{again}")
 
     def store_lead(self, lead: Lead, photos: list[dict], original_text: str = "") -> tuple[Lead, str]:
@@ -642,7 +642,7 @@ class Chat:
             self.lead_ids.append(existing.id)
             return existing, "merged" if filled else "unchanged"
         if match:
-            lead.review_reason = "; ".join(filter(None, [lead.review_reason, f"possible duplicate of #{match[0].id}"]))
+            lead.review_reason = "; ".join(filter(None, [lead.review_reason, f"possible duplicate of #{match[0].event_no}"]))
         lead = self.store.create_lead(lead)
         self.attach_photos(lead.id, photos, original_text)
         self.lead_ids.append(lead.id)
@@ -665,8 +665,8 @@ class Chat:
         leads = self.store.list_leads("from_number = %s AND event_id = %s", (self.number, self.event["id"]))[:NOTE_CHOICES]
         if not leads:
             return self.ask_new_note_lead()
-        self.store.put_session(self.number, "note", "pick", {"ids": [lead.id for lead in leads]})
-        rows = [(f"#{lead.id} {lead.name or lead.org or 'Unnamed lead'}"[:24], " · ".join(filter(None, [lead.org if lead.name else "", lead.phone]))) for lead in leads] + [(NEW_LEAD, "Start one from a name or phone")]
+        self.store.put_session(self.number, "note", "pick", {"ids": {str(lead.event_no): lead.id for lead in leads}})
+        rows = [(f"#{lead.event_no} {lead.name or lead.org or 'Unnamed lead'}"[:24], " · ".join(filter(None, [lead.org if lead.name else "", lead.phone]))) for lead in leads] + [(NEW_LEAD, "Start one from a name or phone")]
         self.replies.append(Reply("Which lead is this note for?", rows, as_list=True))
 
     def ask_new_note_lead(self) -> None:
@@ -677,11 +677,11 @@ class Chat:
         if text.lower().strip() == NEW_LEAD.lower():
             return self.ask_new_note_lead()
         found = re.search(r"#?(\d+)", text)
-        lead = self.store.get_lead(int(found[1])) if found and int(found[1]) in data.get("ids", []) else None
+        lead = self.store.get_lead(data["ids"][found[1]]) if found and found[1] in data.get("ids", {}) else None
         if not lead:
             return self.start_note()  # not one of the leads offered: show the list again
         self.store.put_session(self.number, "note", "collect", {"lead_id": lead.id})
-        self.say(f"Send a voice note or text. It will be added to #{lead.id}, {lead.org or lead.name or 'Unnamed lead'}.")
+        self.say(f"Send a voice note or text. It will be added to #{lead.event_no}, {lead.org or lead.name or 'Unnamed lead'}.")
 
     def note_step(self, data: dict, text: str, media: list[tuple[str, str]]) -> None:
         if not text and not media:
@@ -708,7 +708,7 @@ class Chat:
         if text:
             self.store.add_feedback(self.number, text, lead.id, feedback_type="text_message")
         self.lead_ids.append(lead.id)
-        self.say(f"Added to #{lead.id}. Send another, or type menu.")
+        self.say(f"Added to #{lead.event_no}. Send another, or type menu.")
 
     # ---- visitors ----------------------------------------------------------------------------------------------------
     def known_lead(self) -> Lead | None:

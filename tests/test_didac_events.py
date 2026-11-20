@@ -165,3 +165,25 @@ def test_editing_a_lead_keeps_a_type_that_belongs_to_its_event(store, admin):
     assert store.get_lead(lead.id).doc_type == "form"
     client.post(f"/leads/{lead.id}", data={"csrf": token, "name": "Asha", "doc_type": "nonsense"})
     assert store.get_lead(lead.id).doc_type == "form"  # an unknown type leaves it as it was
+
+
+def test_lead_numbers_count_from_one_in_each_event_and_are_never_reused(store, sent):
+    a1, a2 = (store.create_lead(flows.Lead(name=name)) for name in ("A one", "A two"))
+    store.update_lead_fields(a1.id, deleted_at="2026-11-20T10:00:00+00:00")
+    second = store.create_event("Bett India 2027")
+    store.start_event(second)
+    b1 = store.create_lead(flows.Lead(from_number=STAFF, name="B one", org="Bright School"))
+    assert (a1.event_no, a2.event_no, b1.event_no) == (1, 2, 1)  # the second event starts again at 1
+    assert store.create_lead(flows.Lead(name="B two")).event_no == 2
+    store.update_lead_fields(a2.id, deleted_at="2026-11-20T10:00:00+00:00")
+    assert store.create_event("Third") and store.get_lead(b1.id).event_no == 1
+    say(STAFF, "Add a note")
+    assert last(sent)[1] == ["#1 B one", "New lead"]  # the number people see, not the row id
+    say(STAFF, "#1 B one")
+    assert f"added to #1, Bright School" in last(sent)[0]
+    with store.connect() as conn:  # leads saved before numbers existed are numbered per event by age
+        conn.execute("UPDATE leads SET event_no = NULL")
+    store.init_db()
+    with store.connect() as conn:
+        rows = conn.execute("SELECT event_id, event_no FROM leads ORDER BY id").fetchall()
+    assert [(row["event_id"], row["event_no"]) for row in rows] == [(1, 1), (1, 2), (second, 1), (second, 2)]

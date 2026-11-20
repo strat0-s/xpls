@@ -483,6 +483,7 @@ def lead_card(lead, media: list[dict], members: dict[str, str]) -> dict:
     org = " · ".join(part for part in (lead.org, lead.city) if part)
     return {
         "id": lead.id,
+        "no": lead.event_no,
         "tab": {"form": "forms", "badge": "badges"}.get(lead.doc_type, "other"),
         "name": name,
         "org": org,
@@ -498,7 +499,7 @@ def lead_card(lead, media: list[dict], members: dict[str, str]) -> dict:
         "initials": initials,
         "is_team": is_team,
         "created_at": lead.created_at,
-        "search": " ".join([f"#{lead.id}", name, org, lead.phone, lead.email, note]).lower(),
+        "search": " ".join([f"#{lead.event_no}", name, org, lead.phone, lead.email, note]).lower(),
     }
 
 

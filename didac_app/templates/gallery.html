@@ -81,7 +81,7 @@
   {% for c in pg['items'] %}
   <a class="lead {{ 'chk' if c.review_reason or c.replied_at }}" href="{{ url_for('lead_detail', lead_id=c.id) }}">
     <span class="th">{% if c.kind == 'image' %}<span class="ph"><img src="/media/{{ c.image_id }}" alt="" loading="lazy"></span>{% if c.photo_count > 1 %}<span class="ph">{{ c.photo_count }}</span>{% endif %}{% elif c.kind == 'audio' %}<span class="ph">{{ play|safe }}</span>{% else %}<span class="ph">{{ chat|safe }}</span>{% endif %}</span>
-    <span><b><span style="color:var(--mut);font-weight:600">#{{ c.id }}</span> {{ c.name }}</b><small>{{ c.org }}{{ ' · ' if c.org and c.phone }}{{ c.phone }}</small></span>
+    <span><b><span style="color:var(--mut);font-weight:600">#{{ c.no }}</span> {{ c.name }}</b><small>{{ c.org }}{{ ' · ' if c.org and c.phone }}{{ c.phone }}</small></span>
     <span>{% if c.event.name %}<b style="font-weight:600">{{ c.event.name }}</b><small>{{ c.event.when }}</small>{% endif %}</span>
     <span><span class="chip team">{{ c.type_label }}</span></span>
     <span><span class="chip {{ c.priority|lower or 'none' }}">{{ c.priority or 'Not set' }}</span>{% if c.unscanned %}<br><span class="chip amber" style="margin-top:4px">Not scanned</span>{% elif c.review_reason %}<br><span class="chip amber" style="margin-top:4px">Check</span>{% endif %}{% if c.replied_at %}<br><span class="chip amber" style="margin-top:4px">Texted back</span>{% endif %}</span>

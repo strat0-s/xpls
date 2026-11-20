@@ -64,6 +64,7 @@ class LeadStore:
             for field in LEAD_FIELDS:
                 if field != "id":
                     conn.execute(f"ALTER TABLE leads ADD COLUMN IF NOT EXISTS {field} {column_type(field)}")
+            conn.execute("UPDATE leads SET event_no = r.n FROM (SELECT id, row_number() OVER (PARTITION BY event_id ORDER BY id) AS n FROM leads) r WHERE leads.id = r.id AND leads.event_no IS NULL")  # numbers for leads saved before they existed
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS events (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), "
                 "name TEXT NOT NULL, starts_on DATE, ends_on DATE, venue TEXT NOT NULL DEFAULT '', welcome_text TEXT NOT NULL DEFAULT '', "
@@ -388,11 +389,13 @@ class LeadStore:
     def create_lead(self, lead: Lead) -> Lead:
         if lead.event_id is None and (live := self.live_event()):
             lead.event_id = live["id"]
-        data = asdict(lead)
-        data.pop("id", None)
-        columns = list(data.keys())
-        placeholders = ", ".join("%s" for _ in columns)
         with self.connect() as conn:
+            conn.execute("SELECT pg_advisory_xact_lock(%s)", (lead.event_id or 0,))  # two leads saved at once must not take the same number
+            lead.event_no = conn.execute("SELECT COALESCE(MAX(event_no), 0) + 1 AS n FROM leads WHERE event_id IS NOT DISTINCT FROM %s", (lead.event_id,)).fetchone()["n"]  # deleted leads keep theirs, so a number is never reused
+            data = asdict(lead)
+            data.pop("id", None)
+            columns = list(data.keys())
+            placeholders = ", ".join("%s" for _ in columns)
             lead.id = conn.execute(
                 f"INSERT INTO leads ({', '.join(columns)}) VALUES ({placeholders}) RETURNING id",
                 [data[column] for column in columns],
@@ -789,7 +792,7 @@ def format_sheet(ws) -> None:
 
 
 def column_type(field: str) -> str:
-    return "BIGINT" if field == "event_id" else "TEXT"
+    return "BIGINT" if field in ("event_id", "event_no") else "TEXT"
 
 
 # (key, label, hint, reader). The key is what a lead stores in doc_type; reader says how the photo is read: form, document or badge (QR).
@@ -810,6 +813,6 @@ def unique_key(label: str, taken: set[str]) -> str:
 
 
 def row_to_lead(row) -> Lead:
-    data = {field: (row[field] if row[field] is not None else ("" if field != "event_id" else None)) for field in LEAD_FIELDS if field in row.keys()}
+    data = {field: (row[field] if row[field] is not None else ("" if field not in ("event_id", "event_no") else None)) for field in LEAD_FIELDS if field in row.keys()}
     data["id"] = row["id"]
     return Lead(**data)
