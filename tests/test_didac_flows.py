@@ -256,8 +256,8 @@ def test_photos_in_one_batch_are_appended_atomically(store):
 def test_note_goes_to_the_last_lead_and_voice_is_transcribed(store, sent):
     lead = store.create_lead(flows.Lead(from_number=STAFF, name="Meera", org="Bright School"))
     say(STAFF, "Add a note")
-    assert last(sent)[1] == [f"#{lead.event_no} Meera", "New lead"]
-    say(STAFF, f"#{lead.event_no} Meera")
+    assert f"#{lead.event_no} Meera · Bright School" in last(sent)[0]
+    say(STAFF, f"#{lead.event_no}")
     assert f"added to #{lead.id}, Bright School" in last(sent)[0]
     say(STAFF, "Principal wants a callback")
     say(STAFF, "", [("https://media.bird.com/v1", "audio/ogg")])
@@ -640,23 +640,30 @@ def test_unknown_lead_owner_is_tagged_not_listed_and_none_stays_empty(store, sen
     assert "Lead owner" not in last(sent)[0]
 
 
-def test_note_can_go_to_any_lead_of_the_event_by_browsing_or_typing_its_number(store, sent):
-    leads = [store.create_lead(flows.Lead(from_number=STAFF if n % 2 else "whatsapp:+919800000099", name=f"Person {n}")) for n in range(1, 11)]
+def test_note_can_go_to_any_lead_of_the_event_picked_from_one_message(store, sent):
+    leads = [store.create_lead(flows.Lead(from_number=STAFF if n % 2 else "whatsapp:+919800000099", name=f"Person {n}", org="Bright School" if n == 2 else "")) for n in range(1, 11)]
     say(STAFF, "Add a note")
-    assert last(sent)[1] == [f"#{n} Person {n}" for n in range(10, 3, -1)] + ["More leads", "New lead"]  # everyone's leads, newest first
-    say(STAFF, "More leads")
-    assert last(sent)[1] == ["#3 Person 3", "#2 Person 2", "#1 Person 1", "New lead"]
-    say(STAFF, "#2 Person 2")  # a colleague's lead
+    text, options = last(sent)
+    assert options == [] and text.splitlines()[2:4] == ["#10 Person 10", "#9 Person 9"] and "#2 Person 2 · Bright School" in text and text.endswith("#1 Person 1")  # everyone's leads in one message
+    say(STAFF, "#2")  # a colleague's lead
     say(STAFF, "Wants the lab demo")
     assert store.get_lead(leads[1].id).text_notes == "Wants the lab demo"
     say(STAFF, "menu")
     say(STAFF, "Add a note")
-    say(STAFF, "9")  # typing just the number works without paging
+    say(STAFF, "9")  # a bare number works too
     say(STAFF, "Call back Friday")
     assert store.get_lead(leads[8].id).text_notes == "Call back Friday"
     say(STAFF, "menu")
     say(STAFF, "Add a note")
-    say(STAFF, "4000")  # no such lead: the list comes back
-    assert last(sent)[1][0] == "#10 Person 10"
-    say(STAFF, "New lead")
+    say(STAFF, "4000")
+    assert "could not find that lead" in last(sent)[0]
+    say(STAFF, "new")
     assert "name or phone number" in last(sent)[0]
+
+
+def test_a_long_lead_list_for_a_note_still_fits_one_message(store, sent):
+    for n in range(300):
+        store.create_lead(flows.Lead(from_number=STAFF, name=f"A Rather Long Visitor Name {n}", org="An Equally Long Organisation Name"))
+    say(STAFF, "Add a note")
+    text = last(sent)[0]
+    assert len(text) < 4096 and "older. Type any lead number." in text and "#300 " in text
