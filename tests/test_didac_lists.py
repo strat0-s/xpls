@@ -113,3 +113,9 @@ def test_lead_numbers_show_in_the_list_and_on_the_lead_page(store):
     client = app.test_client()
     assert f"#{lead.id}</span> Numbered Person" in client.get("/dashboard").data.decode()
     assert f"#{lead.id}</small>" in client.get(f"/leads/{lead.id}").data.decode()
+
+
+def test_lead_owner_is_a_column_in_the_leads_list(store):
+    store.create_lead(flows.Lead(name="Owned Person", lead_owner="Magesh Kumar AP"))
+    page = app.test_client().get("/dashboard").data.decode()
+    assert "<span>Lead owner</span>" in page and "<span>Magesh Kumar AP</span>" in page

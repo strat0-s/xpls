@@ -667,3 +667,12 @@ def test_a_long_lead_list_for_a_note_still_fits_one_message(store, sent):
     say(STAFF, "Add a note")
     text = last(sent)[0]
     assert len(text) < 4096 and "older. Type any lead number." in text and "#300 " in text
+
+
+def test_lead_owner_label_written_on_the_form_is_dropped():
+    assert flows.lead_fields({"name": "Asha Rao", "lead_owner": "Lead owner: Magesh"})["fields"]["lead_owner"] == "Magesh"
+    assert flows.lead_fields({"name": "Asha Rao", "lead_owner": "LEAD OWNER - Magesh"})["fields"]["lead_owner"] == "Magesh"
+    assert flows.lead_fields({"name": "Asha Rao", "lead_owner": "LO: Magesh"})["fields"]["lead_owner"] == "Magesh"
+    assert flows.lead_fields({"name": "Asha Rao", "lead_owner": "L.O.- Magesh"})["fields"]["lead_owner"] == "Magesh"
+    assert flows.lead_fields({"name": "Asha Rao", "lead_owner": "Lokesh"})["fields"]["lead_owner"] == "Lokesh"  # a name that starts with Lo is not a label
+    assert "lead_owner" not in flows.lead_fields({"name": "Asha Rao", "lead_owner": "Lead owner:"})["fields"]

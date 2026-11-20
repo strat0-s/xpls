@@ -218,7 +218,7 @@ def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None
     contact = dict(contact)
     photos = [number for number in (contact.pop("photos", None) or []) if isinstance(number, int)]
     check = [item for item in (str(item).strip() for item in contact.pop("check", None) or []) if item and not NOT_ON_DOCUMENT.search(item)] + (no_qr or [])
-    owner = str(contact.pop("lead_owner", "") or "").strip()
+    owner = re.sub(r"^\s*(?:lead\s*owner\s*[:\-]*|l\.?\s*o\.?\s*[:\-]+)\s*", "", str(contact.pop("lead_owner", "") or ""), flags=re.I).strip()  # "Lead owner: Magesh" as written on the form
     demo, workshop, students, remarks = (str(contact.pop(key, "") or "").strip() for key in ("demo", "workshop", "students", "remarks"))
     interest = [f"{label}: {value}" for label, value in (("Demo", demo), ("Teacher workshop", workshop)) if value]
     notes = [f"{label}: {value}" for label, value in (("Students", students), ("Remarks", remarks)) if value]

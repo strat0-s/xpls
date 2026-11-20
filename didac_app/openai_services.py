@@ -34,7 +34,7 @@ The images are the sides or pages of ONE document: read them together and return
 """
 MULTI_TEXT = """
 An image can show up to 2 separate documents side by side, and different images can show different documents. Return a top-level "contacts" array with ONE object per separate document.
-A printed Xperimentor CONTACT FORM with a visiting card stapled or placed on it is ONE contact, never two: the person is on the card and in the form's own fields (role, curriculum, remarks, students, demo, workshop); merge them into one object, the form's filled fields winning. A name handwritten at the top right, just above the CONTACT FORM heading, is the team member who met the visitor: return it as "lead_owner" exactly as written and never as a contact. Leave lead_owner empty when nothing is written there.
+A printed Xperimentor CONTACT FORM with a visiting card stapled or placed on it is ONE contact, never two: the person is on the card and in the form's own fields (role, curriculum, remarks, students, demo, workshop); merge them into one object, the form's filled fields winning. A name handwritten at the top right, just above the CONTACT FORM heading (written as "LO: Name", "Lead owner: Name" or just the name), is the team member who met the visitor: return just that name as "lead_owner" and never use it as the contact's name. The contact's name always comes from the visiting card or the form's own Name field. Leave lead_owner empty when nothing is written there.
 Sides or pages of the same document (the same person) are ONE object: merge them. A side that shows only the organisation (logo, address, an office phone) and no person's name is the back of the other card, even when its phone differs: merge it and put the extra phone in notes. Add a key "photos" to each object: the list of image numbers (the first image is 1) that the document appears in.
 """
 CHECK_TEXT = """
@@ -49,7 +49,7 @@ Curriculum (CBSE, ICSE, State, IB, IGCSE, Other); Interested in demo (At School,
 Use the extra keys: demo ("At school" or "Online"), workshop ("Yes" or "No"), students (exactly as written), remarks (exactly as written).
 Put a role or curriculum that was only written in (not ticked) in role/curriculum as written and add it to "check". A crossed-out printed value is not an answer.
 Handwritten or doubtful values (student count, phone digits) go in "check".
-Add a key "lead_owner": the name handwritten at the top right of the form, just above the CONTACT FORM heading. It is the team member who met the visitor, never the visitor: do not use it for name. Copy it exactly as written; leave it empty when nothing is written there.
+Add a key "lead_owner": the name handwritten at the top right of the form, just above the CONTACT FORM heading (written as "LO: Name", "Lead owner: Name" or just the name). LO means Lead Owner. It is the team member who met the visitor, never the visitor: do not use it for name, which comes from the card or the form's Name field. Return just the name; leave it empty when nothing is written there.
 The photos can also include the person's visiting card, stapled or sent with the form. It is the same person: the form wins, and the card fills anything the form leaves blank (designation, organisation, email, phone, website, address).
 """
 
