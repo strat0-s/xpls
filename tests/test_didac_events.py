@@ -178,7 +178,7 @@ def test_lead_numbers_count_from_one_in_each_event_and_are_never_reused(store, s
     store.update_lead_fields(a2.id, deleted_at="2026-11-20T10:00:00+00:00")
     assert store.create_event("Third") and store.get_lead(b1.id).event_no == 1
     say(STAFF, "Add a note")
-    assert last(sent)[1] == ["#1 B one", "New lead"]  # the number people see, not the row id
+    assert last(sent)[1] == ["#2 B two", "#1 B one", "New lead"]  # the number people see, not the row id
     say(STAFF, "#1 B one")
     assert f"added to #1, Bright School" in last(sent)[0]
     with store.connect() as conn:  # leads saved before numbers existed are numbered per event by age

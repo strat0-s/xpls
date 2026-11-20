@@ -33,8 +33,8 @@ SESSION_MINUTES = 24 * 60  # matches the WhatsApp 24-hour reply window
 MAX_PHOTOS = 10
 MAX_PER_PHOTO = 2  # documents laid side by side in one photo; photos sent one by one are not limited by this
 NOTE_WINDOW_MINUTES = 30  # how recent a lead must be for a voice note sent with no menu choice to go onto it
-NOTE_CHOICES = 8  # leads offered when adding a note (a list holds 10 rows, one is New lead)
-NEW_LEAD = "New lead"
+NOTE_CHOICES = 7  # leads per page when adding a note: a list holds 10 rows, two are More leads and New lead
+NEW_LEAD, MORE_LEADS = "New lead", "More leads"
 
 NOTE = "Add a note"
 EVENT_PHOTOS, TEAM_BROCHURES = "Send event photos", "Brochures"
@@ -660,26 +660,33 @@ class Chat:
         age = minutes_since(lead.updated_at) if lead else None
         return lead.id if lead and age is not None and age <= NOTE_WINDOW_MINUTES else None
 
-    def start_note(self) -> None:
-        """The team picks which lead the note is for: their own latest leads at this event, newest first, or a new lead."""
-        leads = self.store.list_leads("from_number = %s AND event_id = %s", (self.number, self.event["id"]))[:NOTE_CHOICES]
+    def start_note(self, page: int = 0) -> None:
+        """The team picks which lead the note is for. Every lead of the live event, newest first, a few at a time with a More leads row; a typed number goes straight to that lead."""
+        leads = self.store.list_leads("event_id = %s", (self.event["id"],))
         if not leads:
             return self.ask_new_note_lead()
-        self.store.put_session(self.number, "note", "pick", {"ids": {str(lead.event_no): lead.id for lead in leads}})
-        rows = [(f"#{lead.event_no} {lead.name or lead.org or 'Unnamed lead'}"[:24], " · ".join(filter(None, [lead.org if lead.name else "", lead.phone]))) for lead in leads] + [(NEW_LEAD, "Start one from a name or phone")]
-        self.replies.append(Reply("Which lead is this note for?", rows, as_list=True))
+        page = page if 0 <= page * NOTE_CHOICES < len(leads) else 0
+        shown = leads[page * NOTE_CHOICES:(page + 1) * NOTE_CHOICES]
+        rows = [(f"#{lead.event_no} {lead.name or lead.org or 'Unnamed lead'}"[:24], " · ".join(filter(None, [lead.org if lead.name else "", lead.phone]))) for lead in shown]
+        if len(leads) > (page + 1) * NOTE_CHOICES:
+            rows.append((MORE_LEADS, f"{len(leads) - (page + 1) * NOTE_CHOICES} older. Or type a lead number"))
+        self.store.put_session(self.number, "note", "pick", {"page": page})
+        self.replies.append(Reply("Which lead is this note for?", [*rows, (NEW_LEAD, "Start one from a name or phone")], as_list=True))
 
     def ask_new_note_lead(self) -> None:
         self.store.put_session(self.number, "note", "collect", {"lead_id": None})
         self.say("Send a note with a name or phone number and I will save it as a new lead.")
 
     def pick_note_lead(self, data: dict, text: str) -> None:
-        if text.lower().strip() == NEW_LEAD.lower():
+        low = text.lower().strip()
+        if low == NEW_LEAD.lower():
             return self.ask_new_note_lead()
-        found = re.search(r"#?(\d+)", text)
-        lead = self.store.get_lead(data["ids"][found[1]]) if found and found[1] in data.get("ids", {}) else None
+        if low == MORE_LEADS.lower():
+            return self.start_note(data.get("page", 0) + 1)
+        found = re.match(r"#?(\d{1,6})\b", low)
+        lead = next(iter(self.store.list_leads("event_id = %s AND event_no = %s", (self.event["id"], int(found[1])))), None) if found else None
         if not lead:
-            return self.start_note()  # not one of the leads offered: show the list again
+            return self.start_note(data.get("page", 0))  # not a lead of this event: show the list again
         self.store.put_session(self.number, "note", "collect", {"lead_id": lead.id})
         self.say(f"Send a voice note or text. It will be added to #{lead.event_no}, {lead.org or lead.name or 'Unnamed lead'}.")
 
