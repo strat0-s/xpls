@@ -649,9 +649,10 @@ class LeadStore:
 
     def chat_with(self, number: str, lead_id: int, since: datetime | None = None, until: datetime | None = None) -> list[dict]:
         """One WhatsApp chat, both directions, oldest first: everything to or from `number`. With since/until only that stretch of it,
-        plus any exchange tagged with the lead (a team member's chat covers many leads). Rows are {direction 'in'|'out', created_at, body, num_media}."""
+        plus any exchange tagged with the lead (a team member's chat covers many leads). Inside the stretch, an exchange tagged with some other lead
+        (a note, photo or voice note sent for the previous lead) is left out. Rows are {direction 'in'|'out', created_at, body, num_media}."""
         numbers = [number, f"whatsapp:{number}"]
-        window = "(created_at::timestamptz > %s AND created_at::timestamptz <= %s OR %s = ANY(string_to_array(lead_ids, ',')))" if since else "TRUE"
+        window = "(created_at::timestamptz > %s AND created_at::timestamptz <= %s AND COALESCE(lead_ids, '') = '' OR %s = ANY(string_to_array(lead_ids, ',')))" if since else "TRUE"
         extra = [since, until, str(lead_id)] if since else []
         with self.connect() as conn:
             return conn.execute(

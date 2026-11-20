@@ -48,7 +48,7 @@
   <div>
     <a href="{{ url_for('gallery') }}" style="text-decoration:none">&larr; All leads</a>
     <h1>{{ title }}</h1>
-    <div class="sub">{{ (doc_types|selectattr('key', 'equalto', lead.doc_type)|map(attribute='label')|first) or lead.doc_type or 'Document' }} · captured {{ lead.created_at|local_time }}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}</div>
+    <div class="sub">{{ (doc_types|selectattr('key', 'equalto', lead.doc_type)|map(attribute='label')|first) or lead.doc_type or 'Document' }} · captured {{ lead.created_at|local_time('%d %b %Y, %H:%M') }}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}</div>
   </div>
   <div class="admin-actions">
   <form method="post" action="{{ url_for('lead_followup', lead_id=lead.id) }}" data-title="Send follow-up?" data-confirm="This sends the thank-you WhatsApp to this lead's number. Each number can only be messaged once." data-ok="Send message">

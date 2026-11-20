@@ -534,3 +534,36 @@ def test_photo_rotation_is_saved_per_photo(store, sent):
     page = client.get(f"/leads/{lead.id}").data.decode()
     assert 'data-rot="270"' in page
     assert client.post("/media/99999/rotate", data={"csrf": csrf(client)}).status_code == 404
+
+
+def test_team_chat_leaves_out_exchanges_sent_for_another_lead(store):
+    """A note or voice note sent for the previous lead arrives after it was saved, so it falls in the next lead's stretch of the chat."""
+    from datetime import datetime, timedelta
+
+    number = "whatsapp:+919800000002"
+    first = store.create_lead(flows.Lead(name="Rakesh", from_number=number))
+    store.add_inbound_event(number, "note for Rakesh", 0, [], {}, message_id="m1")
+    store.add_inbound_event(number, "Other docs", 0, [], {}, message_id="m2")
+    second = store.create_lead(flows.Lead(name="Prateek", from_number=number))
+    with store.connect() as conn:
+        conn.execute("UPDATE inbound_events SET lead_ids=%s WHERE body='note for Rakesh'", (str(first.id),))
+        conn.execute("UPDATE leads SET created_at=%s WHERE id=%s", ((datetime.now().astimezone() - timedelta(minutes=5)).isoformat(), first.id))
+    store.log_outbound(number, "Noted for Rakesh", [first.id])
+    store.log_outbound(number, "Send the next document", [])
+    since = datetime.fromisoformat(store.previous_lead_time(number, second.id))
+    rows = store.chat_with(number, second.id, since, datetime.now().astimezone() + timedelta(minutes=1))
+    bodies = [row["body"] for row in rows]
+    assert "Other docs" in bodies and "Send the next document" in bodies
+    assert "note for Rakesh" not in bodies and "Noted for Rakesh" not in bodies
+    assert "note for Rakesh" in [row["body"] for row in store.chat_with(number, first.id, since - timedelta(hours=1), datetime.now().astimezone() + timedelta(minutes=1))]
+
+
+def test_same_sitting_stops_at_a_long_pause_but_keeps_notes_after_the_save():
+    from datetime import UTC, datetime, timedelta
+
+    from didac_app.ui import same_sitting
+
+    saved = datetime(2026, 11, 18, 4, 40, tzinfo=UTC)
+    row = lambda body, at: {"body": body, "created_at": at.replace(tzinfo=None).isoformat(sep=" ")}  # the database stores naive UTC text
+    rows = [row("old test", saved - timedelta(hours=19)), row("Hi", saved - timedelta(minutes=3)), row("DONE", saved - timedelta(seconds=20)), row("note", saved + timedelta(minutes=2))]
+    assert [r["body"] for r in same_sitting(rows, saved)] == ["Hi", "DONE", "note"]

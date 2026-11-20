@@ -66,13 +66,13 @@ def register(app, get_store, get_config) -> None:
         return url_for(request.endpoint, **{**request.args.to_dict(), **(request.view_args or {}), key: number})
 
     @app.template_filter("local_time")
-    def local_time(value: str) -> str:
+    def local_time(value: str, fmt: str = "%H:%M") -> str:
         try:
             moment = datetime.fromisoformat(value)
         except (TypeError, ValueError):
             return ""
         # Lead timestamps carry a zone; media/feedback ones are naive UTC from the database.
-        return moment.replace(tzinfo=moment.tzinfo or UTC).astimezone(IST).strftime("%H:%M")
+        return moment.replace(tzinfo=moment.tzinfo or UTC).astimezone(IST).strftime(fmt)
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -500,6 +500,23 @@ def lead_card(lead, media: list[dict], members: dict[str, str]) -> dict:
     }
 
 
+def same_sitting(rows: list[dict], saved_at: datetime, gap: timedelta = timedelta(hours=1)) -> list[dict]:
+    """The rows of one scan: walking back from the moment the lead was saved, stop at the first pause longer than `gap`, so an old chat
+    that no lead claimed (a deleted lead, a test) does not lead this one. Rows after the save (a note for this lead) always stay."""
+    def at(row):
+        moment = datetime.fromisoformat(str(row["created_at"]))
+        return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+    keep, edge = [], saved_at
+    for row in reversed(rows):
+        if at(row) <= saved_at:
+            if edge - at(row) > gap:
+                break
+            edge = at(row)
+        keep.append(row)
+    return keep[::-1]
+
+
 def lead_chats(store, lead, members: dict[str, str]) -> list[dict]:
     """The separate WhatsApp chats behind a lead, each with our number on one side: the visitor's own chat, and the team member's scan chat
     (only the stretch since their previous lead, so another lead's scan is not mixed in)."""
@@ -509,7 +526,8 @@ def lead_chats(store, lead, members: dict[str, str]) -> list[dict]:
     if staff and staff != visitor:
         since = datetime.fromisoformat(store.previous_lead_time(lead.from_number, lead.id) or "1970-01-01T00:00:00+00:00")
         since = max(since, datetime.fromisoformat(lead.created_at) - timedelta(hours=24))
-        chats.append({"title": f"Team chat: {members.get(staff) or staff}", "who": members.get(staff) or staff, "rows": store.chat_with(staff, lead.id, since, datetime.fromisoformat(lead.created_at) + timedelta(seconds=1))})
+        rows = store.chat_with(staff, lead.id, since, datetime.fromisoformat(lead.created_at) + timedelta(seconds=1))
+        chats.append({"title": f"Team chat: {members.get(staff) or staff}", "who": members.get(staff) or staff, "rows": same_sitting(rows, datetime.fromisoformat(lead.created_at))})
     if visitor:
         chats.append({"title": f"Visitor chat: {lead.name or visitor}", "who": lead.name or visitor, "rows": store.chat_with(visitor, lead.id)})
     return chats

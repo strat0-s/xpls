@@ -94,3 +94,15 @@ def test_export_filters_by_event_and_type_and_lists_every_row_in_pages(store):
     other = store.create_event("Bett India 2027")
     assert "No leads match these filters." in client.get(f"/export?event={other}").data.decode()
     assert client.get("/export/orbit.csv?doc=form").status_code == 200
+
+
+def test_leads_list_and_lead_page_show_the_capture_date_with_the_time(store):
+    from datetime import datetime
+
+    from didac_app.ui import IST
+
+    lead = store.create_lead(flows.Lead(name="Dated Person"))
+    when = datetime.fromisoformat(lead.created_at).astimezone(IST)
+    client = app.test_client()
+    assert f"<b style=\"font-weight:600\">{when.strftime('%d %b')}</b><small>{when.strftime('%H:%M')}</small>" in client.get("/dashboard").data.decode()
+    assert when.strftime("captured %d %b %Y, %H:%M") in client.get(f"/leads/{lead.id}").data.decode()
