@@ -590,3 +590,13 @@ def test_each_scan_shows_only_the_messages_of_its_own_conversation(store, sent, 
     assert store.lead_convo(first.id) and store.lead_convo(first.id) != store.lead_convo(second.id)
     assert "marker-A" in team_chat(first) and "marker-B" not in team_chat(first)
     assert "marker-B" in team_chat(second) and "marker-A" not in team_chat(second)
+
+
+def test_org_only_back_of_a_card_is_folded_into_its_front():
+    front = flows.lead_fields({"name": "Bijit Roy", "org": "One Billion Lives Foundation (OBLF)", "phone": "7503216682", "email": "ceo@oblf.org", "photos": [1]})
+    back = flows.lead_fields({"name": "One Billion Lives Foundation", "org": "One Billion Lives Foundation", "phone": "8792977628", "notes": "Chandapura 560099", "photos": [2]})
+    (card,) = flows.merge_org_backs([front, back])
+    assert card["fields"]["name"] == "Bijit Roy" and card["fields"]["phone"] == "7503216682"
+    assert "Other phone: 8792977628" in card["fields"]["notes"] and "Chandapura" in card["fields"]["notes"] and card["photos"] == [1, 2]
+    other = flows.lead_fields({"name": "Asha Rao", "org": "ABC School", "photos": [2]})
+    assert len(flows.merge_org_backs([front, other])) == 2  # a different organisation stays its own lead

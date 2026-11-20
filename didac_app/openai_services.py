@@ -33,7 +33,7 @@ The images are the sides or pages of ONE document: read them together and return
 """
 MULTI_TEXT = """
 An image can show up to 2 separate documents side by side, and different images can show different documents. Return a top-level "contacts" array with ONE object per separate document.
-Sides or pages of the same document (the same person) are ONE object: merge them. Add a key "photos" to each object: the list of image numbers (the first image is 1) that the document appears in.
+Sides or pages of the same document (the same person) are ONE object: merge them. A side that shows only the organisation (logo, address, an office phone) and no person's name is the back of the other card, even when its phone differs: merge it and put the extra phone in notes. Add a key "photos" to each object: the list of image numbers (the first image is 1) that the document appears in.
 """
 CHECK_TEXT = """
 Add a key "check": a list of short phrases naming each field you could not read with confidence (for example "phone digits unclear"). List only values that ARE on the document but are hard to read or doubtful. Never list a field that is simply empty, not printed or unknown. QR codes are decoded separately by software: never read or flag a QR code.

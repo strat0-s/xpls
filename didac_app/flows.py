@@ -141,12 +141,44 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
     docs = [lead_fields(contact, qr_text if index == 0 else "", no_qr if index == 0 else []) for index, contact in enumerate(contacts if kind == "document" else contacts[:1])]
     if kind != "document" and len(contacts) > 1:
         docs[0]["check"].append(f"{len(contacts)} people found, only the first is kept")
+    if kind == "document":
+        docs = merge_org_backs(docs)
     result = {**docs[0], "more": docs[1:], "ms": ms}
     per_photo = Counter(number for doc in docs for number in doc["photos"])
     if per_photo and max(per_photo.values()) > MAX_PER_PHOTO:
         number, count = per_photo.most_common(1)[0]
         result["too_many"] = (number, count)
     return result
+
+
+def merge_org_backs(docs: list[dict]) -> list[dict]:
+    """The back of a visiting card often shows only the organisation and an office phone, and the reader can return it as a second document.
+    A document with no person's name (blank, or just the organisation) on other photos than a named document of the same organisation is folded into it:
+    blanks are filled, and a different phone is kept in the notes."""
+    def org(doc: dict) -> str:
+        return re.sub(r"[^a-z0-9 ]", "", doc["fields"].get("org", "").lower()).strip()
+    def named(doc: dict) -> bool:
+        name = doc["fields"].get("name", "").strip().lower()
+        return bool(name) and name != doc["fields"].get("org", "").strip().lower()
+    kept: list[dict] = []
+    for doc in docs:
+        front = next((other for other in kept if named(other) and not named(doc) and org(doc) and org(other)
+                      and (org(doc) in org(other) or org(other) in org(doc)) and not set(doc["photos"]) & set(other["photos"])), None)
+        if not front:
+            kept.append(doc)
+            continue
+        fields, extra = front["fields"], doc["fields"]
+        for name, value in extra.items():
+            if name not in ("name", "phone") and not fields.get(name):
+                fields[name] = value
+        if extra.get("phone") and extra["phone"] != fields.get("phone"):
+            if fields.get("phone"):
+                fields["notes"] = "; ".join(filter(None, [fields.get("notes", ""), f"Other phone: {extra['phone']}"]))
+            else:
+                fields["phone"] = extra["phone"]
+        front["photos"] = sorted({*front["photos"], *doc["photos"]})
+        front["check"] += [item for item in doc["check"] if item not in front["check"]]
+    return kept
 
 
 def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None) -> dict:
