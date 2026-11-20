@@ -51,6 +51,7 @@ class Lead:
     tags: str = ""
     status: str = "New"
     priority: str = ""  # High / Medium / Low; blank = unclassified until staff tag it
+    lead_owner: str = ""  # the team member written on top of the contact form; blank when nobody is, or NOT_LISTED when the name is not on the team
     media_urls: str = ""
     media_local_paths: str = ""
     raw_message: str = ""

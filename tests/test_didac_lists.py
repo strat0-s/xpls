@@ -106,3 +106,10 @@ def test_leads_list_and_lead_page_show_the_capture_date_with_the_time(store):
     client = app.test_client()
     assert f"<b style=\"font-weight:600\">{when.strftime('%d %b')}</b><small>{when.strftime('%H:%M')}</small>" in client.get("/dashboard").data.decode()
     assert when.strftime("captured %d %b %Y, %H:%M") in client.get(f"/leads/{lead.id}").data.decode()
+
+
+def test_lead_numbers_show_in_the_list_and_on_the_lead_page(store):
+    lead = store.create_lead(flows.Lead(name="Numbered Person"))
+    client = app.test_client()
+    assert f"#{lead.id}</span> Numbered Person" in client.get("/dashboard").data.decode()
+    assert f"#{lead.id}</small>" in client.get(f"/leads/{lead.id}").data.decode()

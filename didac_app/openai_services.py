@@ -15,6 +15,7 @@ LEAD_PROMPT = """
 Extract lead details from this event stall image. It may be a visiting card, event ID badge, QR badge, handwritten note, brochure, or visitor form.
 If multiple visiting cards or contacts are visible in one image, return JSON with a top-level "contacts" array, one object per card/contact.
 If only one card/contact is visible, you may return a single object.
+Photos are often sideways or upside down: turn the image upright in your head before reading, and read every card on it, however small or at whatever angle.
 For event badges and handwritten forms, carefully read printed and handwritten text. Preserve uncertain handwritten words in notes instead of guessing.
 If a QR code or URL is visibly printed and readable, include it as qr_url. If badge/profile details are visible around the QR code, include them in notes.
 Each contact object should use these keys:
@@ -47,6 +48,7 @@ Curriculum (CBSE, ICSE, State, IB, IGCSE, Other); Interested in demo (At School,
 Use the extra keys: demo ("At school" or "Online"), workshop ("Yes" or "No"), students (exactly as written), remarks (exactly as written).
 Put a role or curriculum that was only written in (not ticked) in role/curriculum as written and add it to "check". A crossed-out printed value is not an answer.
 Handwritten or doubtful values (student count, phone digits) go in "check".
+Add a key "lead_owner": the name handwritten at the top right of the form, just above the CONTACT FORM heading. It is the team member who met the visitor, never the visitor: do not use it for name. Copy it exactly as written; leave it empty when nothing is written there.
 The photos can also include the person's visiting card, stapled or sent with the form. It is the same person: the form wins, and the card fills anything the form leaves blank (designation, organisation, email, phone, website, address).
 """
 

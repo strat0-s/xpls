@@ -13,6 +13,7 @@ import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -31,7 +32,9 @@ timing = logging.getLogger("didac.timing")  # same logger the webhook uses, so t
 SESSION_MINUTES = 24 * 60  # matches the WhatsApp 24-hour reply window
 MAX_PHOTOS = 10
 MAX_PER_PHOTO = 2  # documents laid side by side in one photo; photos sent one by one are not limited by this
-NOTE_WINDOW_MINUTES = 30
+NOTE_WINDOW_MINUTES = 30  # how recent a lead must be for a voice note sent with no menu choice to go onto it
+NOTE_CHOICES = 8  # leads offered when adding a note (a list holds 10 rows, one is New lead)
+NEW_LEAD = "New lead"
 
 NOTE = "Add a note"
 EVENT_PHOTOS, TEAM_BROCHURES = "Send event photos", "Brochures"
@@ -41,6 +44,7 @@ NOT_SCANS = {"note", "choose", "requirement", "brochure", "feedback", "eventphot
 NO_EVENT_TEAM = "Hi {first}. No event is live right now, so I cannot save leads or photos. Please ask an admin to start the next event."
 NO_PHOTOS = "This channel does not accept photos. Type menu to see what I can do for you."
 NO_EVENT_VISITOR = "Thanks for getting in touch. The event has finished. Our team will reach out soon."
+NOT_LISTED = "Not on the team list"  # lead_owner when the name written on the form is nobody on the Team page
 SAVE, EDIT, RETAKE, CANCEL = "Save", "Edit", "Retake", "Cancel"
 TRY_AGAIN, SAVE_LATER, TYPE_DETAILS = "Try again", "Save to read later", "Type the details"
 UNCLEAR = "I could not make out this document. Try again in better light with it flat, or type the details instead."
@@ -65,7 +69,7 @@ TYPES = [
     ("Other", "OTHER", "Individual, media, investor"),
 ]
 # Lead fields shown in the scan summary: (field, label). Name, Organisation, Phone and Email always show, even blank.
-SUMMARY = [("name", "Name"), ("org", "Organisation"), ("role", "Role"), ("phone", "Phone"), ("email", "Email"), ("organisation_type", "Type"), ("priority", "Priority"),
+SUMMARY = [("name", "Name"), ("org", "Organisation"), ("role", "Role"), ("phone", "Phone"), ("email", "Email"), ("organisation_type", "Type"), ("priority", "Priority"), ("lead_owner", "Lead owner"),
            ("city", "City"), ("state", "State"), ("curriculum", "Curriculum"), ("interest", "Interest"), ("notes", "Notes"),
            ("qr_url", "QR link"), ("qr_page_text", "QR text")]
 ALWAYS = {"name", "org", "phone", "email"}
@@ -87,6 +91,28 @@ def save_choices(text: str) -> Reply:
     """Save / Edit / Retake / Cancel. WhatsApp allows 3 reply buttons, so four choices go out as a tap-list. Cancel is handled for every step by Chat.run."""
     rows = [(SAVE, "Save it as a lead"), (EDIT, "Correct something first"), (RETAKE, "Clear the photos and start again"), (CANCEL, "Throw this scan away")]
     return Reply(text, rows, as_list=True)
+
+
+def team_owner(store: LeadStore, written: str) -> str:
+    """The team member a handwritten first name or full name points to, or NOT_LISTED. Close spellings count ("Magesh" is Magesh Kumar AP).
+    ponytail: the closest first name wins, so two teammates with the same first name pick the first one."""
+    word = re.sub(r"[^a-z ]", "", written.lower()).split()
+    if not word:
+        return ""
+    def score(user: dict) -> float:
+        parts = re.sub(r"[^a-z ]", "", user["name"].lower()).split()
+        return max(SequenceMatcher(None, word[0], parts[0]).ratio(), SequenceMatcher(None, " ".join(word), " ".join(parts)).ratio()) if parts else 0
+    best = max((user for user in store.list_users() if user["is_active"]), key=score, default=None)
+    return best["name"] if best and score(best) >= 0.8 else NOT_LISTED
+
+
+def tag_owner(store: LeadStore, result: dict) -> None:
+    """Turn the lead owner the reader copied off the form into a team member (or NOT_LISTED, with the written name in the Check line)."""
+    written = result.get("fields", {}).get("lead_owner", "")
+    if written:
+        owner = result["fields"]["lead_owner"] = team_owner(store, written)
+        if owner == NOT_LISTED:
+            result["check"] = [*result["check"], f"lead owner written as {written}, not on the team list"]
 
 
 def staff_user(store: LeadStore, number: str) -> dict | None:
@@ -192,6 +218,7 @@ def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None
     contact = dict(contact)
     photos = [number for number in (contact.pop("photos", None) or []) if isinstance(number, int)]
     check = [item for item in (str(item).strip() for item in contact.pop("check", None) or []) if item and not NOT_ON_DOCUMENT.search(item)] + (no_qr or [])
+    owner = str(contact.pop("lead_owner", "") or "").strip()
     demo, workshop, students, remarks = (str(contact.pop(key, "") or "").strip() for key in ("demo", "workshop", "students", "remarks"))
     interest = [f"{label}: {value}" for label, value in (("Demo", demo), ("Teacher workshop", workshop)) if value]
     notes = [f"{label}: {value}" for label, value in (("Students", students), ("Remarks", remarks)) if value]
@@ -200,6 +227,8 @@ def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None
     lead.interest = "; ".join(filter(None, [lead.interest, *interest]))
     lead.notes = "; ".join(filter(None, [lead.notes, *notes]))
     fields = {name: getattr(lead, name) for name in FILLABLE if getattr(lead, name)}
+    if owner:
+        fields["lead_owner"] = owner  # as written: Chat.read_scan matches it to the team
     if not fields.get("name") and not fields.get("phone"):
         check.append("no name or phone found")
     return {"fields": fields, "check": check, "photos": photos}
@@ -360,7 +389,7 @@ class Chat:
         if flow in self.doc_types:
             return self.scan_step(flow, step, data, text, media)
         if flow == "note":
-            return self.note_step(data, text, media)
+            return self.pick_note_lead(data, text) if step == "pick" else self.note_step(data, text, media)
         if flow == "eventphotos":
             return self.event_photos_step(media)
         if flow == "requirement":
@@ -451,6 +480,9 @@ class Chat:
             return self.replies.append(save_choices("Please choose Save, Edit, Retake or Cancel."))
         if step == "edit":
             applied, unknown = apply_to_documents(data, text)
+            for doc in scan_docs(data):
+                if doc["draft"].get("lead_owner") and "lead owner" in applied:  # a typed name is matched to the team too
+                    doc["draft"]["lead_owner"] = team_owner(self.store, doc["draft"]["lead_owner"])
             if not applied:
                 return self.say("I could not read a correction. Use one per line, like:\nPhone: 98450 11112\nType BACK to stop editing.")
             self.store.put_session(self.number, flow, "confirm", data)
@@ -465,6 +497,7 @@ class Chat:
             self.store.record_read_failure(result["reason"])
             return self.read_failed(flow, data, result["failed"], retry)
         self.store.record_read_ok(result.get("ms", 0))
+        tag_owner(self.store, result)
         if result.get("unclear"):
             self.store.put_session(self.number, flow, "unclear", data)
             return self.replies.append(buttons(UNCLEAR, RETAKE, TYPE_DETAILS))
@@ -628,13 +661,27 @@ class Chat:
         return lead.id if lead and age is not None and age <= NOTE_WINDOW_MINUTES else None
 
     def start_note(self) -> None:
-        lead = self.store.latest_lead_for_number(self.number)
-        age = minutes_since(lead.updated_at) if lead else None
-        if lead and age is not None and age <= NOTE_WINDOW_MINUTES:
-            self.store.put_session(self.number, "note", "collect", {"lead_id": lead.id})
-            return self.say(f"Send a voice note or text. It will be added to #{lead.id}, {lead.org or lead.name or 'Unnamed lead'} (saved {int(age)} min ago).")
+        """The team picks which lead the note is for: their own latest leads at this event, newest first, or a new lead."""
+        leads = self.store.list_leads("from_number = %s AND event_id = %s", (self.number, self.event["id"]))[:NOTE_CHOICES]
+        if not leads:
+            return self.ask_new_note_lead()
+        self.store.put_session(self.number, "note", "pick", {"ids": [lead.id for lead in leads]})
+        rows = [(f"#{lead.id} {lead.name or lead.org or 'Unnamed lead'}"[:24], " · ".join(filter(None, [lead.org if lead.name else "", lead.phone]))) for lead in leads] + [(NEW_LEAD, "Start one from a name or phone")]
+        self.replies.append(Reply("Which lead is this note for?", rows, as_list=True))
+
+    def ask_new_note_lead(self) -> None:
         self.store.put_session(self.number, "note", "collect", {"lead_id": None})
-        self.say(f"You have no lead from the last {NOTE_WINDOW_MINUTES} minutes. Send a note with a name or phone number and I will save it as a new lead.")
+        self.say("Send a note with a name or phone number and I will save it as a new lead.")
+
+    def pick_note_lead(self, data: dict, text: str) -> None:
+        if text.lower().strip() == NEW_LEAD.lower():
+            return self.ask_new_note_lead()
+        found = re.search(r"#?(\d+)", text)
+        lead = self.store.get_lead(int(found[1])) if found and int(found[1]) in data.get("ids", []) else None
+        if not lead:
+            return self.start_note()  # not one of the leads offered: show the list again
+        self.store.put_session(self.number, "note", "collect", {"lead_id": lead.id})
+        self.say(f"Send a voice note or text. It will be added to #{lead.id}, {lead.org or lead.name or 'Unnamed lead'}.")
 
     def note_step(self, data: dict, text: str, media: list[tuple[str, str]]) -> None:
         if not text and not media:

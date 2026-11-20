@@ -197,6 +197,10 @@ def test_editing_a_lead_records_who_and_clears_the_check_badge(store):
     saved = store.get_lead(lead.id)
     assert (saved.name, saved.org, saved.doc_type, saved.interest) == ("New Name", "Org", "form", "Labs")
     assert saved.updated_by == "Test Admin" and saved.review_reason == ""
+    client.post(f"/leads/{lead.id}", data={"name": "New Name", "lead_owner": "Test Admin", "csrf": csrf(client)})
+    assert store.get_lead(lead.id).lead_owner == "Test Admin" and "owner Test Admin" in client.get(f"/leads/{lead.id}").data.decode()
+    client.post(f"/leads/{lead.id}", data={"name": "New Name", "lead_owner": "Somebody Else", "csrf": csrf(client)})
+    assert store.get_lead(lead.id).lead_owner == ""  # only a team member or "not on the team list" is accepted
 
 
 def test_lead_detail_shows_all_received_items(store):

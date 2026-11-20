@@ -177,6 +177,7 @@ def register(app, get_store, get_config) -> None:
                 organisation_type=org_type if (org_type := request.form.get("organisation_type", "")) in orbit.ORG_TYPES else "",
                 interest=request.form.get("interest", "").strip(),
                 priority=request.form.get("priority") if request.form.get("priority") in PRIORITIES else "",
+                lead_owner=owner if (owner := request.form.get("lead_owner", "")) in {u["name"] for u in store.list_users()} | {flows.NOT_LISTED} else "",
                 doc_type=kind if (kind := request.form.get("doc_type")) in {row["key"] for row in store.list_doc_types(lead.event_id)} else lead.doc_type,
                 updated_by=g.user["name"],
                 updated_at=datetime.now(UTC).isoformat(timespec="seconds"),
@@ -190,7 +191,7 @@ def register(app, get_store, get_config) -> None:
         return render_template(
             "lead.html", lead=lead, items=items, chats=chats, replied_at=store.reply_flags().get(lead.id, ""), fields=EDITABLE_FIELDS, title=display_name(lead), doc_types=store.list_doc_types(lead.event_id) if lead.event_id else [],
             org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
-            priorities=PRIORITIES, curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
+            priorities=PRIORITIES, owners=[u["name"] for u in store.list_users() if u["is_active"]] + [flows.NOT_LISTED], curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )
 
     @app.post("/leads/<int:lead_id>/read")
@@ -212,6 +213,7 @@ def register(app, get_store, get_config) -> None:
             flash("The photos could not be read. Please fill the details in below.")
         else:
             store.record_read_ok(result.get("ms", 0))
+            flows.tag_owner(store, result)
             store.merge_into_lead(lead_id, result["fields"], {})  # fills only what is still blank
             store.update_lead_fields(lead_id, review_reason="; ".join(result["check"]), raw_message=flows.summary(result["fields"], []), updated_by=g.user["name"], updated_at=datetime.now(UTC).isoformat(timespec="seconds"))
             flash("Read." + (f" {len(result['more'])} more document(s) were found in the photos; only the first was filled in." if result.get("more") else ""))
@@ -496,7 +498,7 @@ def lead_card(lead, media: list[dict], members: dict[str, str]) -> dict:
         "initials": initials,
         "is_team": is_team,
         "created_at": lead.created_at,
-        "search": " ".join([name, org, lead.phone, lead.email, note]).lower(),
+        "search": " ".join([f"#{lead.id}", name, org, lead.phone, lead.email, note]).lower(),
     }
 
 

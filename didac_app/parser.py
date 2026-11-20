@@ -71,6 +71,8 @@ FIELD_ALIASES = {
     "grades": "grades",
     "notes": "notes",
     "note": "notes",
+    "lead owner": "lead_owner",
+    "owner": "lead_owner",
     "tag": "tags",
     "tags": "tags",
 }

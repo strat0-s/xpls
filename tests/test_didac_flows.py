@@ -256,6 +256,8 @@ def test_photos_in_one_batch_are_appended_atomically(store):
 def test_note_goes_to_the_last_lead_and_voice_is_transcribed(store, sent):
     lead = store.create_lead(flows.Lead(from_number=STAFF, name="Meera", org="Bright School"))
     say(STAFF, "Add a note")
+    assert last(sent)[1] == [f"#{lead.id} Meera", "New lead"]
+    say(STAFF, f"#{lead.id} Meera")
     assert f"added to #{lead.id}, Bright School" in last(sent)[0]
     say(STAFF, "Principal wants a callback")
     say(STAFF, "", [("https://media.bird.com/v1", "audio/ogg")])
@@ -267,7 +269,7 @@ def test_note_goes_to_the_last_lead_and_voice_is_transcribed(store, sent):
 
 def test_note_without_a_recent_lead_needs_a_name_or_phone(store, sent):
     say(STAFF, "Add a note")
-    assert "no lead from the last 30 minutes" in last(sent)[0]
+    assert "Send a note with a name or phone number" in last(sent)[0]
     say(STAFF, "just chatting")
     assert "name or a phone number" in last(sent)[0] and store.list_leads() == []
     say(STAFF, "Name: Ravi Menon\nPhone: 9845099999")
@@ -609,3 +611,47 @@ def test_cancel_at_the_summary_drops_the_scan_without_saving(store, sent):
     assert last(sent)[1][-1] == "Cancel"
     say(STAFF, "Cancel")
     assert last(sent)[0].startswith("Cancelled") and store.list_leads() == [] and store.get_session(STAFF) is None
+
+
+def test_lead_owner_written_on_the_form_is_matched_to_the_team(store, sent, fake_io):
+    flows.auth.add_user(store, "Magesh Kumar AP", "9845000002", "", "long-enough-pw")
+    assert flows.team_owner(store, "Magesh") == "Magesh Kumar AP" and flows.team_owner(store, "magesh kumar") == "Magesh Kumar AP"
+    assert flows.team_owner(store, "Zorba") == flows.NOT_LISTED and flows.team_owner(store, "  ") == ""
+    fake_io["result"] = {"fields": {**CARD["fields"], "lead_owner": "Magesh"}, "check": []}
+    say(STAFF, "Contact form")
+    say(STAFF, "", photo("form"))
+    say(STAFF, "done")
+    assert "Lead owner: Magesh Kumar AP" in last(sent)[0]
+    save_scan(STAFF)
+    assert store.list_leads()[0].lead_owner == "Magesh Kumar AP"
+
+
+def test_unknown_lead_owner_is_tagged_not_listed_and_none_stays_empty(store, sent, fake_io):
+    fake_io["result"] = {"fields": {**CARD["fields"], "lead_owner": "Zorba"}, "check": []}
+    say(STAFF, "Contact form")
+    say(STAFF, "", photo("form"))
+    say(STAFF, "done")
+    text = last(sent)[0]
+    assert f"Lead owner: {flows.NOT_LISTED}" in text and "lead owner written as Zorba" in text
+    say(STAFF, "Retake")
+    fake_io["result"] = CARD
+    say(STAFF, "", photo("form2"))
+    say(STAFF, "done")
+    assert "Lead owner" not in last(sent)[0]
+
+
+def test_note_can_go_to_any_of_my_recent_leads_or_a_new_one(store, sent):
+    first = store.create_lead(flows.Lead(from_number=STAFF, name="Asha Rao", org="Sunrise School"))
+    second = store.create_lead(flows.Lead(from_number=STAFF, name="Meera Nair", org="Bright School"))
+    store.create_lead(flows.Lead(from_number="whatsapp:+919800000099", name="Someone Elses"))  # another person's lead is not offered
+    say(STAFF, "Add a note")
+    assert last(sent)[1] == [f"#{second.id} Meera Nair", f"#{first.id} Asha Rao", "New lead"]
+    say(STAFF, "7777")  # not one of the offered leads: the list comes back
+    assert last(sent)[1][0].startswith(f"#{second.id}")
+    say(STAFF, str(first.id))  # typing just the number works too
+    say(STAFF, "Wants the lab demo")
+    assert store.get_lead(first.id).text_notes == "Wants the lab demo" and store.get_lead(second.id).text_notes == ""
+    say(STAFF, "menu")
+    say(STAFF, "Add a note")
+    say(STAFF, "New lead")
+    assert "name or phone number" in last(sent)[0]
