@@ -307,7 +307,7 @@ class Chat:
             rows = [(row["label"], row["hint"]) for row in self.doc_types.values()][:7] + [(EVENT_PHOTOS, "Photos of the event, saved but not read")]  # a WhatsApp list holds 10 rows
             if self.brochures("team"):
                 rows.append((TEAM_BROCHURES, "Brochures and price lists"))
-            rows.append((NOTE, "Voice or text note on your last lead"))
+            rows.append((NOTE, "Voice or text note on a lead"))
             self.replies.append(Reply(f"Hi {first}. You are at {self.event['name']}. What would you like to do?\n\nType menu any time. Type cancel to stop.", rows, as_list=True))
         else:
             brochures = self.brochures()
