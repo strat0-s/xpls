@@ -41,7 +41,7 @@ NOT_SCANS = {"note", "choose", "requirement", "brochure", "feedback", "eventphot
 NO_EVENT_TEAM = "Hi {first}. No event is live right now, so I cannot save leads or photos. Please ask an admin to start the next event."
 NO_PHOTOS = "This channel does not accept photos. Type menu to see what I can do for you."
 NO_EVENT_VISITOR = "Thanks for getting in touch. The event has finished. Our team will reach out soon."
-SAVE, EDIT, RETAKE = "Save", "Edit", "Retake"
+SAVE, EDIT, RETAKE, CANCEL = "Save", "Edit", "Retake", "Cancel"
 TRY_AGAIN, SAVE_LATER, TYPE_DETAILS = "Try again", "Save to read later", "Type the details"
 UNCLEAR = "I could not make out this document. Try again in better light with it flat, or type the details instead."
 MANUAL_HELP = "Send the details one per line, like:\nName: Meera Nair\nOrganisation: Greenfield School\nPhone: 98450 11112"
@@ -81,6 +81,12 @@ class Reply:
 
 def buttons(text: str, *labels: str) -> Reply:
     return Reply(text, [(label, "") for label in labels])
+
+
+def save_choices(text: str) -> Reply:
+    """Save / Edit / Retake / Cancel. WhatsApp allows 3 reply buttons, so four choices go out as a tap-list. Cancel is handled for every step by Chat.run."""
+    rows = [(SAVE, "Save it as a lead"), (EDIT, "Correct something first"), (RETAKE, "Clear the photos and start again"), (CANCEL, "Throw this scan away")]
+    return Reply(text, rows, as_list=True)
 
 
 def staff_user(store: LeadStore, number: str) -> dict | None:
@@ -442,7 +448,7 @@ class Chat:
             if choice == RETAKE.lower():
                 self.store.put_session(self.number, flow, "photos", {"photos": []})
                 return self.say("Photos cleared. Send the new photos, then reply DONE.")
-            return self.replies.append(buttons("Please choose Save, Edit or Retake.", SAVE, EDIT, RETAKE))
+            return self.replies.append(save_choices("Please choose Save, Edit, Retake or Cancel."))
         if step == "edit":
             applied, unknown = apply_to_documents(data, text)
             if not applied:
@@ -537,9 +543,9 @@ class Chat:
             parts = [f"{number}.\n" + summary(doc["draft"], doc["check"], with_check=True).removeprefix("I read this as:\n") + self.duplicate_note(doc) for number, doc in enumerate(docs, 1)]
             text = prefix + f"I read {len(docs)} documents:\n\n" + "\n\n".join(parts)
         if len(text) <= 1000:
-            return self.replies.append(buttons(text, SAVE, EDIT, RETAKE))
+            return self.replies.append(save_choices(text))
         self.say(text[:4000])
-        self.replies.append(buttons("Save this lead, edit it, or retake the photos?" if len(docs) == 1 else "Save these leads, edit them, or retake the photos?", SAVE, EDIT, RETAKE))
+        self.replies.append(save_choices("Save this lead, edit it, retake the photos, or cancel?" if len(docs) == 1 else "Save these leads, edit them, retake the photos, or cancel?"))
 
     def doc_lead(self, doc: dict, flow: str = "") -> Lead:
         lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow,

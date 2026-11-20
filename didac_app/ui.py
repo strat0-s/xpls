@@ -257,7 +257,7 @@ def register(app, get_store, get_config) -> None:
             abort(404)
         store.update_lead_fields(lead_id, deleted_at=datetime.now(UTC).isoformat(timespec="seconds"), updated_by=g.user["name"])
         flash("Lead deleted.")
-        return redirect(url_for("gallery"))
+        return redirect(url_for("gallery", event=lead.event_id or None))  # back to the event the lead was on, not the live one
 
     @app.route("/team", methods=["GET", "POST"])
     def team():

@@ -216,6 +216,10 @@ def test_only_admins_delete_and_deleted_leads_disappear(store, anon_client):
     sign_in(anon_client, STAFF["email"], STAFF["password"])
     assert anon_client.post(f"/leads/{lead.id}/delete", data={"csrf": csrf(anon_client)}).status_code == 403
     client = app.test_client()
+    other = store.create_event("Bett India 2027")  # a lead on an event that is not the live one
+    old_lead = store.create_lead(Lead(name="Elsewhere", phone="+919800000014"))
+    store.update_lead_fields(old_lead.id, event_id=other)
+    assert client.post(f"/leads/{old_lead.id}/delete", data={"csrf": csrf(client)}).headers["Location"].endswith(f"event={other}")
     assert client.post(f"/leads/{lead.id}/delete", data={"csrf": csrf(client)}).status_code == 302
     assert store.get_lead(lead.id) is None
     assert "Doomed" not in client.get("/?type=other").data.decode()

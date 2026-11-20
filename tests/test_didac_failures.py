@@ -105,7 +105,7 @@ def test_type_the_details_goes_through_the_normal_summary_and_save(store, sent, 
     say("something unreadable")
     assert last(sent)[0].startswith("I could not read that.")
     say("Name: Meera Nair\nPhone: 98450 11112")
-    assert last(sent)[0].startswith("I read this as:") and "Meera Nair" in last(sent)[0] and last(sent)[1] == ["Save", "Edit", "Retake"]
+    assert last(sent)[0].startswith("I read this as:") and "Meera Nair" in last(sent)[0] and last(sent)[1] == ["Save", "Edit", "Retake", "Cancel"]
     say("Save")
     say("High")
     lead = store.list_leads()[0]

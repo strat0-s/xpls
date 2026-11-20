@@ -65,11 +65,11 @@ def test_document_with_two_photos_edit_then_save(store, sent, fake_io):
     text, labels = last(sent)
     assert fake_io["calls"] == [(2, "document")]
     assert "Name: Asha Rao" in text and "Type: School" in text and "Check: phone digits unclear" in text
-    assert labels == ["Save", "Edit", "Retake"]
+    assert labels == ["Save", "Edit", "Retake", "Cancel"]
     say(STAFF, "Edit")
     say(STAFF, "Phone: 98450 11112")
     text, labels = last(sent)
-    assert "Phone: 98450 11112" in text and "Check:" not in text and labels == ["Save", "Edit", "Retake"]
+    assert "Phone: 98450 11112" in text and "Check:" not in text and labels == ["Save", "Edit", "Retake", "Cancel"]
     save_scan(STAFF)
     lead = store.list_leads()[0]
     assert (lead.org, lead.phone, lead.doc_type, lead.captured_by, lead.review_reason) == ("Sunrise School", "98450 11112", "other", "Test Admin", "")
@@ -86,7 +86,7 @@ def test_edit_can_be_ended_with_back_or_a_button_tap(store, sent, fake_io):
     say(STAFF, "done")
     say(STAFF, "Edit")
     say(STAFF, "back")  # ends the edit, summary shown again
-    assert last(sent)[1] == ["Save", "Edit", "Retake"] and "Name: Asha Rao" in last(sent)[0]
+    assert last(sent)[1] == ["Save", "Edit", "Retake", "Cancel"] and "Name: Asha Rao" in last(sent)[0]
     say(STAFF, "Edit")
     say(STAFF, "Retake")  # a stale button tap while editing is not read as a correction
     assert "Photos cleared" in last(sent)[0]
@@ -120,7 +120,7 @@ def test_nothing_is_shortened_in_the_scan_summary(store, sent, fake_io):
     say(STAFF, "Contact form")
     say(STAFF, "", photo("form"))
     say(STAFF, "DONE")
-    assert short_notes in sent[-1][1] and "..." not in sent[-1][1] and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake"]
+    assert short_notes in sent[-1][1] and "..." not in sent[-1][1] and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake", "Cancel"]
 
     long_notes = "Remarks: " + "wants a science lab for every school in the district " * 30  # too long for a button message
     fake_io["result"] = {"fields": {"name": "Meera Iyer", "notes": long_notes}, "check": []}
@@ -128,7 +128,7 @@ def test_nothing_is_shortened_in_the_scan_summary(store, sent, fake_io):
     say(STAFF, "Contact form")
     say(STAFF, "", photo("form"))
     say(STAFF, "DONE")
-    assert long_notes in sent[-2][1] and sent[-2][2] == [] and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake"]
+    assert long_notes in sent[-2][1] and sent[-2][2] == [] and [label for label, _ in sent[-1][2]] == ["Save", "Edit", "Retake", "Cancel"]
     save_scan(STAFF)
     assert store.list_leads()[0].notes == long_notes
 
@@ -600,3 +600,12 @@ def test_org_only_back_of_a_card_is_folded_into_its_front():
     assert "Other phone: 8792977628" in card["fields"]["notes"] and "Chandapura" in card["fields"]["notes"] and card["photos"] == [1, 2]
     other = flows.lead_fields({"name": "Asha Rao", "org": "ABC School", "photos": [2]})
     assert len(flows.merge_org_backs([front, other])) == 2  # a different organisation stays its own lead
+
+
+def test_cancel_at_the_summary_drops_the_scan_without_saving(store, sent):
+    say(STAFF, "Other docs")
+    say(STAFF, "", photo("front"))
+    say(STAFF, "done")
+    assert last(sent)[1][-1] == "Cancel"
+    say(STAFF, "Cancel")
+    assert last(sent)[0].startswith("Cancelled") and store.list_leads() == [] and store.get_session(STAFF) is None
