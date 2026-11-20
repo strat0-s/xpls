@@ -567,3 +567,26 @@ def test_same_sitting_stops_at_a_long_pause_but_keeps_notes_after_the_save():
     row = lambda body, at: {"body": body, "created_at": at.replace(tzinfo=None).isoformat(sep=" ")}  # the database stores naive UTC text
     rows = [row("old test", saved - timedelta(hours=19)), row("Hi", saved - timedelta(minutes=3)), row("DONE", saved - timedelta(seconds=20)), row("note", saved + timedelta(minutes=2))]
     assert [r["body"] for r in same_sitting(rows, saved)] == ["Hi", "DONE", "note"]
+
+
+def test_each_scan_shows_only_the_messages_of_its_own_conversation(store, sent, fake_io):
+    from didac_app.ui import lead_chats
+
+    def scan(marker, fields):
+        fake_io["result"] = {"fields": fields, "check": []}
+        say(STAFF, marker)
+        say(STAFF, "Other docs")
+        say(STAFF, "", photo("p"))
+        say(STAFF, "DONE")
+        save_scan(STAFF)
+        return max(store.list_leads(), key=lambda lead: lead.id)
+
+    def team_chat(lead):
+        return " | ".join(row["body"] or "" for row in lead_chats(store, lead, {})[0]["rows"])
+
+    first = scan("marker-A", {"name": "Rakesh Rao", "org": "IDFC", "phone": "6361790365"})
+    say(STAFF, "late note for A")  # arrives after A was saved and starts the next conversation
+    second = scan("marker-B", {"name": "Prateek Kaul", "org": "Gift Abled", "phone": "9845066661"})
+    assert store.lead_convo(first.id) and store.lead_convo(first.id) != store.lead_convo(second.id)
+    assert "marker-A" in team_chat(first) and "marker-B" not in team_chat(first)
+    assert "marker-B" in team_chat(second) and "marker-A" not in team_chat(second)

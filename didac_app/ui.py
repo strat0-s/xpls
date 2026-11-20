@@ -519,15 +519,18 @@ def same_sitting(rows: list[dict], saved_at: datetime, gap: timedelta = timedelt
 
 def lead_chats(store, lead, members: dict[str, str]) -> list[dict]:
     """The separate WhatsApp chats behind a lead, each with our number on one side: the visitor's own chat, and the team member's scan chat
-    (only the stretch since their previous lead, so another lead's scan is not mixed in)."""
+    (only the messages of the scan conversation it was saved in, so another lead's scan is not mixed in)."""
     chats = []
     visitor = auth.normalize_phone(lead.phone)
     staff = auth.normalize_phone(lead.from_number)
     if staff and staff != visitor:
-        since = datetime.fromisoformat(store.previous_lead_time(lead.from_number, lead.id) or "1970-01-01T00:00:00+00:00")
-        since = max(since, datetime.fromisoformat(lead.created_at) - timedelta(hours=24))
-        rows = store.chat_with(staff, lead.id, since, datetime.fromisoformat(lead.created_at) + timedelta(seconds=1))
-        chats.append({"title": f"Team chat: {members.get(staff) or staff}", "who": members.get(staff) or staff, "rows": same_sitting(rows, datetime.fromisoformat(lead.created_at))})
+        if convo := store.lead_convo(lead.id):
+            rows = store.chat_with(staff, lead.id, convo=convo)
+        else:  # saved before conversations were recorded: guess by time
+            since = datetime.fromisoformat(store.previous_lead_time(lead.from_number, lead.id) or "1970-01-01T00:00:00+00:00")
+            since = max(since, datetime.fromisoformat(lead.created_at) - timedelta(hours=24))
+            rows = same_sitting(store.chat_with(staff, lead.id, since, datetime.fromisoformat(lead.created_at) + timedelta(seconds=1)), datetime.fromisoformat(lead.created_at))
+        chats.append({"title": f"Team chat: {members.get(staff) or staff}", "who": members.get(staff) or staff, "rows": rows})
     if visitor:
         chats.append({"title": f"Visitor chat: {lead.name or visitor}", "who": lead.name or visitor, "rows": store.chat_with(visitor, lead.id)})
     return chats

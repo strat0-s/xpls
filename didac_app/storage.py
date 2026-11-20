@@ -4,6 +4,7 @@ import atexit
 import csv
 import json
 import re
+import uuid
 from dataclasses import asdict, fields
 from datetime import UTC, datetime
 from pathlib import Path
@@ -178,6 +179,9 @@ class LeadStore:
             conn.execute("UPDATE leads SET status='New' WHERE status ~ '^(Menu|Intake|Brochure|Feedback|Badge):'")
             conn.execute("ALTER TABLE media ADD COLUMN IF NOT EXISTS rotation INTEGER NOT NULL DEFAULT 0")
             conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
+            for table in ("inbound_events", "outbound_messages"):
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS convo TEXT")  # which scan conversation a message belongs to, see convo_for
+            conn.execute("CREATE TABLE IF NOT EXISTS convos (phone TEXT PRIMARY KEY, id TEXT NOT NULL, closed BOOLEAN NOT NULL DEFAULT FALSE, updated_at TIMESTAMPTZ NOT NULL DEFAULT now())")
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS inbound_events_message_id_key ON inbound_events (message_id)")
 
     # One row per phone ever: sent, or opted out. The primary key is what keeps it to one message per number.
@@ -595,14 +599,15 @@ class LeadStore:
         raw_payload: dict,
         status: str = "received",
         message_id: str = "",
+        convo: str = "",
     ) -> int | None:
         """Returns the new event id, or None if this message_id was already recorded (a webhook retry)."""
         with self.connect() as conn:
             row = conn.execute(
                 """
                 INSERT INTO inbound_events
-                (from_number, body, num_media, media_urls, status, lead_ids, error, raw_payload, message_id)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (from_number, body, num_media, media_urls, status, lead_ids, error, raw_payload, message_id, convo)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (message_id) DO NOTHING
                 RETURNING id
                 """,
@@ -616,6 +621,7 @@ class LeadStore:
                     "",
                     json.dumps(raw_payload, ensure_ascii=False),
                     message_id or None,
+                    convo or None,
                 ),
             ).fetchone()
             return row["id"] if row else None
@@ -642,18 +648,42 @@ class LeadStore:
         with self.connect() as conn:
             return {row["lead_id"]: row["at"] for row in conn.execute("SELECT f.lead_id, f.at FROM reply_flags f JOIN leads l ON l.id = f.lead_id WHERE (l.deleted_at IS NULL OR l.deleted_at = '')")}
 
-    def log_outbound(self, to_number: str, body: str, lead_ids: list[int] | None = None) -> None:
+    def log_outbound(self, to_number: str, body: str, lead_ids: list[int] | None = None, convo: str = "") -> None:
         """What we sent, kept next to inbound_events so a lead can show the whole chat."""
         with self.connect() as conn:
-            conn.execute("INSERT INTO outbound_messages (to_number, body, lead_ids) VALUES (%s, %s, %s)", (to_number, body, ",".join(str(item) for item in lead_ids or [])))
+            conn.execute("INSERT INTO outbound_messages (to_number, body, lead_ids, convo) VALUES (%s, %s, %s, %s)", (to_number, body, ",".join(str(item) for item in lead_ids or []), convo or None))
 
-    def chat_with(self, number: str, lead_id: int, since: datetime | None = None, until: datetime | None = None) -> list[dict]:
+    def convo_for(self, phone: str) -> str:
+        """The id of the scan conversation this phone is in now. A new one starts after a save (close_convo) or after an hour of silence;
+        every message in and out is stamped with it, so a lead can show exactly the messages of its own scan."""
+        with self.connect() as conn:
+            return conn.execute(
+                "INSERT INTO convos (phone, id) VALUES (%s, %s) ON CONFLICT (phone) DO UPDATE SET "
+                "id = CASE WHEN convos.closed OR convos.updated_at < now() - interval '1 hour' THEN EXCLUDED.id ELSE convos.id END, "
+                "closed = CASE WHEN convos.closed OR convos.updated_at < now() - interval '1 hour' THEN FALSE ELSE convos.closed END, "
+                "updated_at = now() RETURNING id", (phone, uuid.uuid4().hex)).fetchone()["id"]
+
+    def close_convo(self, phone: str) -> None:
+        """A lead was saved: the next message from this phone starts a new conversation."""
+        with self.connect() as conn:
+            conn.execute("UPDATE convos SET closed=TRUE WHERE phone=%s", (phone,))
+
+    def lead_convo(self, lead_id: int) -> str:
+        """The conversation a lead was saved in: that of the first message tagged with it ('' for leads from before conversations were recorded)."""
+        with self.connect() as conn:
+            row = conn.execute("SELECT convo FROM inbound_events WHERE %s = ANY(string_to_array(lead_ids, ',')) ORDER BY id LIMIT 1", (str(lead_id),)).fetchone()
+        return (row["convo"] or "") if row else ""
+
+    def chat_with(self, number: str, lead_id: int, since: datetime | None = None, until: datetime | None = None, convo: str = "") -> list[dict]:
         """One WhatsApp chat, both directions, oldest first: everything to or from `number`. With since/until only that stretch of it,
         plus any exchange tagged with the lead (a team member's chat covers many leads). Inside the stretch, an exchange tagged with some other lead
         (a note, photo or voice note sent for the previous lead) is left out. Rows are {direction 'in'|'out', created_at, body, num_media}."""
         numbers = [number, f"whatsapp:{number}"]
-        window = "(created_at::timestamptz > %s AND created_at::timestamptz <= %s AND COALESCE(lead_ids, '') = '' OR %s = ANY(string_to_array(lead_ids, ',')))" if since else "TRUE"
-        extra = [since, until, str(lead_id)] if since else []
+        if convo:  # exact: the messages of that conversation that are not for another lead, plus anything tagged with this one
+            window, extra = "(convo = %s AND COALESCE(lead_ids, '') = '' OR %s = ANY(string_to_array(lead_ids, ',')))", [convo, str(lead_id)]
+        else:
+            window = "(created_at::timestamptz > %s AND created_at::timestamptz <= %s AND COALESCE(lead_ids, '') = '' OR %s = ANY(string_to_array(lead_ids, ',')))" if since else "TRUE"
+            extra = [since, until, str(lead_id)] if since else []
         with self.connect() as conn:
             return conn.execute(
                 "SELECT * FROM ("

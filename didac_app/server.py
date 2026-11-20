@@ -125,18 +125,19 @@ def bird_webhook():
     body = message["body"]
     media = message["media"]
     num_media = len(media)
-    event_id = store.add_inbound_event(from_number, body, num_media, [url for url, _ in media], event, message_id=message["message_id"])
+    convo = store.convo_for(from_number)
+    event_id = store.add_inbound_event(from_number, body, num_media, [url for url, _ in media], event, message_id=message["message_id"], convo=convo)
     if event_id is None:
         return "duplicate", 200
     if body.startswith("/") and flows.staff_user(store, from_number):
-        return send_replies(event_id, from_number, [Reply(command_reply(body, store, config))], [], "processed_command", started)
+        return send_replies(event_id, from_number, [Reply(command_reply(body, store, config))], [], "processed_command", started, convo)
     if body.strip(" .!").lower() in followup.STOP_WORDS and not flows.staff_user(store, from_number):
         store.opt_out(auth.normalize_phone(from_number) or from_number)
-        return send_replies(event_id, from_number, [Reply("You will not get any more follow-up messages from us. Type menu if you want our brochures.")], [], "opted_out", started)
+        return send_replies(event_id, from_number, [Reply("You will not get any more follow-up messages from us. Type menu if you want our brochures.")], [], "opted_out", started, convo)
     if not flows.staff_user(store, from_number) and (known := flows.lead_for_visitor(store, from_number)):
         store.flag_reply(known.id)  # they texted back: the team has to answer
     replies, lead_ids = flows.handle(store, config, from_number, body, media)
-    return send_replies(event_id, from_number, replies, lead_ids, "processed", started)
+    return send_replies(event_id, from_number, replies, lead_ids, "processed", started, convo)
 
 
 def unique_ids(values):
@@ -147,7 +148,7 @@ def unique_ids(values):
     return seen
 
 
-def send_replies(event_id: int, to_number: str, replies: list[Reply], lead_ids: list[int], status: str, started: float) -> tuple[str, int]:
+def send_replies(event_id: int, to_number: str, replies: list[Reply], lead_ids: list[int], status: str, started: float, convo: str = "") -> tuple[str, int]:
     # Reply first, then record the outcome, so the visitor does not wait for the status write.
     # Answer 200 even if sending fails: Bird would retry and the retry is dropped as a duplicate anyway.
     worked = time.perf_counter()
@@ -162,7 +163,7 @@ def send_replies(event_id: int, to_number: str, replies: list[Reply], lead_ids: 
                     bird.send_message(config, to_number, f"{reply.text}\n{reply.document[0]}")
             else:
                 bird.send_message(config, to_number, reply.text, reply.options, reply.as_list)
-            store.log_outbound(to_number, (f"[File sent: {reply.document[1]}]\n" if reply.document else "") + reply.text + (f"\n[{' | '.join(label for label, _ in reply.options)}]" if reply.options else ""), lead_ids)
+            store.log_outbound(to_number, (f"[File sent: {reply.document[1]}]\n" if reply.document else "") + reply.text + (f"\n[{' | '.join(label for label, _ in reply.options)}]" if reply.options else ""), lead_ids, convo)
     except Exception as exc:
         status, error = "reply_failed", str(exc)
     sent = time.perf_counter()

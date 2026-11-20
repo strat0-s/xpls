@@ -225,7 +225,7 @@ class Chat:
         """Send right away, before the slow work that follows. A failure is ignored: the normal replies still go out afterwards."""
         try:
             bird.send_message(self.config, self.number, text)
-            self.store.log_outbound(self.number, text)
+            self.store.log_outbound(self.number, text, convo=self.store.convo_for(self.number))
         except Exception:
             logger.exception("Could not send the progress message")
 
@@ -490,6 +490,7 @@ class Chat:
         self.attach_photos(lead.id, photos, "")
         self.lead_ids.append(lead.id)
         self.store.put_session(self.number, flow, "photos", {"photos": []})
+        self.store.close_convo(self.number)
         status = self.store.reader_status()
         tail = f"\n\nThere is an error reading documents right now. Please tell someone to check. Reference {status['ref']}." if status["state"] == "down" else ""
         self.say(f"Saved as lead #{lead.id} with {len(photos)} photo(s). Find it under Leads, marked \"Not scanned\". Open it to read it again later, or fill in the details yourself.{tail}")
@@ -536,6 +537,7 @@ class Chat:
             saved, outcome = self.store_lead(lead, photos, doc["original"])
             outcomes.append((saved, outcome))
         self.store.put_session(self.number, flow, "photos", {"photos": []})
+        self.store.close_convo(self.number)
         again = f"Send the next {item_noun(self.doc_types[flow])}, or type menu."
         if len(docs) == 1:
             saved, outcome = outcomes[0]
