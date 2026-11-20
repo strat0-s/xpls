@@ -34,6 +34,7 @@ The images are the sides or pages of ONE document: read them together and return
 """
 MULTI_TEXT = """
 An image can show up to 2 separate documents side by side, and different images can show different documents. Return a top-level "contacts" array with ONE object per separate document.
+A printed Xperimentor CONTACT FORM with a visiting card stapled or placed on it is ONE contact, never two: the person is on the card and in the form's own fields (role, curriculum, remarks, students, demo, workshop); merge them into one object, the form's filled fields winning. A name handwritten at the top right, just above the CONTACT FORM heading, is the team member who met the visitor: return it as "lead_owner" exactly as written and never as a contact. Leave lead_owner empty when nothing is written there.
 Sides or pages of the same document (the same person) are ONE object: merge them. A side that shows only the organisation (logo, address, an office phone) and no person's name is the back of the other card, even when its phone differs: merge it and put the extra phone in notes. Add a key "photos" to each object: the list of image numbers (the first image is 1) that the document appears in.
 """
 CHECK_TEXT = """
