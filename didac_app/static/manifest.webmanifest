@@ -1,0 +1,14 @@
+{
+  "name": "Footfall",
+  "short_name": "Footfall",
+  "description": "Capture and follow up event leads",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4f1f6",
+  "theme_color": "#7d4a8c",
+  "icons": [
+    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
