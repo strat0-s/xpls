@@ -9,6 +9,9 @@
     .col { flex: 1 1 340px; display: flex; flex-direction: column; gap: 10px; }
     .hint { color: var(--mut); font-size: 13px; }
     .notice { padding: 10px 14px; border-radius: 8px; background: var(--warn); color: var(--warn-ink); border: 1px solid var(--warn-line); line-height: 1.5; }
+    .switch { width: 44px; height: 24px; padding: 2px; border: 0; border-radius: 12px; background: var(--line); cursor: pointer; flex: none; transition: background .15s; }
+    .switch span { display: block; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
+    .switch[aria-checked=true] { background: #7d4a8c; } .switch[aria-checked=true] span { transform: translateX(20px); }
     .wa { flex: 1 1 300px; } .wa .bubble { max-width: 360px; }
 {% endblock %}
 {% block content %}
@@ -33,8 +36,10 @@
         Each number is messaged once, never team members or anyone who replied STOP, between 9:00 and 21:00 IST, up to {{ cap }} a day. A lead captured outside those hours or over the cap goes out with the next lead that is saved,
         or from the Follow-up page. Leads captured before this was switched on are never sent automatically.</div>
       {% if not auto_ready %}<div class="notice">The thank-you template is not set up (BIRD_FOLLOWUP_TEMPLATE_ID is missing), so nothing can be sent yet.</div>{% endif %}
-      <div><b>{% if auto_since %}On since {{ auto_since|local_time('%d %b %Y, %H:%M') }}{% else %}Off{% endif %}</b></div>
-      <div><button class="btn {{ 'ghost' if auto_since }}" name="on" value="{{ '0' if auto_since else '1' }}">{{ 'Turn off' if auto_since else 'Turn on' }}</button></div>
+      <div class="row" style="align-items:center;gap:10px">
+        <button class="switch" role="switch" aria-checked="{{ 'true' if auto_since else 'false' }}" aria-label="Automatic follow-up" name="on" value="{{ '0' if auto_since else '1' }}"><span></span></button>
+        <b>{% if auto_since %}On since {{ auto_since|local_time('%d %b %Y, %H:%M') }}{% else %}Off{% endif %}</b>
+      </div>
     </form>
   </section>
 </div>
