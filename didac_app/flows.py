@@ -249,6 +249,9 @@ def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None
     fields = {name: getattr(lead, name) for name in FILLABLE if getattr(lead, name)}
     if owner:
         fields["lead_owner"] = owner  # as written: Chat.read_scan matches it to the team
+        if fields.get("name", "").strip().lower() == owner.lower():  # the reader took the staff name for the visitor: better blank than wrong
+            del fields["name"]
+            check.append("the visitor's name was not read from the card, please add it")
     if not fields.get("name") and not fields.get("phone"):
         check.append("no name or phone found")
     return {"fields": fields, "check": check, "photos": photos}

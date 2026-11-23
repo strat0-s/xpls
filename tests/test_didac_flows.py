@@ -704,3 +704,9 @@ def test_a_known_lead_with_no_interest_yet_can_reply_with_what_they_need(store, 
     say(VISITOR, "Science lab for 20 schools")
     assert last(sent)[0].startswith("Thanks Meera.") and len(store.list_leads()) == 1
     assert store.get_lead(known.id).interest == "Science lab for 20 schools"
+
+
+def test_a_name_that_is_just_the_lead_owner_is_not_kept_as_the_visitor():
+    result = flows.lead_fields({"name": "Abhishek", "org": "EDUBIZ Networks", "lead_owner": "Abhishek"})
+    assert "name" not in result["fields"] and result["fields"]["lead_owner"] == "Abhishek" and "name was not read" in result["check"][0]
+    assert flows.lead_fields({"name": "Srijan Saha", "org": "EDUBIZ", "lead_owner": "Abhishek"})["fields"]["name"] == "Srijan Saha"
