@@ -16,6 +16,11 @@
     .mini { height: 32px; padding: 0 12px; border: 1px solid var(--line); border-radius: 6px; background: transparent; font: inherit; font-weight: 600; color: var(--acc-text); cursor: pointer; }
     .mini:hover { border-color: var(--acc); }
     td.act form { display: inline; margin: 0; } td.act .mini { margin-left: 6px; }
+    @media (max-width: 700px) {  /* each member becomes a card, so the buttons are not off the edge of the screen */
+      tr:first-child { display: none; } tr { display: block; padding: 12px 14px; border-top: 1px solid var(--line); } tr:nth-child(2) { border-top: 0; }
+      table, tbody { display: block; } td { display: block; border: 0; padding: 2px 0; }
+      td.act { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 8px; text-align: left; } td.act .mini { margin-left: 0; }
+    }
     .addform { display: flex; flex-direction: column; gap: 12px; }
     .addform .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
     .addform .adm { display: flex; gap: 8px; align-items: center; }
@@ -38,7 +43,8 @@
         <td class="act">
           <button type="button" class="mini" data-edit="{{ url_for('team_edit', user_id=m.id) }}" data-name="{{ m.name }}" data-phone="{{ m.phone or '' }}" data-email="{{ m.email or '' }}">Edit</button>
           <button type="button" class="mini" data-reset="{{ url_for('team_password', user_id=m.id) }}" data-name="{{ m.name }}">Reset password</button>
-          {% if m.id != user.id %}<form method="post" action="{{ url_for('team_active', user_id=m.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="mini">{{ 'Deactivate' if m.is_active else 'Reactivate' }}</button></form>{% endif %}
+          {% if m.id != user.id %}<form method="post" action="{{ url_for('team_admin', user_id=m.id) }}" data-title="{{ 'Remove admin access?' if m.is_admin else 'Make ' ~ m.name ~ ' an admin?' }}" data-confirm="{{ m.name ~ ' will no longer manage the team, events or documents.' if m.is_admin else 'Admins manage the team, events, documents, messages and products, and can delete leads.' }}" data-ok="{{ 'Make staff' if m.is_admin else 'Make admin' }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="mini">{{ 'Make staff' if m.is_admin else 'Make admin' }}</button></form>
+          <form method="post" action="{{ url_for('team_active', user_id=m.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="mini">{{ 'Deactivate' if m.is_active else 'Reactivate' }}</button></form>{% endif %}
         </td>
       </tr>
       {% endfor %}

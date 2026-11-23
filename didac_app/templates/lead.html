@@ -3,53 +3,66 @@
 {% block title %}{{ title }} · Footfall{% endblock %}
 {% block css %}
     .head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; justify-content: space-between; }
-    .head h1 { margin: 4px 0 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
-    .admin-actions { display: flex; gap: 8px; align-items: center; }
-    .admin-actions form { margin: 0; }
+    .head h1 { margin: 4px 0 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
     .head .sub { color: var(--mut); margin-top: 2px; }
+    .admin-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .admin-actions form { margin: 0; }
     .notice { padding: 10px 14px; border-radius: 8px; background: var(--warn); color: var(--warn-ink); border: 1px solid var(--warn-line); line-height: 1.5; }
-    .cols { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
     @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
-    .left { display: flex; flex-direction: column; gap: 12px; }
-    .right { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
-    .item { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+    .main { display: flex; flex-direction: column; gap: 12px; }
+    fieldset.sec { margin: 0; padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surf); min-width: 0; }
+    fieldset.sec legend { padding: 0 6px; margin-left: -6px; font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--acc-text); }
+    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .grid2 .wide { grid-column: 1 / -1; }
+    @media (max-width: 520px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+    .grid2 label.f { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .checks { display: flex; flex-wrap: wrap; gap: 8px; }
+    .checks label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surf); font-size: 14px; cursor: pointer; }
+    .checks label:has(input:checked) { border-color: var(--acc); background: var(--soft); color: var(--acc-text); font-weight: 600; }
+    .savebar { position: sticky; bottom: 0; display: flex; gap: 8px; padding: 10px 0; background: linear-gradient(transparent, var(--bg) 30%); }
+    .savebar .btn:first-child { flex: 1; }
+    .aside { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
+    @media (max-width: 900px) { .aside { position: static; } }
+    .tabs { display: none; border-bottom: 1px solid var(--line); background: var(--head); }
+    .js .tabs { display: flex; }
+    .tabs button { flex: 1; height: 42px; border: 0; border-bottom: 3px solid transparent; background: none; font-weight: 600; color: var(--mut); cursor: pointer; }
+    .tabs button[aria-selected="true"] { color: var(--acc-text); border-bottom-color: var(--acc); }
+    .panel { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+    .panel h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); }
+    .item { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 8px; }
     .item .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
-    .item .title { font-weight: 600; }
-    .item .meta { font-size: 12px; color: var(--mut); margin-top: 2px; }
+    .item .title { font-weight: 600; } .item .meta { font-size: 12px; color: var(--mut); margin-top: 2px; }
     .item audio { width: 100%; }
-    .chat { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .chat { display: flex; flex-direction: column; gap: 8px; }
     .chat .msgs { display: flex; flex-direction: column; gap: 8px; max-height: 460px; overflow-y: auto; }
-    .bub { max-width: 82%; padding: 8px 12px; border-radius: 12px; background: var(--soft); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .bub { max-width: 86%; padding: 8px 12px; border-radius: 12px; background: var(--soft); white-space: pre-wrap; overflow-wrap: anywhere; }
     .bub.out { align-self: flex-end; background: var(--warn); color: var(--warn-ink); }
     .bub .who { font-size: 11px; color: var(--mut); margin-bottom: 2px; }
-    .viewer { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .viewer { display: flex; flex-direction: column; gap: 10px; }
     .shot .rot { display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; background: var(--soft); }
     .shot img { max-width: 100%; max-height: 460px; display: block; transition: transform .2s; }
-    .turn { display: none; gap: 6px; }
-    .js .turn { display: inline-flex; }
-    .turn button { height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--acc-text); font-weight: 600; cursor: pointer; }
+    .turn { display: none; gap: 6px; } .js .turn { display: inline-flex; }
+    .turn button { height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--acc-text); font-weight: 600; cursor: pointer; }
     .turn button:hover { border-color: var(--acc); }
-    .strip { display: none; gap: 8px; flex-wrap: wrap; }
-    .js .strip { display: flex; }
+    .strip { display: none; gap: 8px; flex-wrap: wrap; } .js .strip { display: flex; }
     .strip button { padding: 0; width: 64px; height: 80px; border: 2px solid var(--line); border-radius: 8px; background: var(--soft); overflow: hidden; cursor: pointer; }
     .strip button[aria-pressed="true"] { border-color: var(--acc); }
     .strip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .upload { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; }
+    .upload input[type=file] { width: 100%; font-size: 13px; }
     .quote { line-height: 1.6; padding: 9px 12px; border-radius: 6px; background: var(--head); white-space: pre-wrap; }
     .quote.raw { border-left: 3px solid var(--line); }
     .hint { font-size: 12px; color: var(--mut); }
-    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    .grid2 .wide { grid-column: 1 / -1; }
-    .actions { display: flex; gap: 8px; }
-    .actions .btn:first-child { flex: 1; }
     details summary { cursor: pointer; font-size: 13px; color: var(--acc-text); font-weight: 600; }
 {% endblock %}
 {% block content %}
 <div class="head">
   <div>
     <a href="{{ url_for('gallery') }}" style="text-decoration:none">&larr; All leads</a>
-    <h1>{{ title }} <small style="color:var(--mut);font-weight:600">#{{ lead.event_no }}</small></h1>
-    <div class="sub">{{ (doc_types|selectattr('key', 'equalto', lead.doc_type)|map(attribute='label')|first) or lead.doc_type or 'Document' }} · captured {{ lead.created_at|local_time('%d %b %Y, %H:%M') }}{% if lead.lead_owner %} · owner {{ lead.lead_owner }}{% endif %}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}</div>
+    <h1>{{ title }}{% if not new %} <small style="color:var(--mut);font-weight:600">#{{ lead.event_no }}</small>{% if lead.priority %}<span class="chip {{ lead.priority|lower }}">{{ lead.priority }}</span>{% endif %}{% endif %}</h1>
+    <div class="sub">{% if new %}Added by hand. You can add photos once it is saved.{% else %}{{ (doc_types|selectattr('key', 'equalto', lead.doc_type)|map(attribute='label')|first) or lead.doc_type or 'Document' }} · captured {{ lead.created_at|local_time('%d %b %Y, %H:%M') }}{% if lead.lead_owner %} · owner {{ lead.lead_owner }}{% endif %}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}{% endif %}</div>
   </div>
+  {% if not new %}
   <div class="admin-actions">
   <form method="post" action="{{ url_for('lead_followup', lead_id=lead.id) }}" data-title="Send follow-up?" data-confirm="This sends the thank-you WhatsApp to this lead's number. Each number can only be messaged once." data-ok="Send message">
     <input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn ghost">Send follow-up</button>
@@ -60,10 +73,11 @@
   </form>
   {% endif %}
   </div>
+  {% endif %}
 </div>
 
 {% if replied_at %}
-<div class="alert" role="alert"><span class="bell" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></span><div class="msg"><b>This visitor texted back. Reply to them.</b><span>Last message {{ replied_at|local_time }}. Read the WhatsApp conversation below. This stays until you mark it as replied.</span></div>
+<div class="alert" role="alert"><span class="bell" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg></span><div class="msg"><b>This visitor texted back. Reply to them.</b><span>Last message {{ replied_at|local_time }}. Read the WhatsApp conversation under the WhatsApp tab. This stays until you mark it as replied.</span></div>
   <form method="post" action="{{ url_for('lead_replied', lead_id=lead.id) }}" style="margin:0"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn">Mark as replied</button></form>
 </div>
 {% endif %}
@@ -79,88 +93,103 @@
 {% endif %}
 
 <div class="cols">
-  <section class="left">
-    <div style="font-size:15px;font-weight:700">Everything received for this lead <span class="hint" style="font-weight:400">· {{ items|length }} item{{ '' if items|length == 1 else 's' }}, oldest first</span></div>
-    {% set photos = items|selectattr('kind', 'equalto', 'image')|list %}
-    {% if photos %}
-    <section class="card viewer" id="viewer">
-      {% for it in photos %}
-      <figure class="shot" style="margin:0">
-        <div class="rot" data-rot="{{ it.rotation }}"><img src="/media/{{ it.id }}" alt="Photo {{ loop.index }} sent to the bot" loading="{{ 'eager' if loop.first else 'lazy' }}"></div>
-        <div class="turn" style="margin-top:6px"><button type="button" data-turn="left" data-id="{{ it.id }}" aria-label="Rotate photo {{ loop.index }} left">&#8634; Rotate left</button><button type="button" data-turn="right" data-id="{{ it.id }}" aria-label="Rotate photo {{ loop.index }} right">Rotate right &#8635;</button></div>
-        <figcaption class="meta hint" style="margin-top:6px">Photo {{ loop.index }} of {{ photos|length }} · {{ it.by }} · {{ it.created_at|local_time }} · <a href="/media/{{ it.id }}" target="_blank" rel="noopener">Open full size</a></figcaption>
-        {% if it.text %}<details style="margin-top:6px"><summary>Text read from the photo</summary><div class="quote">{{ it.text }}</div></details>{% endif %}
-      </figure>
-      {% endfor %}
-      {% if photos|length > 1 %}
-      <div class="strip" role="group" aria-label="Photos">
-        {% for it in photos %}<button type="button" aria-label="Photo {{ loop.index }}" aria-pressed="{{ 'true' if loop.first else 'false' }}"><img src="/media/{{ it.id }}" alt=""></button>{% endfor %}
-      </div>
-      {% endif %}
-    </section>
-    {% endif %}
-    {% for it in items if it.kind != 'image' %}
-    <article class="card item">
-      <div class="top">
-        <div>
-          <div class="title">{{ {'image': 'Photo', 'audio': 'Voice note', 'text': 'Text message', 'file': 'File'}[it.kind] }}</div>
-          <div class="meta">{{ it.by }} · {{ it.created_at|local_time }}</div>
-        </div>
-        <span class="chip {{ 'team' if it.is_team else 'visitor' }}">{{ 'Team' if it.is_team else 'Visitor' }}</span>
-      </div>
-      {% if it.kind == 'audio' %}
-        <audio controls preload="none" src="/media/{{ it.id }}"></audio>
-        {% if it.text %}<div class="hint">Transcript</div><div class="quote">{{ it.text }}</div>{% endif %}
-      {% elif it.kind == 'text' %}
-        <div class="quote raw">{{ it.text }}</div>
-        <div class="hint">Kept exactly as sent. Edits to the lead never change this original.</div>
-      {% else %}
-        <a href="/media/{{ it.id }}" target="_blank" rel="noopener">Open file</a>
-      {% endif %}
-    </article>
-    {% else %}
-    <div class="card item hint">Nothing has been attached to this lead yet.</div>
-    {% endfor %}
-    <div style="font-size:15px;font-weight:700;margin-top:8px">WhatsApp conversations</div>
-    {% for chat in chats %}
-    <details class="card chat" open>
-      <summary style="font-weight:600;cursor:pointer">{{ chat.title }} <span class="hint" style="font-weight:400">· {{ chat.rows|length }} message{{ '' if chat.rows|length == 1 else 's' }}</span></summary>
-      <div class="msgs" style="margin-top:8px">
-      {% for m in chat.rows %}
-      <div class="bub {{ m.direction }}"><div class="who">{{ chat.who if m.direction == 'in' else 'Xperimentor' }} · {{ m.created_at|local_time }}</div>{{ m.body }}{% if m.num_media %}<div class="hint">{{ m.num_media }} attachment{{ '' if m.num_media == 1 else 's' }} (photos and voice notes are above)</div>{% endif %}</div>
-      {% else %}
-      <div class="hint">No messages recorded in this chat yet.</div>
-      {% endfor %}
-      </div>
-    </details>
-    {% else %}
-    <section class="card chat"><div class="hint">No WhatsApp chat is recorded for this lead.</div></section>
-    {% endfor %}
-  </section>
-
-  <form class="card right" method="post">
+  <form class="main" method="post"{% if new %} action="{{ url_for('lead_new', event=request.args.get('event')) }}"{% endif %}>
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-    <div style="font-size:15px;font-weight:700">Lead details</div>
-    <div class="grid2">
-      {% for field, label in fields %}
-      <div class="{{ 'wide' if field in ('name', 'org', 'email') }}"><label class="f" for="f-{{ field }}">{{ label }}</label><input class="t" id="f-{{ field }}" name="{{ field }}" value="{{ lead[field] }}"{% if field == 'email' %} type="email"{% elif field == 'pincode' %} inputmode="numeric" pattern="[0-9]{6}" maxlength="6"{% endif %}></div>
-      {% endfor %}
-      <div class="wide"><label class="f">Curriculum (Orbit keeps only these)</label>
-        <div style="display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:6px">{% for code in curricula %}<label style="font-size:14px"><input type="checkbox" name="curriculum" value="{{ code }}" {{ 'checked' if code in picked }}> {{ code }}</label>{% endfor %}</div>
-        {% if lead.curriculum and lead.curriculum != picked|join(', ') %}<div class="hint">Scanned as: {{ lead.curriculum }}. Saving keeps only the ticked boards.</div>{% endif %}</div>
-      <div class="wide"><label class="f" for="f-doc_type">Type</label>
-        <select class="t" id="f-doc_type" name="doc_type">{% for dt in doc_types %}<option value="{{ dt.key }}" {{ 'selected' if lead.doc_type == dt.key }}>{{ dt.label }}</option>{% else %}<option value="{{ lead.doc_type }}" selected>{{ lead.doc_type or 'Document' }}</option>{% endfor %}</select></div>
+    {% macro field(name, label, width) %}<div class="{{ 'wide' if width == 2 }}"><label class="f" for="f-{{ name }}" title="{{ label }}">{{ label }}</label><input class="t" id="f-{{ name }}" name="{{ name }}" value="{{ lead[name] }}"{% if name == 'email' %} type="email"{% elif name == 'pincode' %} inputmode="numeric" pattern="[0-9]{6}" maxlength="6"{% elif name == 'phone' %} type="tel"{% elif name == 'students' %} inputmode="numeric"{% elif name == 'workshop' %} list="yn"{% endif %}></div>{% endmacro %}
+    <datalist id="yn"><option value="Yes"><option value="No"></datalist>
+    {% for title, rows in sections if title == 'Contact' %}
+    <fieldset class="sec"><legend>{{ title }}</legend><div class="grid2">{% for name, label, width in rows %}{{ field(name, label, width) }}{% endfor %}</div></fieldset>
+    {% endfor %}
+    <fieldset class="sec"><legend>Pipeline</legend><div class="grid2">
+      <div><label class="f" for="f-priority">Priority</label>
+        <select class="t" id="f-priority" name="priority"><option value="">Unclassified</option>{% for p in priorities %}<option {{ 'selected' if p == lead.priority }}>{{ p }}</option>{% endfor %}</select></div>
+      <div><label class="f" for="f-lead_owner">Lead owner</label>
+        <select class="t" id="f-lead_owner" name="lead_owner"><option value="">None</option>{% for o in owners %}<option {{ 'selected' if o == lead.lead_owner }}>{{ o }}</option>{% endfor %}</select></div>
+      <div class="wide"><label class="f" for="f-doc_type">Captured with</label>
+        <select class="t" id="f-doc_type" name="doc_type">{% for dt in doc_types %}<option value="{{ dt.key }}" {{ 'selected' if lead.doc_type == dt.key }}>{{ dt.label }}</option>{% else %}<option value="{{ lead.doc_type }}" selected>{{ lead.doc_type or 'Added by hand' if new else (lead.doc_type or 'Document') }}</option>{% endfor %}</select></div>
+    </div></fieldset>
+    <fieldset class="sec"><legend>Interest</legend><div class="grid2">
+      <div class="wide"><label class="f">Products they are interested in</label>
+        <div class="checks">{% for item in products %}<label><input type="checkbox" name="products" value="{{ item }}" {{ 'checked' if item in have }}> {{ item }}</label>{% else %}<span class="hint">No products are set up yet.</span>{% endfor %}</div></div>
+      {% for title, rows in sections if title == 'Interest' %}{% for name, label, width in rows %}{{ field(name, label, width) }}{% endfor %}{% endfor %}
+      <div class="wide"><label class="f" for="f-interest">What they need</label><textarea class="t" id="f-interest" name="interest" rows="3">{{ lead.interest }}</textarea></div>
+      <div class="wide"><label class="f" for="f-notes">Notes</label><textarea class="t" id="f-notes" name="notes" rows="3">{{ lead.notes }}</textarea></div>
+    </div></fieldset>
+    {% for title, rows in sections if title == 'Location' %}
+    <fieldset class="sec"><legend>{{ title }}</legend><div class="grid2">{% for name, label, width in rows %}{{ field(name, label, width) }}{% endfor %}</div></fieldset>
+    {% endfor %}
+    <fieldset class="sec"><legend>Organisation</legend><div class="grid2">
       <div class="wide"><label class="f" for="f-organisation_type">Organisation type (used for the Orbit export)</label>
         <select class="t" id="f-organisation_type" name="organisation_type"><option value="">Not set</option>{% for code, label in org_types.items() %}<option value="{{ code }}" {{ 'selected' if code == org_type }}>{{ label }}</option>{% endfor %}</select></div>
-      <div class="wide"><label class="f" for="f-priority">Priority</label>
-        <select class="t" id="f-priority" name="priority"><option value="">Unclassified</option>{% for p in priorities %}<option {{ 'selected' if p == lead.priority }}>{{ p }}</option>{% endfor %}</select></div>
-      <div class="wide"><label class="f" for="f-lead_owner">Lead owner</label>
-        <select class="t" id="f-lead_owner" name="lead_owner"><option value="">None</option>{% for o in owners %}<option {{ 'selected' if o == lead.lead_owner }}>{{ o }}</option>{% endfor %}</select></div>
-      <div class="wide"><label class="f" for="f-notes">Notes (student count, remarks)</label><textarea class="t" id="f-notes" name="notes" rows="3">{{ lead.notes }}</textarea></div>
-      <div class="wide"><label class="f" for="f-interest">Summary of what they need</label><textarea class="t" id="f-interest" name="interest" rows="3">{{ lead.interest }}</textarea></div>
-    </div>
-    <div class="actions"><button class="btn">Save changes</button><a class="btn ghost" href="{{ url_for('gallery') }}">Cancel</a></div>
+      <div class="wide"><label class="f">Curriculum (Orbit keeps only these)</label>
+        <div class="checks">{% for code in curricula %}<label><input type="checkbox" name="curriculum" value="{{ code }}" {{ 'checked' if code in picked }}> {{ code }}</label>{% endfor %}</div>
+        {% if lead.curriculum and lead.curriculum != picked|join(', ') %}<div class="hint">Scanned as: {{ lead.curriculum }}. Saving keeps only the ticked boards.</div>{% endif %}</div>
+      {% for title, rows in sections if title == 'Organisation' %}{% for name, label, width in rows %}{{ field(name, label, width) }}{% endfor %}{% endfor %}
+    </div><div class="hint" style="margin-top:6px">Medium of instruction: comma separated, for example English, Kannada.</div></fieldset>
+    <div class="savebar"><button class="btn">{{ 'Add lead' if new else 'Save changes' }}</button><a class="btn ghost" href="{{ url_for('gallery') }}">Cancel</a></div>
   </form>
+
+  {% if not new %}
+  <aside class="card aside">
+    {% set photos = items|selectattr('kind', 'equalto', 'image')|rejectattr('purpose')|list %}
+    {% set withv = items|selectattr('kind', 'equalto', 'image')|selectattr('purpose')|list %}
+    {% set others = items|rejectattr('kind', 'equalto', 'image')|list %}
+    <div class="tabs" role="tablist"><button type="button" role="tab" aria-selected="true">Photos</button><button type="button" role="tab" aria-selected="false">Notes{% if others %} ({{ others|length }}){% endif %}</button><button type="button" role="tab" aria-selected="false">WhatsApp</button></div>
+    <section class="panel" role="tabpanel">
+      <h3>Contact form and card photos</h3>
+      {% if photos %}
+      <div class="viewer" id="viewer">
+        {% for it in photos %}
+        <figure class="shot" style="margin:0">
+          <div class="rot" data-rot="{{ it.rotation }}"><img src="/media/{{ it.id }}" alt="Photo {{ loop.index }} sent to the bot" loading="{{ 'eager' if loop.first else 'lazy' }}"></div>
+          <div class="turn" style="margin-top:6px"><button type="button" data-turn="left" data-id="{{ it.id }}" aria-label="Rotate photo {{ loop.index }} left">&#8634; Rotate left</button><button type="button" data-turn="right" data-id="{{ it.id }}" aria-label="Rotate photo {{ loop.index }} right">Rotate right &#8635;</button></div>
+          <figcaption class="hint" style="margin-top:6px">Photo {{ loop.index }} of {{ photos|length }} · {{ it.by }} · {{ it.created_at|local_time }} · <a href="/media/{{ it.id }}" target="_blank" rel="noopener">Open full size</a></figcaption>
+          {% if it.text %}<details style="margin-top:6px"><summary>Text read from the photo</summary><div class="quote">{{ it.text }}</div></details>{% endif %}
+        </figure>
+        {% endfor %}
+        {% if photos|length > 1 %}<div class="strip" role="group" aria-label="Photos">{% for it in photos %}<button type="button" aria-label="Photo {{ loop.index }}" aria-pressed="{{ 'true' if loop.first else 'false' }}"><img src="/media/{{ it.id }}" alt=""></button>{% endfor %}</div>{% endif %}
+      </div>
+      {% else %}<div class="hint">No document photos yet.</div>{% endif %}
+      <form class="upload" method="post" action="{{ url_for('lead_photos', lead_id=lead.id) }}" enctype="multipart/form-data" data-upload="Reading... a few seconds">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="purpose" value="scan">
+        <b>Add photos to read</b><span class="hint">A better photo of the form or card, or the other side. The photos are read again and only blank details are filled in. Nothing already on the lead is changed.</span>
+        <input type="file" name="photo" accept="image/*" multiple required><button class="btn ghost">Add and read</button>
+      </form>
+      <h3 style="margin-top:6px">With the visitor</h3>
+      {% for it in withv %}<figure style="margin:0"><img src="/media/{{ it.id }}" alt="Photo with the visitor" style="max-width:100%;max-height:360px;border-radius:6px;display:block" loading="lazy"><figcaption class="hint">Added by {{ it.by }} · {{ it.created_at|local_time('%d %b, %H:%M') }}</figcaption></figure>{% endfor %}
+      <form class="upload" method="post" action="{{ url_for('lead_photos', lead_id=lead.id) }}" enctype="multipart/form-data" data-upload="Adding...">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="purpose" value="visitor">
+        <b>{{ 'Add another photo' if withv else 'Add a photo with the visitor' }}</b><span class="hint">A photo of you with the visitor, for personal follow-ups. It is not read.</span>
+        <input type="file" name="photo" accept="image/*" required><button class="btn ghost">Add photo</button>
+      </form>
+    </section>
+    <section class="panel" role="tabpanel">
+      <h3>Voice notes and messages</h3>
+      {% for it in others %}
+      <article class="item">
+        <div class="top"><div><div class="title">{{ {'audio': 'Voice note', 'text': 'Text message', 'file': 'File'}[it.kind] }}</div><div class="meta">{{ it.by }} · {{ it.created_at|local_time }}</div></div>
+          <span class="chip {{ 'team' if it.is_team else 'visitor' }}">{{ 'Team' if it.is_team else 'Visitor' }}</span></div>
+        {% if it.kind == 'audio' %}<audio controls preload="none" src="/media/{{ it.id }}"></audio>{% if it.text %}<div class="hint">Transcript</div><div class="quote">{{ it.text }}</div>{% endif %}
+        {% elif it.kind == 'text' %}<div class="quote raw">{{ it.text }}</div><div class="hint">Kept exactly as sent. Edits to the lead never change this original.</div>
+        {% else %}<a href="/media/{{ it.id }}" target="_blank" rel="noopener">Open file</a>{% endif %}
+      </article>
+      {% else %}<div class="hint">No voice notes or messages are attached to this lead.</div>{% endfor %}
+    </section>
+    <section class="panel" role="tabpanel">
+      <h3>WhatsApp conversations</h3>
+      {% for chat in chats %}
+      <details class="chat" open>
+        <summary style="font-weight:600;cursor:pointer">{{ chat.title }} <span class="hint" style="font-weight:400">· {{ chat.rows|length }} message{{ '' if chat.rows|length == 1 else 's' }}</span></summary>
+        <div class="msgs" style="margin-top:8px">
+        {% for m in chat.rows %}
+        <div class="bub {{ m.direction }}"><div class="who">{{ chat.who if m.direction == 'in' else 'Xperimentor' }} · {{ m.created_at|local_time }}</div>{{ m.body }}{% if m.num_media %}<div class="hint">{{ m.num_media }} attachment{{ '' if m.num_media == 1 else 's' }} (photos and voice notes are under Photos and Notes)</div>{% endif %}</div>
+        {% else %}<div class="hint">No messages recorded in this chat yet.</div>{% endfor %}
+        </div>
+      </details>
+      {% else %}<div class="hint">No WhatsApp chat is recorded for this lead.</div>{% endfor %}
+    </section>
+  </aside>
+  {% endif %}
 </div>
 <script>
   // More than one photo: show one at a time, switch with the thumbnails. Without JavaScript they are all listed.
@@ -199,6 +228,43 @@
           .then(function (r) { return r.json(); }).then(function (data) { box.dataset.rot = data.rotation; show(box); });
       });
     });
+  })();
+
+  // Phone photos are big: shrink each one in the browser before it is sent, so an upload stays small and fast. Without JavaScript the form posts the original file.
+  (function () {
+    function shrink(file) {
+      return new Promise(function (done) {
+        if (!file.type.startsWith('image/') || !window.createImageBitmap) return done(file);
+        createImageBitmap(file).then(function (bmp) {
+          var k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+          c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+          c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+          c.toBlob(function (blob) { done(blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file); }, 'image/jpeg', 0.85);
+        }, function () { done(file); });
+      });
+    }
+    document.querySelectorAll('form[data-upload]').forEach(function (form) {
+      form.addEventListener('submit', function (e) {
+        var input = form.querySelector('input[type=file]'), button = form.querySelector('button');
+        if (!window.fetch || !input.files.length) return;
+        e.preventDefault(); button.disabled = true; button.textContent = form.dataset.upload;
+        Promise.all(Array.prototype.map.call(input.files, shrink)).then(function (files) {
+          var body = new FormData(); body.append('csrf', form.querySelector('[name=csrf]').value); body.append('purpose', form.querySelector('[name=purpose]').value);
+          files.forEach(function (f) { body.append('photo', f, f.name); });
+          return fetch(form.action, { method: 'POST', body: body, redirect: 'manual' });
+        }).then(function () { location.reload(); }, function () { button.disabled = false; button.textContent = 'Try again'; });
+      });
+    });
+  })();
+
+  // Tabs on the right: Photos, Notes and voice, WhatsApp. Without JavaScript every panel is simply listed.
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('[role=tab]')), panels = Array.prototype.slice.call(document.querySelectorAll('[role=tabpanel]'));
+    if (!tabs.length) return;
+    document.documentElement.classList.add('js');
+    function show(i) { tabs.forEach(function (t, n) { t.setAttribute('aria-selected', n === i); }); panels.forEach(function (p, n) { p.hidden = n !== i; }); }
+    tabs.forEach(function (t, n) { t.addEventListener('click', function () { show(n); }); });
+    show(0);
   })();
 </script>
 {% endblock %}

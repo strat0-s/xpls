@@ -5,31 +5,30 @@ import secrets
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from pathlib import Path
+
+from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 from didac_app import auth, flows, followup, orbit
-from didac_app.models import NOT_SCANNED
+from didac_app.dedupe import find_duplicate
+from didac_app.media import suffix_for
+from didac_app.models import NOT_SCANNED, Lead
 from didac_app import blobstore
+from didac_app.places import tidy
 from didac_app.pager import paginate
 
 IST = ZoneInfo("Asia/Kolkata")
-OPEN_PATHS = {"/health", "/bird/webhook"}
+APP_FILES = {"manifest.webmanifest": "application/manifest+json", "sw.js": "text/javascript", "icon-192.png": "image/png", "icon-512.png": "image/png", "apple-touch-icon.png": "image/png"}  # what a phone needs to install the app
+OPEN_PATHS = {"/health", "/bird/webhook", *(f"/{name}" for name in APP_FILES)}
 PRIORITIES = ("High", "Medium", "Low")
-EDITABLE_FIELDS = [
-    ("name", "Full name"),
-    ("org", "Organization"),
-    ("designation", "Designation"),
-    ("phone", "Phone"),
-    ("email", "Email"),
-    ("city", "City"),
-    ("state", "State"),
-    ("district", "District"),
-    ("pincode", "Pincode (6 digits)"),
-    ("website", "Website"),
-    ("google_maps_url", "Google Maps link"),
-    ("udise_code", "UDISE code"),
-    ("medium_of_instruction", "Medium of instruction (comma separated, e.g. English, Kannada)"),
+# The lead page's text fields in the order they are shown: (title of the group, [(field, label, width)]); a width of 2 spans the row.
+LEAD_SECTIONS = [
+    ("Contact", [("name", "Full name", 2), ("org", "Organisation", 2), ("designation", "Designation", 1), ("phone", "Phone", 1), ("email", "Email", 2)]),
+    ("Location", [("city", "City", 1), ("state", "State", 1), ("district", "District", 1), ("pincode", "Pincode (6 digits)", 1)]),
+    ("Organisation", [("website", "Website", 2), ("google_maps_url", "Google Maps link", 2), ("udise_code", "UDISE code", 1), ("medium_of_instruction", "Medium of instruction", 1)]),
+    ("Interest", [("demo_interest", "Demo (yes or no, and when)", 2), ("workshop", "Teacher workshop", 1), ("students", "Students", 1)]),
 ]
+EDITABLE_FIELDS = [(field, label) for _title, rows in LEAD_SECTIONS for field, label, _width in rows]
 # Rows the bot writes while processing media; the media itself already shows what was read from it.
 DERIVED_FEEDBACK = {"audio", "audio_transcript", "media", "media_text"}
 
@@ -95,6 +94,9 @@ def register(app, get_store, get_config) -> None:
             flash("That phone, email or password is not right.")
             return render_template("login.html"), 401
         return render_template("login.html")
+
+    for file_name, file_type in APP_FILES.items():
+        app.add_url_rule(f"/{file_name}", f"app_file_{file_name}", lambda file_name=file_name, file_type=file_type: send_from_directory(Path(__file__).parent / "static", file_name, mimetype=file_type, max_age=3600))
 
     @app.post("/logout")
     def logout():
@@ -165,58 +167,112 @@ def register(app, get_store, get_config) -> None:
         if not lead:
             abort(404)
         if request.method == "POST":
-            values = {field: request.form.get(field, "").strip() for field, _label in EDITABLE_FIELDS}
-            first, _, last = values["name"].partition(" ")  # the export reads first/last name and designation, so keep them in step with what was edited
-            picked = request.form.getlist("curriculum")
-            store.update_lead_fields(
-                lead_id,
-                **values,
-                first_name=first, last_name=last.strip(), role=values["designation"],
-                curriculum=", ".join(code for code in orbit.CURRICULUM_CHOICES if code in picked),
-                notes=request.form.get("notes", "").strip(),
-                organisation_type=org_type if (org_type := request.form.get("organisation_type", "")) in orbit.ORG_TYPES else "",
-                interest=request.form.get("interest", "").strip(),
-                priority=request.form.get("priority") if request.form.get("priority") in PRIORITIES else "",
-                lead_owner=owner if (owner := request.form.get("lead_owner", "")) in {u["name"] for u in store.list_users()} | {flows.NOT_LISTED} else "",
-                doc_type=kind if (kind := request.form.get("doc_type")) in {row["key"] for row in store.list_doc_types(lead.event_id)} else lead.doc_type,
-                updated_by=g.user["name"],
-                updated_at=datetime.now(UTC).isoformat(timespec="seconds"),
-                review_reason="",
-            )
+            store.update_lead_fields(lead_id, **lead_form_values(store, lead), review_reason="", updated_by=g.user["name"], updated_at=datetime.now(UTC).isoformat(timespec="seconds"))
             flash("Saved.")
             return redirect(url_for("lead_detail", lead_id=lead_id))
+        return render_lead(store, lead)
+
+    @app.route("/leads/new", methods=["GET", "POST"])
+    def lead_new():
+        """Add a lead by hand: the same form as the lead page; photos can be added once it is saved."""
+        store = get_store()
+        events = {e["id"]: e for e in store.list_events()}
+        event_id = chosen_event_id(store, events, request.values)
+        lead = Lead(source_channel="dashboard", captured_by=g.user["name"], from_number=g.user["phone"] or "", staff_number=g.user["phone"] or "", event_id=event_id)
+        if request.method == "POST":
+            values = lead_form_values(store, lead)
+            for name, value in values.items():
+                setattr(lead, name, value)
+            if not (lead.name or lead.org or lead.phone or lead.email):
+                flash("Add at least a name, organisation, phone or email.")
+                return render_lead(store, lead, new=True)
+            if (match := find_duplicate(store, lead)) and match[1]:
+                flash(f"That is already lead #{match[0].event_no}. Opened it instead.")
+                return redirect(url_for("lead_detail", lead_id=match[0].id))
+            lead.updated_by = g.user["name"]
+            lead.review_reason = f"possible duplicate of #{match[0].event_no}" if match else ""
+            lead = store.create_lead(lead)
+            flash("Lead added. You can add photos below.")
+            return redirect(url_for("lead_detail", lead_id=lead.id))
+        return render_lead(store, lead, new=True)
+
+    def lead_form_values(store, lead) -> dict:
+        """The lead page's form as lead columns: only what the form shows, so nothing the bot wrote meanwhile is touched."""
+        values = {field: request.form.get(field, "").strip() for field, _label in EDITABLE_FIELDS}
+        values["city"], values["state"], values["district"] = tidy(values["city"], values["state"], values["district"])
+        first, _, last = values["name"].partition(" ")  # the export reads first/last name and designation, so keep them in step with what was edited
+        picked = request.form.getlist("curriculum")
+        return {
+            **values, "first_name": first, "last_name": last.strip(), "role": values["designation"],
+            "curriculum": ", ".join(code for code in orbit.CURRICULUM_CHOICES if code in picked),
+            "products": "; ".join(dict.fromkeys(item.strip() for item in request.form.getlist("products") if item.strip())),
+            "notes": request.form.get("notes", "").strip(),
+            "organisation_type": org_type if (org_type := request.form.get("organisation_type", "")) in orbit.ORG_TYPES else "",
+            "interest": request.form.get("interest", "").strip(),
+            "priority": request.form.get("priority") if request.form.get("priority") in PRIORITIES else "",
+            "lead_owner": owner if (owner := request.form.get("lead_owner", "")) in {u["name"] for u in store.list_users()} | {flows.NOT_LISTED} else "",
+            "doc_type": kind if (kind := request.form.get("doc_type")) in {row["key"] for row in (store.list_doc_types(lead.event_id) if lead.event_id else [])} else lead.doc_type,
+        }
+
+    def render_lead(store, lead, new: bool = False):
         members = members_by_phone(store)
-        items = lead_items(lead, store, members)
-        chats = lead_chats(store, lead, members)
+        items = [] if new else lead_items(lead, store, members)
+        chats = [] if new else lead_chats(store, lead, members)
+        listed = [row["label"] for row in store.list_products()]
+        have = [item for item in lead.products.split("; ") if item]
         return render_template(
-            "lead.html", lead=lead, items=items, chats=chats, replied_at=store.reply_flags().get(lead.id, ""), fields=EDITABLE_FIELDS, title=display_name(lead), doc_types=store.list_doc_types(lead.event_id) if lead.event_id else [],
-            org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
+            "lead.html", lead=lead, new=new, items=items, chats=chats, replied_at="" if new else store.reply_flags().get(lead.id, ""), sections=LEAD_SECTIONS, title="New lead" if new else display_name(lead),
+            doc_types=store.list_doc_types(lead.event_id) if lead.event_id else [], org_types=orbit.ORG_TYPES, org_type=orbit.lead_org_type(lead),
+            products=listed + [item for item in have if item not in listed], have=have,
             priorities=PRIORITIES, owners=[u["name"] for u in store.list_users() if u["is_active"]] + [flows.NOT_LISTED], curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )
-
-    @app.post("/leads/<int:lead_id>/read")
-    def lead_read(lead_id: int):
-        """Read the photos of a Not scanned lead again and fill in what is still blank."""
-        store = get_store()
-        lead = store.get_lead(lead_id) or abort(404)
-        photos = [{"key": row["local_path"], "ct": row["content_type"]} for row in store.list_media(lead_id) if (row["content_type"] or "").startswith("image/") and row["local_path"]]
+    def read_lead_photos(store, lead) -> None:
+        """Read the lead's document photos again and fill in only what is still blank; says what was filled."""
+        photos = [{"key": row["local_path"], "ct": row["content_type"]} for row in store.list_media(lead.id)
+                  if (row["content_type"] or "").startswith("image/") and row["local_path"] and not row["purpose"]][:flows.MAX_PHOTOS]
         if not photos:
-            flash("This lead has no photos to read.")
-            return redirect(url_for("lead_detail", lead_id=lead_id))
+            return flash("This lead has no document photos to read.")
         reader = next((row["reader"] for row in store.list_doc_types(lead.event_id) if row["key"] == lead.doc_type), "document") if lead.event_id else "document"
-        result = flows.read_documents(get_config(), photos, reader)
+        result = flows.read_documents(get_config(), photos, reader, [row["label"] for row in store.list_products()])
         if result.get("failed"):
             store.record_read_failure(result["reason"])
-            flash("Reading is still not working, so nothing was changed. Please try again in a bit.")
+            flash("Reading is not working just now, so nothing was changed. Please try again in a bit.")
         elif result.get("unclear") or not result["fields"]:
             store.record_read_ok(result.get("ms", 0))
-            flash("The photos could not be read. Please fill the details in below.")
+            flash("The photos could not be read. Please fill the details in by hand.")
         else:
             store.record_read_ok(result.get("ms", 0))
             flows.tag_owner(store, result)
-            store.merge_into_lead(lead_id, result["fields"], {})  # fills only what is still blank
-            store.update_lead_fields(lead_id, review_reason="; ".join(result["check"]), raw_message=flows.summary(result["fields"], []), updated_by=g.user["name"], updated_at=datetime.now(UTC).isoformat(timespec="seconds"))
-            flash("Read." + (f" {len(result['more'])} more document(s) were found in the photos; only the first was filled in." if result.get("more") else ""))
+            store.merge_into_lead(lead.id, result["fields"], {})  # fills only what is still blank
+            after = store.get_lead(lead.id)
+            filled = [label for name, label in flows.SUMMARY if getattr(after, name) != getattr(lead, name)]
+            store.update_lead_fields(lead.id, review_reason="; ".join(result["check"]), updated_by=g.user["name"], updated_at=datetime.now(UTC).isoformat(timespec="seconds"))
+            flash((f"Filled in: {', '.join(filled)}. Nothing that was already there was changed." if filled else "Read the photos: nothing new to fill in, everything found is already on the lead.")
+                  + (f" {len(result['more'])} more document(s) were found in the photos; only the first was used." if result.get("more") else ""))
+
+    @app.post("/leads/<int:lead_id>/read")
+    def lead_read(lead_id: int):
+        read_lead_photos(get_store(), get_store().get_lead(lead_id) or abort(404))
+        return redirect(url_for("lead_detail", lead_id=lead_id))
+
+    @app.post("/leads/<int:lead_id>/photos")
+    def lead_photos(lead_id: int):
+        """Photos added from the lead page. purpose=scan: more photos of the contact form or card, read straight away to fill what is blank. purpose=visitor: the team member with the visitor, kept as is."""
+        store = get_store()
+        lead = store.get_lead(lead_id) or abort(404)
+        visitor = request.form.get("purpose") == "visitor"
+        files = [file for file in request.files.getlist("photo") if (file.mimetype or "").startswith("image/")][: 1 if visitor else flows.MAX_PHOTOS]
+        if not files:
+            flash("Choose a photo first.")
+            return redirect(url_for("lead_detail", lead_id=lead_id))
+        for file in files:
+            key = f"uploads/{lead_id}/{secrets.token_hex(6)}{suffix_for(file.mimetype, file.filename or '')}"
+            blobstore.upload(get_config(), key, file.read(), file.mimetype)
+            store.add_media(lead_id, "", file.mimetype, key, purpose="visitor" if visitor else "")
+        if visitor:
+            flash("Photo added.")
+        else:
+            read_lead_photos(store, lead)
         return redirect(url_for("lead_detail", lead_id=lead_id))
 
     @app.post("/leads/<int:lead_id>/resolve")
@@ -358,6 +414,17 @@ def register(app, get_store, get_config) -> None:
             flash("You can't deactivate yourself.")
         else:
             get_store().set_user_active(user_id, not member["is_active"])
+        return redirect(url_for("team"))
+
+    @app.post("/team/<int:user_id>/admin")
+    def team_admin(user_id: int):
+        require_admin()
+        member = get_store().get_user(user_id) or abort(404)
+        if member["id"] == g.user["id"]:
+            flash("You can't change your own access.")  # so there is always an admin left
+        else:
+            get_store().set_user_admin(user_id, not member["is_admin"])
+            flash(f"{member['name']} is now {'staff' if member['is_admin'] else 'an admin'}.")
         return redirect(url_for("team"))
 
     @app.post("/team/<int:user_id>/edit")
@@ -557,7 +624,7 @@ def lead_items(lead, store, members: dict[str, str]) -> list[dict]:
     for row in media_rows:
         content_type = row["content_type"] or ""
         kind = "image" if content_type.startswith("image/") else "audio" if content_type.startswith("audio/") else "file"
-        items.append({"kind": kind, "id": row["id"], "rotation": row["rotation"], "text": row["extracted_text"], "by": by, "is_team": is_team, "created_at": row["created_at"]})
+        items.append({"kind": kind, "id": row["id"], "purpose": row["purpose"], "rotation": row["rotation"], "text": row["extracted_text"], "by": by, "is_team": is_team, "created_at": row["created_at"]})
     for row in store.list_feedback(lead.id):
         if row["feedback_type"] in DERIVED_FEEDBACK:
             continue

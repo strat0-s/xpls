@@ -4,8 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237d4a8c'/%3E%3Cg fill='%23fff'%3E%3Cellipse cx='11.5' cy='20' rx='3.6' ry='5.4' transform='rotate%28-10 11.5 20%29'/%3E%3Cellipse cx='11' cy='11.2' rx='2.4' ry='2.2'/%3E%3Cellipse cx='21' cy='17' rx='3.6' ry='5.4' transform='rotate%2810 21 17%29'/%3E%3C/g%3E%3Ccircle cx='21.6' cy='8' r='2.4' fill='%23f2b84b'/%3E%3C/svg%3E">
+  <link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#7d4a8c"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Footfall">
   <title>{% block title %}Footfall{% endblock %}</title>
-  <script>try { if (localStorage.getItem('theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}</script>
+  <script>document.documentElement.classList.add('mjs'); try { if (localStorage.getItem('theme') === 'dark') document.documentElement.dataset.theme = 'dark'; } catch (e) {}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap">
   <style>
@@ -92,7 +94,7 @@
     dialog.ask .row { display: flex; justify-content: flex-end; gap: 8px; }
 
     /* Sidebar layout: plum column on the left, the page on the right. On a phone the column sits on top. */
-    .shell { display: flex; flex-wrap: wrap; min-height: calc(100vh / var(--z)); }
+    .shell { display: flex; flex-wrap: wrap; align-content: flex-start; min-height: calc(100vh / var(--z)); }
     .side { flex: 0 0 244px; background: var(--bar); color: #fff; display: flex; flex-direction: column; gap: 18px; padding: 18px 12px; position: sticky; top: 0; height: calc(100vh / var(--z)); align-self: flex-start; overflow-y: auto; }
     .shell > main.page { flex: 999 1 640px; min-width: 0; max-width: none; margin: 0; }
     .side .brand { display: flex; align-items: center; gap: 10px; padding: 0 10px; font-size: 17px; }
@@ -111,19 +113,28 @@
     .side .me .dot { width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,.22); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
     .side .me .who { flex: 1; min-width: 0; } .side .me .who b { display: block; } .side .me .who small { color: #f6eef8; }
     .side .me form { margin: 0; } .side .me .out { background: none; border: 0; padding: 4px 6px; color: #fff; opacity: .8; cursor: pointer; border-radius: 6px; } .side .me .out:hover { opacity: 1; text-decoration: underline; }
-    @media (max-width: 860px) { .side { flex-basis: 100%; position: static; height: auto; } }  /* on a phone the column is a normal block on top */
-    @media (max-width: 860px) { header.top { padding: 10px 16px; } main.page { padding: 16px; } }
+    .side .menu { display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
+    .burger { display: none; }
+    /* On a phone the column is a slim top bar: logo, the live event, and a menu button that opens the links. */
+    @media (max-width: 860px) {
+      .side { flex-basis: 100%; position: static; height: auto; gap: 10px; padding: 10px 14px; }
+      .side .evbox { padding: 6px 10px; } .side .evtext small { display: none; } .side .evtext b { font-size: 13.5px; }
+      .burger { display: inline-flex; margin-left: 4px; }
+      .mjs .side .menu { display: none; } .mjs .side.open .menu { display: flex; }
+      header.top { padding: 10px 16px; } main.page { padding: 14px; }
+    }
     {% block css %}{% endblock %}
   </style>
 </head>
 <body>
 {% block body %}
-{% macro ico(name) %}<svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ {'leads': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', 'photos': '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>', 'followup': '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>', 'export': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>', 'event': '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>', 'documents': '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8"/>', 'messages': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/>', 'team': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>'}[name]|safe }}</svg>{% endmacro %}
+{% macro ico(name) %}<svg class="ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{{ {'leads': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', 'photos': '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>', 'followup': '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>', 'export': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>', 'event': '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>', 'documents': '<path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8"/>', 'products': '<path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/>', 'messages': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/>', 'team': '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>'}[name]|safe }}</svg>{% endmacro %}
 <div class="shell">
 <aside class="side">
-  <div class="brand"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#fff"/><g fill="#7d4a8c"><ellipse cx="11.5" cy="20" rx="3.6" ry="5.4" transform="rotate(-10 11.5 20)"/><ellipse cx="11" cy="11.2" rx="2.4" ry="2.2"/><ellipse cx="21" cy="17" rx="3.6" ry="5.4" transform="rotate(10 21 17)"/></g><circle cx="21.6" cy="8" r="2.4" fill="#f2b84b"/></svg><b>Footfall</b><button type="button" class="theme" style="margin-left:auto" id="theme-toggle" aria-label="Switch to dark mode" title="Dark mode"><svg class="moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button></div>
+  <div class="brand"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#fff"/><g fill="#7d4a8c"><ellipse cx="11.5" cy="20" rx="3.6" ry="5.4" transform="rotate(-10 11.5 20)"/><ellipse cx="11" cy="11.2" rx="2.4" ry="2.2"/><ellipse cx="21" cy="17" rx="3.6" ry="5.4" transform="rotate(10 21 17)"/></g><circle cx="21.6" cy="8" r="2.4" fill="#f2b84b"/></svg><b>Footfall</b><button type="button" class="theme" style="margin-left:auto" id="theme-toggle" aria-label="Switch to dark mode" title="Dark mode"><svg class="moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button><button type="button" class="theme burger" id="burger" aria-label="Menu" aria-controls="menu" aria-expanded="false"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
   {% set evbox %}<span class="evdot {{ '' if live_event else 'off' }}" aria-hidden="true"></span><span class="evtext"><b>{{ live_event.name if live_event else 'No event is live' }}</b><small>{% if live_event %}{{ live_event.starts_on.strftime('%d %b') ~ (' to ' ~ live_event.ends_on.strftime('%d %b %Y') if live_event.ends_on else '') ~ ' · ' if live_event.starts_on }}Live{% else %}Nothing is saved on WhatsApp{% endif %}</small></span>{% endset %}
   {% if user.is_admin %}<a class="evbox" href="{{ url_for('admin_event') }}">{{ evbox }}</a>{% else %}<div class="evbox">{{ evbox }}</div>{% endif %}
+  <div class="menu" id="menu">
   <nav aria-label="Main"><div class="gl">Workspace</div>
     <a href="{{ url_for('gallery') }}" class="{{ 'on' if active == 'leads' }}">{{ ico('leads') }}Leads</a>
     <a href="{{ url_for('photos') }}" class="{{ 'on' if active == 'photos' }}">{{ ico('photos') }}Event photos</a>
@@ -133,11 +144,13 @@
   {% if user.is_admin %}<nav aria-label="Admin"><div class="gl">Admin</div>
     <a href="{{ url_for('admin_event') }}" class="{{ 'on' if active == 'event' }}">{{ ico('event') }}Event control</a>
     <a href="{{ url_for('admin_documents') }}" class="{{ 'on' if active == 'documents' }}">{{ ico('documents') }}Documents and brochures</a>
+    <a href="{{ url_for('admin_products') }}" class="{{ 'on' if active == 'products' }}">{{ ico('products') }}Products</a>
     <a href="{{ url_for('admin_messages') }}" class="{{ 'on' if active == 'messages' }}">{{ ico('messages') }}Messages</a>
     <a href="{{ url_for('team') }}" class="{{ 'on' if active == 'team' }}">{{ ico('team') }}Team access</a>
   </nav>{% endif %}
   <div class="me"><span class="dot">{{ user.name[:1]|upper }}</span><span class="who"><b>{{ user.name }}</b>{% if user.is_admin %}<small>Admin</small>{% endif %}</span>
     <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="out">Sign out</button></form>
+  </div>
   </div>
 </aside>
 <main class="page">
@@ -166,6 +179,12 @@
       show();
     };
     show();
+  })();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(function () {});
+  // The phone menu opens and closes.
+  (function () {
+    var burger = document.getElementById('burger'), side = document.querySelector('.side');
+    if (burger) burger.onclick = function () { var open = side.classList.toggle('open'); burger.setAttribute('aria-expanded', open); };
   })();
   // Every password box gets a Show / Hide button.
   document.querySelectorAll('input[type=password]').forEach(function (input) {
