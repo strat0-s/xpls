@@ -656,7 +656,9 @@ def test_unknown_lead_owner_is_tagged_not_listed_and_none_stays_empty(store, sen
     fake_io["result"] = CARD
     say(STAFF, "", photo("form2"))
     say(STAFF, "done")
-    assert "Lead owner" not in last(sent)[0]
+    assert "Lead owner: (blank)" in last(sent)[0]  # shown even when empty, so staff see they can add one with Edit
+    say(STAFF, "Edit")
+    assert "Lead owner: Magesh" in last(sent)[0]
 
 
 def test_note_can_go_to_any_lead_of_the_event_picked_from_one_message(store, sent):

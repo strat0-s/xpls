@@ -74,7 +74,7 @@ TYPES = [
 SUMMARY = [("name", "Name"), ("org", "Organisation"), ("role", "Role"), ("phone", "Phone"), ("email", "Email"), ("organisation_type", "Type"), ("priority", "Priority"), ("lead_owner", "Lead owner"),
            ("city", "City"), ("state", "State"), ("curriculum", "Curriculum"), ("interest", "Interest"), ("notes", "Notes"),
            ("qr_url", "QR link"), ("qr_page_text", "QR text")]
-ALWAYS = {"name", "org", "phone", "email"}
+ALWAYS = {"name", "org", "phone", "email", "lead_owner"}
 
 
 @dataclass
@@ -494,8 +494,8 @@ class Chat:
             if choice == EDIT.lower():
                 self.store.put_session(self.number, flow, "edit", data)
                 if len(scan_docs(data)) > 1:
-                    return self.say("Reply with corrections, one per line. Start a line with 1 or 2 to say which document.\nExample:\n2 Phone: 98450 11112\n1 Priority: High\nType BACK to stop editing.")
-                return self.say("Reply with corrections, one per line.\nExample:\nPhone: 98450 11112\nPriority: High\nType BACK to stop editing.")
+                    return self.say("Reply with corrections, one per line. Start a line with 1 or 2 to say which document.\nExample:\n2 Phone: 98450 11112\n1 Lead owner: Magesh\nType BACK to stop editing.")
+                return self.say("Reply with corrections, one per line.\nExample:\nPhone: 98450 11112\nLead owner: Magesh\nType BACK to stop editing.")
             if choice == RETAKE.lower():
                 self.store.put_session(self.number, flow, "photos", {"photos": []})
                 return self.say("Photos cleared. Send the new photos, then reply DONE.")
