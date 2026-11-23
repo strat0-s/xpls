@@ -22,7 +22,7 @@ def store():
     store.init_db()
     store.clear()
     with store.connect() as conn:
-        conn.execute("TRUNCATE users, login_attempts, followups, events RESTART IDENTITY CASCADE")  # clear() leaves users alone so reset-sample can't lock everyone out
+        conn.execute("TRUNCATE users, login_attempts, followups, events, app_settings RESTART IDENTITY CASCADE")  # clear() leaves users alone so reset-sample can't lock everyone out
     store.ensure_default_event(default_brochures(load_config()))  # every test starts with DIDAC 2026 live, as a fresh install does
     yield store
     store.close()
@@ -33,6 +33,12 @@ def isolated_store(store, monkeypatch):
     import didac_app.server as server
 
     monkeypatch.setattr(server, "store", store)
+
+
+@pytest.fixture(autouse=True)
+def no_reading_service(monkeypatch):
+    """A visitor's details are read without the model unless a test supplies one."""
+    monkeypatch.setattr("didac_app.flows.requirement_read", lambda text: "")
 
 
 @pytest.fixture(autouse=True)

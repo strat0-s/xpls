@@ -17,12 +17,12 @@ from difflib import SequenceMatcher
 from datetime import UTC, datetime
 from pathlib import Path
 
-from didac_app import auth, bird, blobstore, orbit
+from didac_app import auth, bird, blobstore, followup, orbit
 from didac_app.config import DidacConfig
 from didac_app.dedupe import FILLABLE, fill_blanks, find_duplicate
 from didac_app.media import append_qr_details, extract_media_text, save_media, suffix_for
 from didac_app.models import NOT_SCANNED, Lead
-from didac_app.openai_services import classify_failure, lead_dict_to_text, parse_contacts, vision_read
+from didac_app.openai_services import classify_failure, lead_dict_to_text, parse_contacts, parse_json, requirement_read, vision_read
 from didac_app.parser import FIELD_ALIASES, extract_schools_count, normalize_contact_name, normalize_key, parse_message, parse_structured_lead
 from didac_app.storage import LeadStore
 
@@ -44,6 +44,9 @@ NOT_SCANS = {"note", "choose", "requirement", "brochure", "feedback", "eventphot
 NO_EVENT_TEAM = "Hi {first}. No event is live right now, so I cannot save leads or photos. Please ask an admin to start the next event."
 NO_PHOTOS = "This channel does not accept photos. Type menu to see what I can do for you."
 NO_EVENT_VISITOR = "Thanks for getting in touch. The event has finished. Our team will reach out soon."
+DETAILS_ASK = ("Happy to help. Please send your details in one message: your name, email, organisation, city and state, and what you are looking for.\n\n"
+               "Example: Meera Nair, meera@greenfield.edu, Greenfield School, Pune Maharashtra, looking for a science lab for 20 schools")
+NEED_ASK = "What are you looking for? Example: science lab for 20 schools, teacher training, CSR pilot."
 NOT_LISTED = "Not on the team list"  # lead_owner when the name written on the form is nobody on the Team page
 SAVE, EDIT, RETAKE, CANCEL = "Save", "Edit", "Retake", "Cancel"
 TRY_AGAIN, SAVE_LATER, TYPE_DETAILS = "Try again", "Save to read later", "Type the details"
@@ -213,6 +216,24 @@ def merge_org_backs(docs: list[dict]) -> list[dict]:
     return kept
 
 
+def read_requirement(text: str) -> dict:
+    """{name, email, org, organisation_type, city, state, interest} from the visitor's one message. The reading service understands plain sentences; labelled lines ("Name: ...")
+    and a typed email work without it. Never raises: when nothing can be told apart the whole message is kept as what they need."""
+    found: dict = {}
+    try:
+        found = parse_json(requirement_read(text))
+    except Exception:
+        logger.exception("Reading the visitor's details failed")
+    if not found.get("name"):  # labelled lines, which the reading service may be off for
+        lead = parse_structured_lead("New lead\n" + text)
+        found = {**{key: getattr(lead, key) for key in ("name", "org", "city", "state", "interest")}, **{key: value for key, value in found.items() if value}}
+    email = auth.normalize_email(found.get("email", "")) or next((auth.normalize_email(word.strip(".,;:()<>")) for word in text.split() if "@" in word), "")
+    kind = found.get("organisation_type", "")
+    found = {key: str(found.get(key) or "").strip() for key in ("name", "org", "city", "state", "interest")} | {"email": email, "organisation_type": kind if kind in orbit.ORG_TYPES else ""}
+    found = {key: value for key, value in found.items() if value}
+    return found if found.get("name") or found.get("interest") else {**found, "interest": text.strip()}
+
+
 def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None) -> dict:
     """One document the reader found, as {"fields": lead fields, "check": doubts, "photos": the photo numbers it appears on}."""
     contact = dict(contact)
@@ -355,8 +376,7 @@ class Chat:
         if choice == BROCHURE.lower():
             return self.pick_brochure("visitors")
         if choice == REQUIREMENT.lower():
-            self.store.put_session(self.number, "requirement", "name", {})
-            return self.say("Happy to help. What is your name?")
+            return self.start_requirement()
         if choice == FEEDBACK.lower():
             self.store.put_session(self.number, "feedback", "collect", {})
             return self.say("Please type your feedback, or send a voice note or photo now. We will save it for the team. Type menu when you are done.")
@@ -609,6 +629,7 @@ class Chat:
             outcomes.append((saved, outcome))
         self.store.put_session(self.number, flow, "photos", {"photos": []})
         self.store.close_convo(self.number)
+        followup.auto_send(self.store, self.config)
         again = f"Send the next {item_noun(self.doc_types[flow])}, or type menu."
         if len(docs) == 1:
             saved, outcome = outcomes[0]
@@ -760,43 +781,38 @@ class Chat:
             return self.say(f"Here is the {selected['name']} brochure:\n{selected['url']}{team_only}\n\n{more}")
         self.say(f"The {selected['name']} brochure link is not set up yet. Our team will send it to you. Type menu for other options.")
 
+    def start_requirement(self) -> None:
+        """A visitor we already hold (they replied to the follow-up) is only asked what they need. Anyone else gives every detail in one message."""
+        known = self.known_lead()
+        if known and known.name:
+            self.store.put_session(self.number, "requirement", "need", {"name": known.name})
+            return self.say(f"Thanks {known.name.split()[0]}. {NEED_ASK}")
+        self.store.put_session(self.number, "requirement", "details", {})
+        self.say(DETAILS_ASK)
+
     def requirement_step(self, step: str, data: dict, text: str) -> None:
         if not text:
             return self.say("Please type your answer, or type menu to stop.")
-        if step == "name":
-            self.store.put_session(self.number, "requirement", "email", data | {"name": text})
-            return self.say("What is your email address? Type skip if you would rather not share it.")
-        if step == "email":
-            email = "" if text.lower().strip(" .!") == "skip" else auth.normalize_email(text)
-            if not email and text.lower().strip(" .!") != "skip":
-                return self.say("That does not look like an email address. Type it again, or type skip.")
-            self.store.put_session(self.number, "requirement", "org", data | {"email": email})
-            return self.say("Which organisation are you with?")
-        if step == "org":
-            self.store.put_session(self.number, "requirement", "type", data | {"org": text})
-            return self.replies.append(Reply("What best describes it?", [(label, description) for label, _, description in TYPES], as_list=True))
-        if step == "type":
-            code = next((code for label, code, _ in TYPES if label.lower() == text.lower()), "") or orbit.normalize_org_type(text)
-            if not code:
-                return self.replies.append(Reply("Please pick one from the list.", [(label, description) for label, _, description in TYPES], as_list=True))
-            self.store.put_session(self.number, "requirement", "place", data | {"type": code})
-            return self.say("Which city and state?")
-        if step == "place":
-            self.store.put_session(self.number, "requirement", "need", data | {"place": text})
-            return self.say("What are you looking for? Example: science lab for 20 schools, teacher training, CSR pilot.")
-        city, _, state = data["place"].partition(",")
-        lead = Lead(from_number=self.number, phone=self.number.replace("whatsapp:", ""), name=data["name"], email=data.get("email", ""), org=data["org"], organisation_type=data["type"],
-                    city=city.strip(), state=state.strip(), interest=text, schools_count=extract_schools_count(text))
+        if step == "details":
+            data = data | read_requirement(text)
+        else:
+            data = data | {"name" if step == "name" else "interest": text}
+        for missing, ask in (("name", "What is your name?"), ("interest", NEED_ASK)):  # only these two are needed; the rest is kept when it was given
+            if not data.get(missing):
+                self.store.put_session(self.number, "requirement", "name" if missing == "name" else "need", data)
+                return self.say(ask)
+        lead = Lead(from_number=self.number, phone=self.number.replace("whatsapp:", ""), name=data["name"], email=data.get("email", ""), org=data.get("org", ""), organisation_type=data.get("organisation_type", ""),
+                    city=data.get("city", ""), state=data.get("state", ""), interest=data["interest"], schools_count=extract_schools_count(data["interest"]))
         normalize_contact_name(lead)
         if saved := self.known_lead():  # a follow-up reply goes on the lead we scanned, even if they spell their name differently
-            filled = fill_blanks(saved, lead)
-            self.store.merge_into_lead(saved.id, {name: getattr(saved, name) for name in filled}, {"interest": text})
+            filled = [name for name in fill_blanks(saved, lead) if name != "interest"]  # the need is added below, never both filled and appended
+            self.store.merge_into_lead(saved.id, {name: getattr(saved, name) for name in filled}, {"interest": data["interest"]})
             self.lead_ids.append(saved.id)
         else:
             saved, outcome = self.store_lead(lead, [])
             if outcome != "created":
-                self.store.merge_into_lead(saved.id, {}, {"interest": text})
-        self.store.add_feedback(self.number, text, saved.id, feedback_type="text_message")
+                self.store.merge_into_lead(saved.id, {}, {"interest": data["interest"]})
+        self.store.add_feedback(self.number, data["interest"], saved.id, feedback_type="text_message")
         self.store.delete_session(self.number)
         self.say(f"Thanks {data['name'].split()[0]}. We saved your details. Our team will be in touch.\nType menu for brochures.")
 

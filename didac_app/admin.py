@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import date
+from datetime import UTC, date, datetime
 
 from flask import abort, flash, g, redirect, render_template, request, url_for
 
-from didac_app import blobstore
+from didac_app import blobstore, followup
 from didac_app.flows import DEFAULT_WELCOME
 
 READERS = {"document": "Other document (up to 2 per photo)", "form": "Form (one person, several pages)", "badge": "Badge with a QR code"}
@@ -197,7 +197,21 @@ def register(app, get_store, get_config) -> None:
     def admin_messages():
         store = get_store()
         event = chosen_event(store)
-        return render_template("admin_messages.html", event=event, welcome=(event["welcome_text"] or DEFAULT_WELCOME.format(event=event["name"])) if event else "")
+        since = store.get_setting(followup.AUTO_KEY)
+        return render_template("admin_messages.html", event=event, welcome=(event["welcome_text"] or DEFAULT_WELCOME.format(event=event["name"])) if event else "",
+                               auto_since=since, auto_ready=bool(get_config().followup_template_id), cap=get_config().followup_daily_cap)
+
+    @app.post("/admin/messages/auto-followup")
+    def admin_auto_followup_save():
+        store = get_store()
+        if request.form.get("on") == "1":
+            if not store.get_setting(followup.AUTO_KEY):  # switching on again keeps the original moment, so nothing older is ever sent
+                store.set_setting(followup.AUTO_KEY, datetime.now(UTC).isoformat(timespec="seconds"))
+            flash("Automatic follow-up is on. Leads captured from now on are messaged as soon as they are saved.")
+        else:
+            store.set_setting(followup.AUTO_KEY, "")
+            flash("Automatic follow-up is off.")
+        return redirect(url_for("admin_messages"))
 
     @app.post("/admin/messages/welcome")
     def admin_welcome_save():

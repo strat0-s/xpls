@@ -8,6 +8,7 @@
     .panel { padding: 18px; display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
     .col { flex: 1 1 340px; display: flex; flex-direction: column; gap: 10px; }
     .hint { color: var(--mut); font-size: 13px; }
+    .notice { padding: 10px 14px; border-radius: 8px; background: var(--warn); color: var(--warn-ink); border: 1px solid var(--warn-line); line-height: 1.5; }
     .wa { flex: 1 1 300px; } .wa .bubble { max-width: 360px; }
 {% endblock %}
 {% block content %}
@@ -24,6 +25,18 @@
     <div class="wa"><div class="cap">How it looks on WhatsApp</div><div class="bubble" id="p-welcome">{{ welcome }}</div></div>
   </section>
   {% endif %}
+  <section class="card panel">
+    <form class="col" method="post" action="{{ url_for('admin_auto_followup_save') }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <h2>Automatic follow-up</h2>
+      <div class="hint">When this is on, every new lead with a mobile number is sent the thank-you message as soon as it is saved. Nobody has to press Send follow-up.
+        Each number is messaged once, never team members or anyone who replied STOP, between 9:00 and 21:00 IST, up to {{ cap }} a day. A lead captured outside those hours or over the cap goes out with the next lead that is saved,
+        or from the Follow-up page. Leads captured before this was switched on are never sent automatically.</div>
+      {% if not auto_ready %}<div class="notice">The thank-you template is not set up (BIRD_FOLLOWUP_TEMPLATE_ID is missing), so nothing can be sent yet.</div>{% endif %}
+      <div><b>{% if auto_since %}On since {{ auto_since|local_time('%d %b %Y, %H:%M') }}{% else %}Off{% endif %}</b></div>
+      <div><button class="btn {{ 'ghost' if auto_since }}" name="on" value="{{ '0' if auto_since else '1' }}">{{ 'Turn off' if auto_since else 'Turn on' }}</button></div>
+    </form>
+  </section>
 </div>
 <script>
   // The preview follows what is typed: [name] shows as a sample name and [event] as this event's name.

@@ -169,8 +169,7 @@ def test_save_asks_for_a_priority_and_stores_it(store, sent, fake_io):
 
 def test_visitor_leads_start_unclassified_and_staff_tag_them(store, sent):
     say(VISITOR, "Share my requirement")
-    for answer in ("Asha", "asha@sunrise.edu", "Sunrise School", "School", "Mysuru, Karnataka", "Science labs"):
-        say(VISITOR, answer)
+    say(VISITOR, "Name: Asha\nEmail: asha@sunrise.edu\nOrganisation: Sunrise School\nNeed: Science labs")
     lead = store.list_leads()[0]
     assert lead.priority == ""
     client = app.test_client()
@@ -277,25 +276,48 @@ def test_note_without_a_recent_lead_needs_a_name_or_phone(store, sent):
     assert lead.name == "Ravi Menon" and lead.review_reason == "note only"
 
 
-def test_visitor_requirement_becomes_an_orbit_ready_lead(store, sent):
+def test_visitor_gives_every_detail_in_one_message(store, sent, monkeypatch):
+    monkeypatch.setattr(flows, "requirement_read", lambda text: '{"name": "Anil Kumar", "email": "Anil@GVT.org", "org": "Green Valley Trust", "organisation_type": "SCHOOL_CHAIN", "city": "Pune", "state": "Maharashtra", "interest": "STEM labs for 12 schools"}')
     say(VISITOR, "Share my requirement")
-    say(VISITOR, "Anil Kumar")
-    assert "email address" in last(sent)[0]
-    say(VISITOR, "not an email")
-    assert "does not look like an email" in last(sent)[0]
-    say(VISITOR, "Anil@GVT.org")
-    say(VISITOR, "Green Valley Trust")
-    text, rows = last(sent)
-    assert text == "What best describes it?" and len(rows) == 9
-    say(VISITOR, "School chain / group")
-    say(VISITOR, "Pune, Maharashtra")
-    say(VISITOR, "STEM labs for 12 schools")
+    assert last(sent)[0] == flows.DETAILS_ASK and last(sent)[1] == []
+    say(VISITOR, "Anil Kumar, Anil@GVT.org, Green Valley Trust, Pune Maharashtra, STEM labs for 12 schools")
     assert last(sent)[0].startswith("Thanks Anil.")
     lead = store.list_leads()[0]
     assert (lead.name, lead.org, lead.organisation_type, lead.city, lead.state, lead.schools_count) == ("Anil Kumar", "Green Valley Trust", "SCHOOL_CHAIN", "Pune", "Maharashtra", "12")
     assert lead.email == "anil@gvt.org"
     assert lead.phone == "+919811111111" and lead.captured_by == "" and store.get_session(VISITOR) is None
     assert [f["body"] for f in store.list_feedback(lead.id)] == ["STEM labs for 12 schools"]
+
+
+def test_missing_name_or_need_is_asked_for_and_nothing_else(store, sent, monkeypatch):
+    monkeypatch.setattr(flows, "requirement_read", lambda text: '{"org": "Green Valley Trust", "interest": "STEM labs"}')
+    say(VISITOR, "Share my requirement")
+    say(VISITOR, "Green Valley Trust, STEM labs")
+    assert last(sent)[0] == "What is your name?"
+    say(VISITOR, "Anil Kumar")
+    assert last(sent)[0].startswith("Thanks Anil.")
+    lead = store.list_leads()[0]
+    assert (lead.name, lead.org, lead.interest, lead.email) == ("Anil Kumar", "Green Valley Trust", "STEM labs", "")
+    monkeypatch.setattr(flows, "requirement_read", lambda text: '{"name": "Ravi Menon"}')
+    other = "whatsapp:+919811111112"  # a number we do not hold yet
+    say(other, "Share my requirement")
+    say(other, "I am Ravi Menon")
+    assert last(sent)[0] == flows.NEED_ASK
+    say(other, "Teacher training")
+    assert store.list_leads()[0].interest == "Teacher training" and last(sent)[0].startswith("Thanks Ravi.")
+
+
+def test_details_are_understood_without_the_reading_service(store, sent):
+    say(VISITOR, "Share my requirement")
+    say(VISITOR, "Name: Anil Kumar\nEmail: anil@gvt.org\nCity: Pune\nNeed: STEM labs")
+    lead = store.list_leads()[0]
+    assert (lead.name, lead.email, lead.city, lead.interest) == ("Anil Kumar", "anil@gvt.org", "Pune", "STEM labs")
+    other = "whatsapp:+919811111112"
+    say(other, "Share my requirement")
+    say(other, "labs please, mail me at x@y.org")  # a plain sentence: kept as the need, the email is still found
+    assert last(sent)[0] == "What is your name?"
+    say(other, "Rao")
+    assert store.list_leads()[0].email == "x@y.org" and "labs please" in store.list_leads()[0].interest
 
 
 def test_a_reply_to_the_follow_up_lands_on_the_scanned_lead(store, sent):
@@ -311,8 +333,9 @@ def test_a_reply_to_the_follow_up_lands_on_the_scanned_lead(store, sent):
     store.add_brochure(event["id"], "TiQer", "https://x/tiqer.pdf")
     say(visitor, "Download brochure")
     say(visitor, "TiQer")
-    for answer in ("Share my requirement", "A. Rao", "skip", "Sunrise", "School", "Pune, Maharashtra", "STEM labs for 12 schools"):
-        say(visitor, answer)
+    say(visitor, "Share my requirement")
+    assert last(sent)[0] == f"Thanks Asha. {flows.NEED_ASK}"  # a lead we already hold is not asked for name, email or organisation again
+    say(visitor, "STEM labs for 12 schools")
     leads = store.list_leads()
     assert len(leads) == 1 and leads[0].id == scanned.id
     assert "TiQer" in leads[0].interest and "STEM labs for 12 schools" in leads[0].interest
@@ -321,7 +344,7 @@ def test_a_reply_to_the_follow_up_lands_on_the_scanned_lead(store, sent):
     visitor_chat = store.chat_with(number, scanned.id)
     assert {row["direction"] for row in visitor_chat} == {"in", "out"}  # they asked, the bot answered
     assert any(row["direction"] == "in" and row["body"] == "STEM labs for 12 schools" for row in visitor_chat)
-    assert any(row["direction"] == "out" and row["body"].startswith("Thanks A.") for row in visitor_chat)
+    assert any(row["direction"] == "out" and row["body"].startswith("Thanks Asha.") for row in visitor_chat)
     team_chat = store.chat_with("+919800000001", scanned.id)
     assert any(row["direction"] == "out" for row in team_chat) and not any(row["body"] == "STEM labs for 12 schools" for row in team_chat)  # two separate chats
     page = app.test_client().get(f"/leads/{scanned.id}").data.decode()
@@ -334,18 +357,6 @@ def test_a_reply_to_the_follow_up_lands_on_the_scanned_lead(store, sent):
     assert store.reply_flags() == {}
     say(STAFF, "menu")  # the team chatting is not a visitor texting back
     assert store.reply_flags() == {}
-
-
-def test_visitor_can_skip_the_email(store, sent):
-    for answer in ("Share my requirement", "Anil", "skip", "Org", "School", "Pune, Maharashtra", "Labs"):
-        say(VISITOR, answer)
-    assert store.list_leads()[0].email == ""
-
-
-def test_visitor_type_step_reasks_on_nonsense(sent):
-    for answer in ("Share my requirement", "Anil", "skip", "Org", "purple"):
-        say(VISITOR, answer)
-    assert last(sent)[0] == "Please pick one from the list."
 
 
 def test_visitor_brochure_and_feedback(store, sent, monkeypatch):
@@ -676,3 +687,12 @@ def test_lead_owner_label_written_on_the_form_is_dropped():
     assert flows.lead_fields({"name": "Asha Rao", "lead_owner": "L.O.- Magesh"})["fields"]["lead_owner"] == "Magesh"
     assert flows.lead_fields({"name": "Asha Rao", "lead_owner": "Lokesh"})["fields"]["lead_owner"] == "Lokesh"  # a name that starts with Lo is not a label
     assert "lead_owner" not in flows.lead_fields({"name": "Asha Rao", "lead_owner": "Lead owner:"})["fields"]
+
+
+def test_a_known_lead_with_no_interest_yet_can_reply_with_what_they_need(store, sent):
+    known = store.create_lead(flows.Lead(name="Meera Nair", org="Greenfield School", phone="+919811111111", captured_by="Test Admin"))
+    say(VISITOR, "Share my requirement")
+    assert last(sent)[0] == f"Thanks Meera. {flows.NEED_ASK}"
+    say(VISITOR, "Science lab for 20 schools")
+    assert last(sent)[0].startswith("Thanks Meera.") and len(store.list_leads()) == 1
+    assert store.get_lead(known.id).interest == "Science lab for 20 schools"

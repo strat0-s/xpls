@@ -129,3 +129,55 @@ def test_staff_can_follow_up_but_not_delete(store, templates, monkeypatch, anon_
     assert templates == ["+919845011111"]
     assert b"Send follow-up" in anon_client.get(f"/leads/{item.id}").data and b"Delete lead" not in anon_client.get(f"/leads/{item.id}").data
     assert anon_client.post(f"/leads/{item.id}/delete", data={"csrf": csrf(anon_client)}).status_code == 403
+
+
+def test_auto_followup_only_messages_leads_captured_since_it_was_switched_on(store, templates):
+    before = lead(store, "98450 11111", "old")
+    with store.connect() as conn:
+        conn.execute("UPDATE leads SET created_at = '2026-01-01T00:00:00+00:00' WHERE id = %s", (before.id,))
+    lead(store, "98450 22222", "new")
+    followup.auto_send(store, CONFIG, DAY)
+    assert templates == []  # off: nothing goes out by itself
+    store.set_setting(followup.AUTO_KEY, "2026-06-01T00:00:00+00:00")
+    followup.auto_send(store, CONFIG, DAY)
+    assert templates == ["+919845022222"]  # the older lead is left for a person to send
+    followup.auto_send(store, CONFIG, DAY)
+    assert templates == ["+919845022222"]  # once per number
+    lead(store, "98450 33333", "night")
+    followup.auto_send(store, CONFIG, datetime(2026, 11, 10, 22, 0, tzinfo=followup.IST))
+    assert templates == ["+919845022222"]  # quiet hours: it waits
+    followup.auto_send(store, CONFIG, DAY)
+    assert templates == ["+919845022222", "+919845033333"]  # and goes out with the next one
+
+
+def test_saving_a_scan_sends_the_followup_when_automatic_is_on(store, templates, monkeypatch):
+    from didac_app import flows
+
+    monkeypatch.setattr(followup, "blocked", lambda *args: "")
+    monkeypatch.setattr(flows, "fetch_media", lambda config, url, ct, number: ("k/x.jpg", ""))
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind: {"fields": {"name": "Asha Rao", "phone": "9845011111"}, "check": [], "more": [], "ms": 1})
+    staff = "whatsapp:+919800000001"
+
+    def scan():
+        for body, media in (("Contact form", ()), ("", [("https://media.bird.com/p", "image/jpeg")]), ("done", ()), ("Save", ()), ("High", ())):
+            post_bird(app.test_client(), staff, body, list(media))
+
+    scan()
+    assert templates == []  # automatic follow-up is off by default
+    store.set_setting(followup.AUTO_KEY, "2026-01-01T00:00:00+00:00")
+    with store.connect() as conn:
+        conn.execute("DELETE FROM followups")
+    scan()
+    assert templates == ["+919845011111"]
+
+
+def test_admin_can_switch_automatic_followup_on_and_off(store):
+    client = app.test_client()
+    assert "Off" in client.get("/admin/messages").data.decode()
+    client.post("/admin/messages/auto-followup", data={"on": "1", "csrf": csrf(client)})
+    since = store.get_setting(followup.AUTO_KEY)
+    assert since and "On since" in client.get("/admin/messages").data.decode()
+    client.post("/admin/messages/auto-followup", data={"on": "1", "csrf": csrf(client)})
+    assert store.get_setting(followup.AUTO_KEY) == since  # switching on again does not move the start
+    client.post("/admin/messages/auto-followup", data={"on": "0", "csrf": csrf(client)})
+    assert store.get_setting(followup.AUTO_KEY) == ""

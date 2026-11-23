@@ -77,6 +77,22 @@ def vision_read(images: list[tuple[str, str]], kind: str = "document") -> str:
     return response.output_text
 
 
+REQUIREMENT_PROMPT = """A visitor at an education event typed ONE WhatsApp message giving their details and what they need. Return a single JSON object with the keys
+name, email, org, organisation_type, city, state, interest. interest is what they are looking for, in their own words. organisation_type must be exactly one of
+SCHOOL, SCHOOL_CHAIN, CSR, NGO, GOVERNMENT, DISTRIBUTOR, INSTITUTION, VENDOR, OTHER, or empty when unclear. Use empty strings for anything not written. Do not guess."""
+
+
+def requirement_read(text: str) -> str:
+    """The raw JSON the model returns for a visitor's one-message requirement; empty when the reading service is off. Raises when it fails."""
+    if not openai_enabled():
+        return ""
+    from openai import OpenAI
+
+    client = OpenAI(timeout=float(os.getenv("OPENAI_TIMEOUT", "40")), max_retries=0)
+    # Pulling fields out of one short message needs no deep thinking, so the model is kept quick: the visitor is waiting for the next message.
+    return client.responses.create(model=os.getenv("OPENAI_VISION_MODEL", "gpt-5-mini"), input=f"{REQUIREMENT_PROMPT}\n\nMessage:\n{text}", reasoning={"effort": "minimal"}).output_text
+
+
 def classify_failure(exc: Exception) -> tuple[str, str]:
     """(kind, reason for admins) for an error from the reading service. kind is timeout, quota, key, outage or error; the team never sees the reason."""
     name, code, status = type(exc).__name__, str(getattr(exc, "code", "") or ""), getattr(exc, "status_code", None)
