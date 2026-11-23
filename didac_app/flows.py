@@ -14,7 +14,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from didac_app import auth, bird, blobstore, followup, orbit
@@ -39,8 +39,10 @@ NEW_LEAD = "New lead"
 NOTE = "Add a note"
 EVENT_PHOTOS, TEAM_BROCHURES = "Send event photos", "Brochures"
 # The document types in the menu are not fixed: they come from the live event (see Chat.doc_types).
-BROCHURE, REQUIREMENT, FEEDBACK = "Download brochure", "Share my requirement", "Feedback / voice note"
-NOT_SCANS = {"note", "choose", "requirement", "brochure", "feedback", "eventphotos"}  # session flows that are not a document scan
+BROCHURE, REQUIREMENT, DEMO, FEEDBACK = "Download brochure", "Share my requirement", "Schedule a demo", "Feedback / voice note"
+ONLINE, OFFLINE = "Online", "Offline"
+DATE_ASK = "Please type the date as DD/MM/YYYY. Example: 05/12/2026"
+NOT_SCANS = {"note", "choose", "requirement", "demo", "brochure", "feedback", "eventphotos"}  # session flows that are not a document scan
 NO_EVENT_TEAM = "Hi {first}. No event is live right now, so I cannot save leads or photos. Please ask an admin to start the next event."
 NO_PHOTOS = "This channel does not accept photos. Type menu to see what I can do for you."
 NO_EVENT_VISITOR = "Thanks for getting in touch. The event has finished. Our team will reach out soon."
@@ -291,7 +293,7 @@ class Chat:
             self.menu(session)
         elif session and session["flow"] in (*self.doc_types, "note", "choose", "eventphotos") and not self.user:
             self.menu(session)  # deactivated mid-scan: back to the visitor menu
-        elif session and session["flow"] in ("note", "requirement", "brochure", "feedback", "eventphotos") and low in self.menu_choices():
+        elif session and session["flow"] in ("note", "requirement", "demo", "brochure", "feedback", "eventphotos") and low in self.menu_choices():
             self.store.delete_session(self.number)
             self.no_flow(text, media)
         elif session:
@@ -302,7 +304,7 @@ class Chat:
     def menu_choices(self) -> set[str]:
         if self.user:
             return {*self.by_label, NOTE.lower(), EVENT_PHOTOS.lower(), TEAM_BROCHURES.lower()}
-        return {label.lower() for label in (BROCHURE, REQUIREMENT, FEEDBACK)}
+        return {label.lower() for label in (BROCHURE, REQUIREMENT, DEMO, FEEDBACK)}
 
     def brochures(self, audience: str = "visitors") -> list[dict]:
         """The active brochures of the live event that this audience ('visitors' or 'team') may see, as {key, name, url, for_visitors}."""
@@ -335,7 +337,7 @@ class Chat:
         else:
             brochures = self.brochures()
             rows = ([(BROCHURE, ", ".join(item["name"] for item in brochures[:3]) + (" and more" if len(brochures) > 3 else ""))] if brochures else []) \
-                + [(REQUIREMENT, "Tell us what you need"), (FEEDBACK, "Type, speak or send a photo")]
+                + [(REQUIREMENT, "Tell us what you need"), (DEMO, "Online or in person"), (FEEDBACK, "Type, speak or send a photo")]
             welcome = (self.event["welcome_text"] or DEFAULT_WELCOME.format(event=self.event["name"])).replace("[event]", self.event["name"])
             self.replies.append(Reply(welcome, rows, as_list=True))
 
@@ -379,6 +381,9 @@ class Chat:
             return self.pick_brochure("visitors")
         if choice == REQUIREMENT.lower():
             return self.start_requirement()
+        if choice == DEMO.lower():
+            self.store.put_session(self.number, "demo", "mode", {})
+            return self.replies.append(buttons("Would you like the demo online or offline?", ONLINE, OFFLINE))
         if choice == FEEDBACK.lower():
             self.store.put_session(self.number, "feedback", "collect", {})
             return self.say("Please type your feedback, or send a voice note or photo now. We will save it for the team. Type menu when you are done.")
@@ -416,6 +421,8 @@ class Chat:
             return self.event_photos_step(media)
         if flow == "requirement":
             return self.requirement_step(step, data, text)
+        if flow == "demo":
+            return self.demo_step(step, data, text)
         if flow == "brochure":
             return self.brochure_step(text)
         if flow == "feedback":
@@ -817,6 +824,39 @@ class Chat:
         self.store.add_feedback(self.number, data["interest"], saved.id, feedback_type="text_message")
         self.store.delete_session(self.number)
         self.say(f"Thanks {data['name'].split()[0]}. We saved your details. Our team will be in touch.\nType menu for brochures.")
+
+    def demo_step(self, step: str, data: dict, text: str) -> None:
+        """Online: a date. Offline: a date and a place, in one message or two. Saved on the visitor's lead as a line in Interest."""
+        low = text.lower().strip()
+        if step == "mode":
+            if low not in (ONLINE.lower(), OFFLINE.lower()):
+                return self.replies.append(buttons("Please tap Online or Offline.", ONLINE, OFFLINE))
+            data = {"mode": low}
+            self.store.put_session(self.number, "demo", "when", data)
+            return self.say(DATE_ASK if low == "online" else f"{DATE_ASK}, then the location.\nExample: 05/12/2026, Greenfield School, Pune")
+        if step == "when":
+            match = re.search(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", text)
+            try:
+                day = date(int(match[3]), int(match[2]), int(match[1])) if match else None
+            except ValueError:
+                day = None
+            if not day:
+                return self.say(f"I could not read that date. {DATE_ASK}")
+            if day < datetime.now(followup.IST).date():
+                return self.say(f"That date has passed. {DATE_ASK}")
+            data = data | {"date": day.strftime("%d/%m/%Y")}
+            place = re.sub(r"^[\s,;:\-]+|[\s,;:\-]+$", "", text.replace(match[0], "", 1))
+            if data["mode"] == "offline" and not place:
+                self.store.put_session(self.number, "demo", "where", data)
+                return self.say("Where should the demo be? Type the location.")
+            data["place"] = place if data["mode"] == "offline" else ""
+        elif step == "where":
+            data = data | {"place": text}
+        what = f"Demo requested: {data['mode']} on {data['date']}" + (f" at {data['place']}" if data["place"] else "")
+        lead = self.visitor_lead(interest=what)
+        self.store.add_feedback(self.number, what, lead.id, feedback_type="text_message")
+        self.store.delete_session(self.number)
+        self.say(f"Thank you. We have noted your {data['mode']} demo for {data['date']}" + (f" at {data['place']}" if data["place"] else "") + ". Our team will confirm with you.\nType menu for more.")
 
     def collect_feedback(self, text: str, media: list[tuple[str, str]]) -> None:
         lead = self.visitor_lead()

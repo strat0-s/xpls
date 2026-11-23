@@ -49,7 +49,7 @@ def test_staff_menu_is_a_four_row_list_and_hi_creates_no_lead(store, sent):
 def test_visitor_menu_is_a_list_without_demo_or_badge(sent):
     say(VISITOR, "menu")
     text, rows = last(sent)
-    assert rows == ["Download brochure", "Share my requirement", "Feedback / voice note"]
+    assert rows == ["Download brochure", "Share my requirement", "Schedule a demo", "Feedback / voice note"]
     assert "reply with a number" not in text
     say(VISITOR, "Book a demo")
     assert last(sent)[1] == rows  # no longer an option: the menu is shown again
@@ -659,6 +659,52 @@ def test_unknown_lead_owner_is_tagged_not_listed_and_none_stays_empty(store, sen
     assert "Lead owner: (blank)" in last(sent)[0]  # shown even when empty, so staff see they can add one with Edit
     say(STAFF, "Edit")
     assert "Lead owner: Magesh" in last(sent)[0]
+
+
+def test_visitor_schedules_an_online_demo_with_a_date(store, sent):
+    say(VISITOR, "Schedule a demo")
+    assert last(sent) == ("Would you like the demo online or offline?", ["Online", "Offline"])
+    say(VISITOR, "Online")
+    assert "DD/MM/YYYY" in last(sent)[0]
+    say(VISITOR, "next friday")
+    assert last(sent)[0].startswith("I could not read that date")
+    say(VISITOR, "31/02/2099")
+    assert last(sent)[0].startswith("I could not read that date")
+    say(VISITOR, "01/01/2020")
+    assert last(sent)[0].startswith("That date has passed")
+    say(VISITOR, "5/12/2099")
+    assert "online demo for 05/12/2099" in last(sent)[0] and store.get_session(VISITOR) is None
+    lead = store.list_leads()[0]
+    assert lead.interest == "Demo requested: online on 05/12/2099" and [f["body"] for f in store.list_feedback(lead.id)] == [lead.interest]
+
+
+def test_visitor_schedules_an_offline_demo_with_date_and_location(store, sent):
+    say(VISITOR, "Schedule a demo")
+    say(VISITOR, "maybe")
+    assert last(sent)[1] == ["Online", "Offline"]
+    say(VISITOR, "Offline")
+    say(VISITOR, "05/12/2099, Greenfield School, Pune")
+    assert "offline demo for 05/12/2099 at Greenfield School, Pune" in last(sent)[0]
+    assert store.list_leads()[0].interest == "Demo requested: offline on 05/12/2099 at Greenfield School, Pune"
+
+
+def test_offline_demo_asks_for_the_location_when_only_a_date_came(store, sent):
+    say(VISITOR, "Schedule a demo")
+    say(VISITOR, "Offline")
+    say(VISITOR, "05/12/2099")
+    assert last(sent)[0] == "Where should the demo be? Type the location."
+    say(VISITOR, "Our Pune office")
+    assert store.list_leads()[0].interest == "Demo requested: offline on 05/12/2099 at Our Pune office"
+
+
+def test_demo_goes_on_the_lead_we_already_hold(store, sent):
+    say(VISITOR, "Share my requirement")
+    say(VISITOR, "Name: Anil Kumar\nNeed: STEM labs")
+    say(VISITOR, "Schedule a demo")
+    say(VISITOR, "Online")
+    say(VISITOR, "05/12/2099")
+    leads = store.list_leads()
+    assert len(leads) == 1 and leads[0].interest == "STEM labs; Demo requested: online on 05/12/2099"
 
 
 def test_note_can_go_to_any_lead_of_the_event_picked_from_one_message(store, sent):

@@ -134,7 +134,7 @@ def test_a_visitor_is_told_when_there_are_no_brochures(store, sent):
     for row in store.list_brochures(event["id"]):
         store.set_brochure_active(row["id"], False)
     say(VISITOR, "hi")
-    assert last(sent)[1] == ["Share my requirement", "Feedback / voice note"]  # no brochure row to tap
+    assert last(sent)[1] == ["Share my requirement", "Schedule a demo", "Feedback / voice note"]  # no brochure row to tap
 
 
 def test_a_new_event_can_start_from_the_last_ones_setup(store):
