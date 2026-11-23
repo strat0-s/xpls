@@ -341,6 +341,15 @@ def register(app, get_store, get_config) -> None:
         filename = f"orbit-import-{datetime.now(IST).date().isoformat()}.{fmt}"
         return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
+    @app.get("/export/everything.xlsx")
+    def export_everything():
+        store = get_store()
+        event_id = chosen_event_id(store, {e["id"]: e for e in store.list_events()}, request.args)
+        event = store.get_event(event_id) if event_id else None
+        name = re.sub(r"[^a-z0-9]+", "-", (event["name"] if event else "all-events").lower()).strip("-")
+        return Response(store.export_everything(event_id), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f'attachment; filename="{name}-everything-{datetime.now(IST).date().isoformat()}.xlsx"'})
+
     @app.post("/team/<int:user_id>/active")
     def team_active(user_id: int):
         require_admin()

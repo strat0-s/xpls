@@ -107,8 +107,31 @@ def test_date_filter_uses_india_time(store):
     assert "<b>0</b> leads in the file" in client.get("/export?to=2026-11-01").data.decode()
 
 
+def test_export_everything_has_every_field_of_the_events_leads_with_notes_and_media(store):
+    other = store.create_event("Other Expo")
+    mine = make(store, org="Sunrise School", name="Asha", text_notes="Call Monday", lead_owner="Ravi")
+    store.create_lead(Lead(from_number="x", org="Elsewhere", event_id=other))
+    store.add_feedback("x", "Loved the demo", mine.id)
+    store.add_media(mine.id, "http://u", "image/jpeg", "k/1.jpg", "")
+    client = app.test_client()
+    event = store.live_event()["id"]
+    download = client.get(f"/export/everything.xlsx?event={event}")
+    assert download.status_code == 200 and "-everything-" in download.headers["Content-Disposition"]
+    book = load_workbook(io.BytesIO(download.data))
+    leads = list(book["Leads"].iter_rows(values_only=True))
+    head = leads[0]
+    assert head[:2] == ("event", "id") and {"text_notes", "lead_owner", "event_no", "raw_message", "created_at"} <= set(head) and len(leads) == 2
+    row = dict(zip(head, leads[1]))
+    assert (row["org"], row["text_notes"], row["lead_owner"], row["event"]) == ("Sunrise School", "Call Monday", "Ravi", store.live_event()["name"])
+    assert [r[0] for r in book["Feedback"].iter_rows(values_only=True)][0] == "id" and "Loved the demo" in [c for r in book["Feedback"].iter_rows(values_only=True) for c in r]
+    assert "k/1.jpg" in [c for r in book["Media"].iter_rows(values_only=True) for c in r]
+    assert len(list(load_workbook(io.BytesIO(client.get("/export/everything.xlsx?event=all").data))["Leads"].iter_rows())) == 3
+    assert "Download everything" in client.get("/export").data.decode()
+
+
 def test_export_needs_login(anon_client):
     assert anon_client.get("/export").status_code == 302
+    assert anon_client.get("/export/everything.xlsx").status_code == 302
     assert anon_client.get("/export/orbit.csv").status_code == 302
 
 

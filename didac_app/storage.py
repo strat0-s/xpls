@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import csv
+from io import BytesIO
 import json
 import re
 import uuid
@@ -762,6 +763,30 @@ class LeadStore:
             format_sheet(sheet)
         wb.save(output_path)
         return output_path
+
+    def export_everything(self, event_id: int | None = None) -> bytes:
+        """Every stored field of the event's leads (all events when None) with their notes, feedback and media, as one workbook. Not the Orbit layout."""
+        names = {event["id"]: event["name"] for event in self.list_events()}
+        leads = list(reversed(self.list_leads("event_id = %s", (event_id,)) if event_id else self.list_leads()))
+        ids = {lead.id for lead in leads}
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Leads"
+        ws.append(["event", *LEAD_FIELDS])
+        for lead in leads:
+            data = asdict(lead)
+            ws.append([names.get(lead.event_id, ""), *(data[name] for name in LEAD_FIELDS)])
+        for title, rows in (("Feedback", self.list_feedback()), ("Media", self.list_media())):
+            rows = [row for row in reversed(rows) if row["lead_id"] in ids]
+            sheet = wb.create_sheet(title)
+            sheet.append(list(rows[0]) if rows else ["lead_id"])
+            for row in rows:
+                sheet.append(list(row.values()))
+        for sheet in wb.worksheets:
+            format_sheet(sheet)
+        out = BytesIO()
+        wb.save(out)
+        return out.getvalue()
 
     def export_report_csv(self, output_path: Path) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)

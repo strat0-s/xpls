@@ -55,6 +55,10 @@
     <a class="btn ghost dl {{ '' if ok else 'off' }}" href="{{ url_for('export_orbit', fmt='xlsx', **query) }}">Download Excel</a>
   </div>
 </section>
+<section class="card panel">
+  <div class="sum"><b>Everything for {{ events|selectattr('id', 'equalto', event_id)|map(attribute='name')|first if event_id else 'all events' }}</b>: every field of every lead, with notes, feedback and photo records. Not in the Orbit layout, and the filters above do not apply.</div>
+  <div class="actions"><a class="btn ghost" href="{{ url_for('export_everything', event=event_id or 'all') }}">Download everything (Excel)</a></div>
+</section>
 <script>
   // Unticked leads are remembered while you page through, and left out of the file.
   (function () {
