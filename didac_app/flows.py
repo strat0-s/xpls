@@ -44,8 +44,7 @@ NOT_SCANS = {"note", "choose", "requirement", "brochure", "feedback", "eventphot
 NO_EVENT_TEAM = "Hi {first}. No event is live right now, so I cannot save leads or photos. Please ask an admin to start the next event."
 NO_PHOTOS = "This channel does not accept photos. Type menu to see what I can do for you."
 NO_EVENT_VISITOR = "Thanks for getting in touch. The event has finished. Our team will reach out soon."
-DETAILS_ASK = ("Happy to help. Please send your details in one message: your name, email, organisation, city and state, and what you are looking for.\n\n"
-               "Example: Meera Nair, meera@greenfield.edu, Greenfield School, Pune Maharashtra, looking for a science lab for 20 schools")
+DETAILS_ASK = "Happy to help. Please send your name, organisation, city and state in one message.\n\nExample: Meera Nair, Greenfield School, Pune Maharashtra"
 NEED_ASK = "What are you looking for? Example: science lab for 20 schools, teacher training, CSR pilot."
 NOT_LISTED = "Not on the team list"  # lead_owner when the name written on the form is nobody on the Team page
 SAVE, EDIT, RETAKE, CANCEL = "Save", "Edit", "Retake", "Cancel"
@@ -782,7 +781,7 @@ class Chat:
         self.say(f"The {selected['name']} brochure link is not set up yet. Our team will send it to you. Type menu for other options.")
 
     def start_requirement(self) -> None:
-        """A visitor we already hold (they replied to the follow-up) is only asked what they need. Anyone else gives every detail in one message."""
+        """A visitor we already hold (they replied to the follow-up) is only asked what they need. Anyone else sends name, organisation, city and state in one message, then says what they need."""
         known = self.known_lead()
         if known and known.name:
             self.store.put_session(self.number, "requirement", "need", {"name": known.name})

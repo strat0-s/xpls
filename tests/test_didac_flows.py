@@ -276,17 +276,25 @@ def test_note_without_a_recent_lead_needs_a_name_or_phone(store, sent):
     assert lead.name == "Ravi Menon" and lead.review_reason == "note only"
 
 
-def test_visitor_gives_every_detail_in_one_message(store, sent, monkeypatch):
-    monkeypatch.setattr(flows, "requirement_read", lambda text: '{"name": "Anil Kumar", "email": "Anil@GVT.org", "org": "Green Valley Trust", "organisation_type": "SCHOOL_CHAIN", "city": "Pune", "state": "Maharashtra", "interest": "STEM labs for 12 schools"}')
+def test_visitor_gives_their_details_in_one_message_then_says_what_they_need(store, sent, monkeypatch):
+    monkeypatch.setattr(flows, "requirement_read", lambda text: '{"name": "Anil Kumar", "email": "Anil@GVT.org", "org": "Green Valley Trust", "organisation_type": "SCHOOL_CHAIN", "city": "Pune", "state": "Maharashtra"}')
     say(VISITOR, "Share my requirement")
     assert last(sent)[0] == flows.DETAILS_ASK and last(sent)[1] == []
-    say(VISITOR, "Anil Kumar, Anil@GVT.org, Green Valley Trust, Pune Maharashtra, STEM labs for 12 schools")
+    say(VISITOR, "Anil Kumar, Green Valley Trust, Pune Maharashtra, anil@gvt.org")
+    assert last(sent)[0] == flows.NEED_ASK and store.list_leads() == []  # the need is asked in its own message, nothing is saved yet
+    say(VISITOR, "STEM labs for 12 schools")
     assert last(sent)[0].startswith("Thanks Anil.")
     lead = store.list_leads()[0]
     assert (lead.name, lead.org, lead.organisation_type, lead.city, lead.state, lead.schools_count) == ("Anil Kumar", "Green Valley Trust", "SCHOOL_CHAIN", "Pune", "Maharashtra", "12")
     assert lead.email == "anil@gvt.org"
     assert lead.phone == "+919811111111" and lead.captured_by == "" and store.get_session(VISITOR) is None
     assert [f["body"] for f in store.list_feedback(lead.id)] == ["STEM labs for 12 schools"]
+
+
+def test_a_visitor_who_already_said_what_they_need_is_not_asked_again(store, sent):
+    say(VISITOR, "Share my requirement")
+    say(VISITOR, "Name: Anil Kumar\nOrganisation: Green Valley Trust\nNeed: STEM labs")
+    assert last(sent)[0].startswith("Thanks Anil.") and store.list_leads()[0].interest == "STEM labs"
 
 
 def test_missing_name_or_need_is_asked_for_and_nothing_else(store, sent, monkeypatch):
