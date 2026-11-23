@@ -22,6 +22,7 @@ from didac_app.models import NOT_SCANNED, Lead
 
 DOWN_AFTER = 5  # failed reads in a row before reading counts as paused
 SLOW_MS = 20_000  # a read longer than this makes the next ones show the "a little slower" line
+DEFAULT_PRODUCTS = ["SIA", "TiQer", "PlayLab", "Xperimentor", "Math Max"]
 LEAD_FIELDS = [field.name for field in fields(Lead)]
 NOT_DELETED = "(deleted_at IS NULL OR deleted_at = '')"
 # For media/feedback joined to their lead; rows without a lead stay visible (LEFT JOIN gives NULL).
@@ -94,6 +95,9 @@ class LeadStore:
                 "last_ok_at TIMESTAMPTZ, last_failure_at TIMESTAMPTZ, down_since TIMESTAMPTZ, last_reason TEXT NOT NULL DEFAULT '')"
             )
             conn.execute("INSERT INTO reader_status (id) VALUES (1) ON CONFLICT DO NOTHING")
+            conn.execute("CREATE TABLE IF NOT EXISTS products (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, label TEXT NOT NULL UNIQUE, position INTEGER NOT NULL DEFAULT 0)")
+            if not conn.execute("SELECT 1 FROM products LIMIT 1").fetchone():  # the starting list, then the admins own it
+                conn.execute("INSERT INTO products (label, position) SELECT name, n FROM unnest(%s::text[]) WITH ORDINALITY AS t(name, n)", (DEFAULT_PRODUCTS,))
             conn.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
             conn.execute(
                 f"""
@@ -180,6 +184,7 @@ class LeadStore:
             # Leads left on the old text-status conversation steps go back to plain New.
             conn.execute("UPDATE leads SET status='New' WHERE status ~ '^(Menu|Intake|Brochure|Feedback|Badge):'")
             conn.execute("ALTER TABLE media ADD COLUMN IF NOT EXISTS rotation INTEGER NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE media ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT ''")  # '' = a photo of a document to read; 'visitor' = the team member with the visitor
             conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
             for table in ("inbound_events", "outbound_messages"):
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS convo TEXT")  # which scan conversation a message belongs to, see convo_for
@@ -275,6 +280,24 @@ class LeadStore:
     def stop_event(self, event_id: int) -> None:
         with self.connect() as conn:
             conn.execute("UPDATE events SET status='ended' WHERE id=%s AND status='live'", (event_id,))
+
+    # ---- the products a lead can be interested in: one list for every event, kept by the admins ----------------------------------
+    def list_products(self) -> list[dict]:
+        with self.connect() as conn:
+            return conn.execute("SELECT * FROM products ORDER BY position, id").fetchall()
+
+    def add_product(self, label: str) -> bool:
+        with self.connect() as conn:
+            return bool(conn.execute("INSERT INTO products (label, position) SELECT %s, COALESCE(max(position), 0) + 1 FROM products ON CONFLICT DO NOTHING RETURNING id", (label.strip(),)).fetchone())
+
+    def rename_product(self, product_id: int, label: str) -> bool:
+        with self.connect() as conn:
+            return bool(conn.execute("UPDATE products SET label=%s WHERE id=%s AND NOT EXISTS (SELECT 1 FROM products WHERE label=%s AND id<>%s) RETURNING id", (label.strip(), product_id, label.strip(), product_id)).fetchone())
+
+    def delete_product(self, product_id: int) -> None:
+        """Leads keep the names they were saved with."""
+        with self.connect() as conn:
+            conn.execute("DELETE FROM products WHERE id=%s", (product_id,))
 
     # ---- document types and brochures belong to an event; deactivating hides them from WhatsApp but never deletes the data --------
     def list_doc_types(self, event_id: int, active_only: bool = False) -> list[dict]:
@@ -479,6 +502,10 @@ class LeadStore:
         with self.connect() as conn:
             conn.execute("UPDATE users SET is_active=%s WHERE id=%s", (active, user_id))
 
+    def set_user_admin(self, user_id: int, admin: bool) -> None:
+        with self.connect() as conn:
+            conn.execute("UPDATE users SET is_admin=%s WHERE id=%s", (admin, user_id))
+
     def update_user(self, user_id: int, name: str, phone: str, email: str) -> None:
         with self.connect() as conn:
             conn.execute("UPDATE users SET name=%s, phone=%s, email=%s WHERE id=%s", (name, phone, email or None, user_id))
@@ -542,11 +569,11 @@ class LeadStore:
             rows = conn.execute(query, params).fetchall()
         return [row_to_lead(row) for row in rows]
 
-    def add_media(self, lead_id: int, url: str, content_type: str = "", local_path: str = "", extracted_text: str = "") -> None:
+    def add_media(self, lead_id: int, url: str, content_type: str = "", local_path: str = "", extracted_text: str = "", purpose: str = "") -> int:
         with self.connect() as conn:
             return conn.execute(
-                "INSERT INTO media (lead_id, url, content_type, local_path, extracted_text) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-                (lead_id, url, content_type, local_path, extracted_text),
+                "INSERT INTO media (lead_id, url, content_type, local_path, extracted_text, purpose) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                (lead_id, url, content_type, local_path, extracted_text, purpose),
             ).fetchone()["id"]
 
     def add_feedback(

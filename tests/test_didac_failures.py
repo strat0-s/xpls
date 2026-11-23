@@ -18,7 +18,7 @@ QUOTA = {"fields": {}, "check": ["could not read the photos"], "failed": "quota"
 def reads(monkeypatch):
     state = {"result": GOOD, "calls": 0}
     monkeypatch.setattr(flows, "fetch_media", lambda config, url, ct, number: (f"k/{url.rsplit('/', 1)[-1]}", ""))
-    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind: state.__setitem__("calls", state["calls"] + 1) or state["result"])
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): state.__setitem__("calls", state["calls"] + 1) or state["result"])
     return state
 
 
@@ -108,6 +108,7 @@ def test_type_the_details_goes_through_the_normal_summary_and_save(store, sent, 
     assert last(sent)[0].startswith("I read this as:") and "Meera Nair" in last(sent)[0] and last(sent)[1] == ["Save", "Edit", "Retake", "Cancel"]
     say("Save")
     say("High")
+    say("No")
     lead = store.list_leads()[0]
     assert (lead.name, lead.priority, lead.review_reason) == ("Meera Nair", "High", "") and [row["local_path"] for row in store.list_media(lead.id)] == ["k/a"]
 
@@ -127,6 +128,7 @@ def test_a_slow_last_read_adds_the_hang_tight_line(store, sent, reads):
     assert store.reader_status()["state"] == "slow"
     say("Save")
     say("High")
+    say("No")
     start_scan("b")
     assert any("This is taking a little longer than usual, so hang tight. Your photos are safe." in m[1] for m in sent)
 
@@ -142,10 +144,10 @@ def test_the_dashboard_banner_and_the_read_again_button(store, sent, monkeypatch
     assert "There is an error reading documents right now." in page and "For admins only: reading service quota used up" in page
     assert "This document was not scanned" in page and "Read again" in page
     assert "Not scanned" in client.get("/dashboard").data.decode()
-    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind: {"fields": {}, "check": [], "failed": "quota", "reason": "reading service quota used up"})
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): {"fields": {}, "check": [], "failed": "quota", "reason": "reading service quota used up"})
     client.post(f"/leads/{lead.id}/read", data={"csrf": csrf(client)})
     assert store.get_lead(lead.id).review_reason == NOT_SCANNED  # still failing: nothing changed
-    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind: {"fields": {"name": "Asha Rao", "phone": "9845011111"}, "check": ["phone digits unclear"], "more": [], "ms": 4000})
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): {"fields": {"name": "Asha Rao", "phone": "9845011111"}, "check": ["phone digits unclear"], "more": [], "ms": 4000})
     client.post(f"/leads/{lead.id}/read", data={"csrf": csrf(client)})
     fixed = store.get_lead(lead.id)
     assert (fixed.name, fixed.phone, fixed.review_reason) == ("Asha Rao", "9845011111", "phone digits unclear") and store.reader_status()["state"] == "ok"

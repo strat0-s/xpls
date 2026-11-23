@@ -39,6 +39,10 @@ class Lead:
     parent_organisation_id: str = ""
     lead_type: str = ""
     interest: str = ""
+    products: str = ""  # products of interest from the admin list, "; " apart
+    demo_interest: str = ""  # one line: yes/no or a mode, with the date or time frame next to it
+    workshop: str = ""  # interested in teacher workshops: Yes / No
+    students: str = ""
     budget: str = ""
     timeline: str = ""
     schools_count: str = ""

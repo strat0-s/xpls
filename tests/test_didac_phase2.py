@@ -15,7 +15,7 @@ TWO = {**ONE, "more": [{"fields": {"name": "Ravi Menon", "org": "Menon Trust", "
 def reads(monkeypatch):
     state = {"result": ONE, "calls": []}
     monkeypatch.setattr(flows, "fetch_media", lambda config, url, ct, number: (f"k/{url.rsplit('/', 1)[-1]}", ""))
-    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind: state["calls"].append((len(photos), kind)) or state["result"])
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): state["calls"].append((len(photos), kind)) or state["result"])
     return state
 
 
@@ -45,6 +45,7 @@ def test_two_documents_are_shown_together_and_saved_as_two_leads(store, sent, re
     say(STAFF, "Save")
     assert last(sent) == ("How important are these leads?", ["High", "Medium", "Low"])
     say(STAFF, "High")
+    say(STAFF, "No")
     leads = sorted(store.list_leads(), key=lambda lead: lead.id)
     assert [(lead.name, lead.priority, lead.doc_type, lead.event_id) for lead in leads] == [("Asha Rao", "High", "other", store.live_event()["id"]), ("Ravi Menon", "High", "other", store.live_event()["id"])]
     assert leads[1].review_reason == "phone digits unclear" and last(sent)[0].startswith("Saved 2 documents:")

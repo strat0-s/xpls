@@ -192,6 +192,34 @@ def register(app, get_store, get_config) -> None:
         store.set_brochure_active(brochure_id, request.form.get("active") == "1")
         return autosaved() or back("admin_documents", store.get_event(row["event_id"]))
 
+    # ---- products of interest --------------------------------------------------------------------------------------------------
+    @app.route("/admin/products", methods=["GET", "POST"])
+    def admin_products():
+        store = get_store()
+        if request.method == "POST":
+            label = " ".join(request.form.get("label", "").split())
+            if not label:
+                flash("The product needs a name.")
+            elif store.add_product(label):
+                flash(f"Added {label}.")
+            else:
+                flash(f"{label} is already on the list.")
+            return redirect(url_for("admin_products"))
+        return render_template("admin_products.html", products=store.list_products())
+
+    @app.post("/admin/products/<int:product_id>")
+    def admin_product_edit(product_id: int):
+        label = " ".join(request.form.get("label", "").split())
+        ok = bool(label) and get_store().rename_product(product_id, label)
+        flash("Saved." if ok else "That name is empty or already on the list.")
+        return autosaved("" if ok else "Empty or already listed") or redirect(url_for("admin_products"))
+
+    @app.post("/admin/products/<int:product_id>/delete")
+    def admin_product_delete(product_id: int):
+        get_store().delete_product(product_id)
+        flash("Removed. Leads keep the products they were saved with.")
+        return redirect(url_for("admin_products"))
+
     # ---- message wording -------------------------------------------------------------------------------------------------------
     @app.get("/admin/messages")
     def admin_messages():

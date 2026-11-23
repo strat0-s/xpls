@@ -155,11 +155,11 @@ def test_saving_a_scan_sends_the_followup_when_automatic_is_on(store, templates,
 
     monkeypatch.setattr(followup, "blocked", lambda *args: "")
     monkeypatch.setattr(flows, "fetch_media", lambda config, url, ct, number: ("k/x.jpg", ""))
-    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind: {"fields": {"name": "Asha Rao", "phone": "9845011111"}, "check": [], "more": [], "ms": 1})
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): {"fields": {"name": "Asha Rao", "phone": "9845011111"}, "check": [], "more": [], "ms": 1})
     staff = "whatsapp:+919800000001"
 
     def scan():
-        for body, media in (("Contact form", ()), ("", [("https://media.bird.com/p", "image/jpeg")]), ("done", ()), ("Save", ()), ("High", ())):
+        for body, media in (("Contact form", ()), ("", [("https://media.bird.com/p", "image/jpeg")]), ("done", ()), ("Save", ()), ("High", ()), ("No", ())):
             post_bird(app.test_client(), staff, body, list(media))
 
     scan()

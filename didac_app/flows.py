@@ -23,6 +23,8 @@ from didac_app.dedupe import FILLABLE, fill_blanks, find_duplicate
 from didac_app.media import append_qr_details, extract_media_text, save_media, suffix_for
 from didac_app.models import NOT_SCANNED, Lead
 from didac_app.openai_services import classify_failure, lead_dict_to_text, parse_contacts, parse_json, requirement_read, vision_read
+from didac_app.places import tidy
+from didac_app.products import match_products
 from didac_app.parser import FIELD_ALIASES, extract_schools_count, normalize_contact_name, normalize_key, parse_message, parse_structured_lead
 from didac_app.storage import LeadStore
 
@@ -74,7 +76,7 @@ TYPES = [
 ]
 # Lead fields shown in the scan summary: (field, label). Name, Organisation, Phone and Email always show, even blank.
 SUMMARY = [("name", "Name"), ("org", "Organisation"), ("role", "Role"), ("phone", "Phone"), ("email", "Email"), ("organisation_type", "Type"), ("priority", "Priority"), ("lead_owner", "Lead owner"),
-           ("city", "City"), ("state", "State"), ("curriculum", "Curriculum"), ("interest", "Interest"), ("notes", "Notes"),
+           ("city", "City"), ("state", "State"), ("curriculum", "Curriculum"), ("products", "Products"), ("demo_interest", "Demo"), ("workshop", "Teacher workshop"), ("students", "Students"), ("interest", "Interest"), ("notes", "Notes"),
            ("qr_url", "QR link"), ("qr_page_text", "QR text")]
 ALWAYS = {"name", "org", "phone", "email", "lead_owner"}
 
@@ -140,7 +142,7 @@ def fetch_media(config: DidacConfig, url: str, content_type: str, number: str) -
         Path(temp_path).unlink(missing_ok=True)
 
 
-def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
+def read_documents(config: DidacConfig, photos: list[dict], kind: str, products: list[str] = ()) -> dict:
     """One read over every photo of a scan (kind is form, document or badge). Returns {"fields": {lead field: value}, "check": [doubtful things]} for the first document,
     "photos" (which photo numbers it is on), "more" (the same for any further documents) and "too_many" (photo number, count) when a photo holds more documents than allowed; never raises."""
     paths, qr_text = [], ""
@@ -155,7 +157,7 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
         downloaded = time.perf_counter()
         # The model call is mostly waiting on OpenAI and the QR decode is CPU work, so they run side by side instead of one after the other.
         with ThreadPoolExecutor(max_workers=1) as pool:
-            reading = pool.submit(lambda: (vision_read(paths, kind), time.perf_counter()))
+            reading = pool.submit(lambda: (vision_read(paths, kind, products), time.perf_counter()))
             qr_text = "\n".join(filter(None, (append_qr_details(path, "") for path, _ in paths)))
             qr_done = time.perf_counter()
             raw, vision_done = reading.result()
@@ -174,7 +176,7 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str) -> dict:
     if not contacts:  # the reader answered but found nothing: a photo problem, not an outage
         return {"fields": {}, "check": ["could not read the photos", *no_qr], "unclear": True, "ms": ms}
     # Only a visiting-card style document may hold several documents; a form or a badge is one person (a badge's QR belongs to one).
-    docs = [lead_fields(contact, qr_text if index == 0 else "", no_qr if index == 0 else []) for index, contact in enumerate(contacts if kind == "document" else contacts[:1])]
+    docs = [lead_fields(contact, qr_text if index == 0 else "", no_qr if index == 0 else [], products) for index, contact in enumerate(contacts if kind == "document" else contacts[:1])]
     if kind != "document" and len(contacts) > 1:
         docs[0]["check"].append(f"{len(contacts)} people found, only the first is kept")
     if kind == "document":
@@ -231,23 +233,29 @@ def read_requirement(text: str) -> dict:
     email = auth.normalize_email(found.get("email", "")) or next((auth.normalize_email(word.strip(".,;:()<>")) for word in text.split() if "@" in word), "")
     kind = found.get("organisation_type", "")
     found = {key: str(found.get(key) or "").strip() for key in ("name", "org", "city", "state", "interest")} | {"email": email, "organisation_type": kind if kind in orbit.ORG_TYPES else ""}
+    found["city"], found["state"], _ = tidy(found.get("city", ""), found.get("state", ""))
     found = {key: value for key, value in found.items() if value}
     return found if found.get("name") or found.get("interest") else {**found, "interest": text.strip()}
 
 
-def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None) -> dict:
+def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None, products: list[str] = ()) -> dict:
     """One document the reader found, as {"fields": lead fields, "check": doubts, "photos": the photo numbers it appears on}."""
     contact = dict(contact)
     photos = [number for number in (contact.pop("photos", None) or []) if isinstance(number, int)]
     check = [item for item in (str(item).strip() for item in contact.pop("check", None) or []) if item and not NOT_ON_DOCUMENT.search(item)] + (no_qr or [])
     owner = re.sub(r"^\s*(?:lead\s*owner\s*[:\-]*|l\.?\s*o\.?\s*[:\-]+)\s*", "", str(contact.pop("lead_owner", "") or ""), flags=re.I).strip()  # "Lead owner: Magesh" as written on the form
     demo, workshop, students, remarks = (str(contact.pop(key, "") or "").strip() for key in ("demo", "workshop", "students", "remarks"))
-    interest = [f"{label}: {value}" for label, value in (("Demo", demo), ("Teacher workshop", workshop)) if value]
-    notes = [f"{label}: {value}" for label, value in (("Students", students), ("Remarks", remarks)) if value]
+    contact["city"], contact["state"], contact["district"] = tidy(*(str(contact.get(key) or "") for key in ("city", "state", "district")))  # before the text form, where a line break would split the value
+    liked, other = match_products(contact.pop("products", None), list(products))
+    other += match_products(contact.pop("other_products", None), [])[1]
+    liked += [name for name in products if name not in liked and re.search(rf"\b{re.escape(name)}\b", remarks, re.I)]  # a product named in the remarks that the reader did not list
+    notes = [f"Remarks: {remarks}"] if remarks else []
+    if other:
+        notes.append("Other products: " + ", ".join(other))
     lead = parse_structured_lead("New lead\n" + lead_dict_to_text(contact) + ("\n" + qr_text if qr_text else ""))
     lead.organisation_type = orbit.lead_org_type(lead)
-    lead.interest = "; ".join(filter(None, [lead.interest, *interest]))
     lead.notes = "; ".join(filter(None, [lead.notes, *notes]))
+    lead.products, lead.demo_interest, lead.workshop, lead.students = "; ".join(liked), demo, workshop, students
     fields = {name: getattr(lead, name) for name in FILLABLE if getattr(lead, name)}
     if owner:
         fields["lead_owner"] = owner  # as written: Chat.read_scan matches it to the team
@@ -489,13 +497,29 @@ class Chat:
                 return self.replies.append(buttons("Please tap High, Medium or Low.", *PRIORITIES))
             for doc in scan_docs(data):
                 doc["draft"].setdefault("priority", pick)
-            return self.save_scan(flow, data)
+            return self.ask_photo(flow, data)
+        if step == "photo":  # the last question before saving
+            if low in ("yes", "y"):
+                self.store.put_session(self.number, flow, "visitorphoto", data)
+                return self.say("Send the photo of you with the visitor. Type SKIP to save without it.")
+            if low in ("no", "n", "skip"):
+                return self.save_scan(flow, data)
+            return self.replies.append(buttons("Please tap Yes or No.", "Yes", "No"))
+        if step == "visitorphoto":
+            image = next(((url, ct) for url, ct in media if ct.startswith("image/")), None)
+            if image:
+                key, _ = fetch_media(self.config, image[0], image[1], self.number)
+                data["visitor_photo"] = {"key": key, "url": image[0], "ct": image[1]}
+                return self.save_scan(flow, data)
+            if low == "skip":
+                return self.save_scan(flow, data)
+            return self.say("Send the photo, or type SKIP to save without it.")
         if step == "confirm":
             choice = low
             if choice == SAVE.lower():
                 docs = scan_docs(data)
                 if all(doc["draft"].get("priority") for doc in docs):
-                    return self.save_scan(flow, data)
+                    return self.ask_photo(flow, data)
                 self.store.put_session(self.number, flow, "priority", data)
                 return self.replies.append(buttons("How important is this lead?" if len(docs) == 1 else "How important are these leads?", *PRIORITIES))
             if choice == EDIT.lower():
@@ -517,11 +541,15 @@ class Chat:
             self.store.put_session(self.number, flow, "confirm", data)
             return self.confirm(data, f"I could not use: {', '.join(unknown)}\n\n" if unknown else "")
 
+    def ask_photo(self, flow: str, data: dict) -> None:
+        self.store.put_session(self.number, flow, "photo", data)
+        self.replies.append(buttons("Add a photo with the visitor?", "Yes", "No"))
+
     def read_scan(self, flow: str, data: dict, retry: bool = False) -> None:
         """Read the photos of a scan and move to the summary, or to the calm failure step when the reading service is not working."""
         slow = " This is taking a little longer than usual, so hang tight. Your photos are safe." if self.store.reader_status()["state"] == "slow" else ""
         self.say_now(f"Reading your {len(data['photos'])} photo(s)... this takes a few seconds.{slow}")
-        result = read_documents(self.config, data["photos"], self.doc_types[flow]["reader"])
+        result = read_documents(self.config, data["photos"], self.doc_types[flow]["reader"], [row["label"] for row in self.store.list_products()])
         if result.get("failed"):
             self.store.record_read_failure(result["reason"])
             return self.read_failed(flow, data, result["failed"], retry)
@@ -635,6 +663,9 @@ class Chat:
             lead.media_urls = "; ".join(photo["url"] for photo in photos)
             lead.media_local_paths = "; ".join(photo["key"] for photo in photos)
             saved, outcome = self.store_lead(lead, photos, doc["original"])
+            if data.get("visitor_photo"):
+                with_visitor = data["visitor_photo"]
+                self.store.add_media(saved.id, with_visitor["url"], with_visitor["ct"], with_visitor["key"], purpose="visitor")
             outcomes.append((saved, outcome))
         self.store.put_session(self.number, flow, "photos", {"photos": []})
         self.store.close_convo(self.number)
@@ -752,10 +783,12 @@ class Chat:
     def known_lead(self) -> Lead | None:
         return lead_for_visitor(self.store, self.number)
 
-    def visitor_lead(self, interest: str = "") -> Lead:
+    def visitor_lead(self, interest: str = "", demo: str = "") -> Lead:
         lead = self.known_lead() or self.store.create_lead(Lead(from_number=self.number, phone=self.number.replace("whatsapp:", "")))
         if interest and interest.lower() not in lead.interest.lower():
             self.store.update_lead_fields(lead.id, interest="; ".join(filter(None, [lead.interest, interest])))
+        if demo:  # the latest request wins: one line, replaced
+            self.store.update_lead_fields(lead.id, demo_interest=demo)
         self.lead_ids.append(lead.id)
         return lead
 
@@ -852,9 +885,9 @@ class Chat:
             data["place"] = place if data["mode"] == "offline" else ""
         elif step == "where":
             data = data | {"place": text}
-        what = f"Demo requested: {data['mode']} on {data['date']}" + (f" at {data['place']}" if data["place"] else "")
-        lead = self.visitor_lead(interest=what)
-        self.store.add_feedback(self.number, what, lead.id, feedback_type="text_message")
+        what = f"{data['mode'].capitalize()}, {data['date']}" + (f", {data['place']}" if data["place"] else "")
+        lead = self.visitor_lead(demo=what)
+        self.store.add_feedback(self.number, f"Demo requested: {what}", lead.id, feedback_type="text_message")
         self.store.delete_session(self.number)
         self.say(f"Thank you. We have noted your {data['mode']} demo for {data['date']}" + (f" at {data['place']}" if data["place"] else "") + ". Our team will confirm with you.\nType menu for more.")
 
@@ -948,6 +981,11 @@ def apply_corrections(draft: dict, text: str) -> tuple[list[str], list[str]]:
             applied += [key, name.replace("_", " ")]
         elif line.strip():
             unknown.append(line.strip())
+    if {"city", "state", "district"} & {key for key in draft}:
+        for key, value in zip(("city", "state", "district"), tidy(*(draft.get(key, "") for key in ("city", "state", "district")))):
+            draft[key] = value
+            if not value:
+                del draft[key]
     return applied, unknown
 
 

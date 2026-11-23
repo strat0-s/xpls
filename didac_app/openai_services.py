@@ -27,6 +27,7 @@ organisation_type must be exactly one of SCHOOL, SCHOOL_CHAIN, CSR, NGO, GOVERNM
 (DISTRIBUTOR = reseller or dealer; INSTITUTION = college, university or training centre; VENDOR = another edtech, hardware or content company; OTHER = individual, media, investor.)
 Leave organisation_type empty if the organisation is unclear.
 Use empty strings when unknown. Do not guess.
+city is the town or city only, state is the Indian state written out in full (Karnataka, not KA), and district is the district only when it is printed. Never put the state or the district inside city, and never put a city in state.
 """
 
 SINGLE_TEXT = """
@@ -46,7 +47,7 @@ MULTI_PROMPT = LEAD_PROMPT + MULTI_TEXT + CHECK_TEXT  # any other document type:
 FORM_PROMPT = DOCUMENT_PROMPT + """
 This is the printed Xperimentor contact form. Fields: Full Name, Organization, City, Phone, Email; Your Role (Management, Principal, Teacher/Coordinator, Other);
 Curriculum (CBSE, ICSE, State, IB, IGCSE, Other); Interested in demo (At School, Online); Interested to attend teacher workshops (Yes, No); Number of Students; Remarks.
-Use the extra keys: demo ("At school" or "Online"), workshop ("Yes" or "No"), students (exactly as written), remarks (exactly as written).
+Use the extra keys: demo (whatever is ticked or written at "Interested in demo": Yes, No, At school or Online, followed by any date or time frame written next to it, exactly as written, for example "Yes, 2nd week of December" or "Online - December"), workshop ("Yes" or "No"), students (exactly as written), remarks (exactly as written), products (a list, see below).
 Put a role or curriculum that was only written in (not ticked) in role/curriculum as written and add it to "check". A crossed-out printed value is not an answer.
 Handwritten or doubtful values (student count, phone digits) go in "check".
 Add a key "lead_owner": the name handwritten at the top right of the form, just above the CONTACT FORM heading (written as "LO: Name", "Lead owner: Name" or just the name). LO means Lead Owner. It is the team member who met the visitor, never the visitor: do not use it for name, which comes from the card or the form's Name field. Return just the name; leave it empty when nothing is written there.
@@ -60,13 +61,18 @@ If a URL or ID is printed next to the QR code, put it in qr_url (a URL) or qr_pa
 """
 
 
-def vision_read(images: list[tuple[str, str]], kind: str = "document") -> str:
+def products_text(products: list[str]) -> str:
+    return ("\nAdd a key \"products\": the list of products the person is interested in, whether ticked or written in the remarks. Use only these exact names: " + ", ".join(products)
+            + ". A product written in a different spelling (for example Tiqer for TiQer) gets the listed name. Any product that is not on this list goes in \"other_products\" as written.\n") if products else ""
+
+
+def vision_read(images: list[tuple[str, str]], kind: str = "document", products: list[str] = ()) -> str:
     """One model call over every photo of a document (kind: form, badge or document); returns the raw JSON text. images = [(local_path, content_type)]."""
     if not openai_enabled():
         return ""
     from openai import OpenAI
 
-    content = [{"type": "input_text", "text": {"form": FORM_PROMPT, "badge": BADGE_PROMPT}.get(kind, MULTI_PROMPT)}]
+    content = [{"type": "input_text", "text": {"form": FORM_PROMPT + products_text(products), "badge": BADGE_PROMPT}.get(kind, MULTI_PROMPT)}]
     content += [{"type": "input_image", "image_url": image_data_url(path, content_type)} for path, content_type in images]
     # OPENAI_VISION_EFFORT (minimal, low, medium, high) trims the model's thinking time; unset keeps the model's default.
     effort = os.getenv("OPENAI_VISION_EFFORT", "").strip()

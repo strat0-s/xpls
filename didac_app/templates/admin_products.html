@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set active = 'products' %}
+{% block title %}Products · Footfall{% endblock %}
+{% block css %}
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .stack { display: flex; flex-direction: column; gap: 16px; max-width: 640px; }
+    .panel { padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+    .hint { color: var(--mut); font-size: 13px; }
+    .line { display: flex; gap: 8px; align-items: center; }
+    .line form { margin: 0; display: flex; gap: 8px; flex: 1; min-width: 0; }
+    .line input { flex: 1; min-width: 0; }
+{% endblock %}
+{% block content %}
+<div class="stack">
+  <h1>Products</h1>
+  <section class="card panel">
+    <div class="hint">The products a visitor can be interested in. The contact form reader matches what is ticked or written on the form to these names, and a lead's page offers them as tick boxes. Anything on the form that is not on this list goes into the lead's notes. Add brochure names here too if you want them matched.
+      Removing a product does not change leads that already have it.</div>
+    {% for p in products %}
+    <div class="line">
+      <form method="post" action="{{ url_for('admin_product_edit', product_id=p.id) }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input class="t" name="label" value="{{ p.label }}" aria-label="Product name" required><button class="btn ghost">Save</button></form>
+      <form method="post" action="{{ url_for('admin_product_delete', product_id=p.id) }}" style="flex:none" data-title="Remove {{ p.label }}?" data-confirm="Leads that already have it keep it." data-ok="Remove" data-danger="1"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn danger">Remove</button></form>
+    </div>
+    {% else %}<div class="hint">No products yet.</div>{% endfor %}
+    <form class="line" method="post"><input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input class="t" name="label" placeholder="New product" aria-label="New product" required style="flex:1"><button class="btn">Add</button></form>
+  </section>
+</div>
+{% endblock %}

@@ -17,7 +17,7 @@ def fake_io(monkeypatch):
     """No bucket, no OpenAI: a stored photo is just its URL tail, and a read returns whatever `reads` holds."""
     monkeypatch.setattr(flows, "fetch_media", lambda config, url, content_type, number: (f"k/{url.rsplit('/', 1)[-1]}", "heard: call me" if content_type.startswith("audio/") else ""))
     reads = {"result": CARD, "calls": []}
-    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind: reads["calls"].append((len(photos), kind)) or reads["result"])
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): reads["calls"].append((len(photos), kind)) or reads["result"])
     return reads
 
 
@@ -33,6 +33,7 @@ def save_scan(number):
     """Save asks for a priority before it stores the lead."""
     say(number, "Save")
     say(number, "High")
+    say(number, "No")
 
 
 def last(sent):
@@ -151,6 +152,8 @@ def test_priority_can_be_set_in_edit_and_then_save_does_not_ask(store, sent, fak
     say(STAFF, "Priority: medium")
     assert "Priority: Medium" in last(sent)[0]
     say(STAFF, "Save")
+    assert last(sent) == ("Add a photo with the visitor?", ["Yes", "No"]) and store.list_leads() == []
+    say(STAFF, "No")
     assert "Saved as #" in last(sent)[0] and [lead.priority for lead in store.list_leads()] == ["Medium"]
 
 
@@ -164,7 +167,38 @@ def test_save_asks_for_a_priority_and_stores_it(store, sent, fake_io):
     say(STAFF, "maybe")
     assert last(sent)[0] == "Please tap High, Medium or Low." and store.list_leads() == []
     say(STAFF, "Low")
-    assert [lead.priority for lead in store.list_leads()] == ["Low"]
+    assert last(sent) == ("Add a photo with the visitor?", ["Yes", "No"]) and store.list_leads() == []
+    say(STAFF, "maybe")
+    assert last(sent)[0] == "Please tap Yes or No."
+    say(STAFF, "No")
+    assert [lead.priority for lead in store.list_leads()] == ["Low"] and store.list_media(store.list_leads()[0].id)[0]["purpose"] == ""
+
+
+def test_a_photo_with_the_visitor_is_kept_apart_from_the_scan(store, sent, fake_io):
+    say(STAFF, "Contact form")
+    say(STAFF, "", photo("form"))
+    say(STAFF, "DONE")
+    say(STAFF, "Save")
+    say(STAFF, "Low")
+    say(STAFF, "Yes")
+    assert "Send the photo of you with the visitor" in last(sent)[0]
+    say(STAFF, "blah")
+    assert "Send the photo" in last(sent)[0] and store.list_leads() == []
+    say(STAFF, "", photo("me"))
+    [lead] = store.list_leads()
+    assert sorted(row["purpose"] for row in store.list_media(lead.id)) == ["", "visitor"] and "Saved as #" in last(sent)[0]
+    assert store.get_session(STAFF)["step"] == "photos"
+
+
+def test_skipping_the_visitor_photo_saves_the_lead(store, sent, fake_io):
+    say(STAFF, "Contact form")
+    say(STAFF, "", photo("form"))
+    say(STAFF, "DONE")
+    say(STAFF, "Save")
+    say(STAFF, "Low")
+    say(STAFF, "Yes")
+    say(STAFF, "skip")
+    assert [row["purpose"] for row in store.list_media(store.list_leads()[0].id)] == [""]
 
 
 def test_visitor_leads_start_unclassified_and_staff_tag_them(store, sent):
@@ -445,7 +479,7 @@ def test_event_badge_is_its_own_type_and_flags_a_missing_qr(store, sent, fake_io
 
 def test_badge_without_a_decodable_qr_gets_a_check(monkeypatch):
     monkeypatch.setattr(flows.blobstore, "download", lambda config, key: b"x")
-    monkeypatch.setattr(flows, "vision_read", lambda paths, kind: '{"name": "Nisha Rao", "org": "Expo Org"}')
+    monkeypatch.setattr(flows, "vision_read", lambda paths, kind, products=(): '{"name": "Nisha Rao", "org": "Expo Org"}')
     monkeypatch.setattr(flows, "append_qr_details", lambda path, text: "")
     badge = real_read_documents(flows.DidacConfig(), [{"key": "k", "ct": "image/jpeg"}], "badge")
     assert badge["fields"]["name"] == "Nisha Rao" and "QR code could not be scanned" in badge["check"][0]
@@ -517,7 +551,7 @@ def test_form_read_merges_card_details_and_the_prompt_asks_for_it(monkeypatch):
     seen = {}
     monkeypatch.setattr(flows.blobstore, "download", lambda config, key: b"x")
     monkeypatch.setattr(flows, "append_qr_details", lambda path, text: "")
-    monkeypatch.setattr(flows, "vision_read", lambda paths, kind: seen.update(n=len(paths), kind=kind) or '{"name": "Meera Iyer", "org": "Bright School", "role": "Principal", "email": "meera@bright.edu", "remarks": "call Friday"}')
+    monkeypatch.setattr(flows, "vision_read", lambda paths, kind, products=(): seen.update(n=len(paths), kind=kind) or '{"name": "Meera Iyer", "org": "Bright School", "role": "Principal", "email": "meera@bright.edu", "remarks": "call Friday"}')
     result = real_read_documents(flows.DidacConfig(), [{"key": k, "ct": "image/jpeg"} for k in ("form", "card")], "form")
     assert seen == {"n": 2, "kind": "form"}
     assert result["fields"]["role"] == "Principal" and result["fields"]["email"] == "meera@bright.edu"
@@ -675,7 +709,7 @@ def test_visitor_schedules_an_online_demo_with_a_date(store, sent):
     say(VISITOR, "5/12/2099")
     assert "online demo for 05/12/2099" in last(sent)[0] and store.get_session(VISITOR) is None
     lead = store.list_leads()[0]
-    assert lead.interest == "Demo requested: online on 05/12/2099" and [f["body"] for f in store.list_feedback(lead.id)] == [lead.interest]
+    assert lead.demo_interest == "Online, 05/12/2099" and [f["body"] for f in store.list_feedback(lead.id)] == ["Demo requested: Online, 05/12/2099"]
 
 
 def test_visitor_schedules_an_offline_demo_with_date_and_location(store, sent):
@@ -685,7 +719,7 @@ def test_visitor_schedules_an_offline_demo_with_date_and_location(store, sent):
     say(VISITOR, "Offline")
     say(VISITOR, "05/12/2099, Greenfield School, Pune")
     assert "offline demo for 05/12/2099 at Greenfield School, Pune" in last(sent)[0]
-    assert store.list_leads()[0].interest == "Demo requested: offline on 05/12/2099 at Greenfield School, Pune"
+    assert store.list_leads()[0].demo_interest == "Offline, 05/12/2099, Greenfield School, Pune"
 
 
 def test_offline_demo_asks_for_the_location_when_only_a_date_came(store, sent):
@@ -694,7 +728,7 @@ def test_offline_demo_asks_for_the_location_when_only_a_date_came(store, sent):
     say(VISITOR, "05/12/2099")
     assert last(sent)[0] == "Where should the demo be? Type the location."
     say(VISITOR, "Our Pune office")
-    assert store.list_leads()[0].interest == "Demo requested: offline on 05/12/2099 at Our Pune office"
+    assert store.list_leads()[0].demo_interest == "Offline, 05/12/2099, Our Pune office"
 
 
 def test_demo_goes_on_the_lead_we_already_hold(store, sent):
@@ -704,7 +738,7 @@ def test_demo_goes_on_the_lead_we_already_hold(store, sent):
     say(VISITOR, "Online")
     say(VISITOR, "05/12/2099")
     leads = store.list_leads()
-    assert len(leads) == 1 and leads[0].interest == "STEM labs; Demo requested: online on 05/12/2099"
+    assert len(leads) == 1 and leads[0].interest == "STEM labs" and leads[0].demo_interest == "Online, 05/12/2099"
 
 
 def test_note_can_go_to_any_lead_of_the_event_picked_from_one_message(store, sent):
@@ -758,3 +792,45 @@ def test_a_name_that_is_just_the_lead_owner_is_not_kept_as_the_visitor():
     result = flows.lead_fields({"name": "Abhishek", "org": "EDUBIZ Networks", "lead_owner": "Abhishek"})
     assert "name" not in result["fields"] and result["fields"]["lead_owner"] == "Abhishek" and "name was not read" in result["check"][0]
     assert flows.lead_fields({"name": "Srijan Saha", "org": "EDUBIZ", "lead_owner": "Abhishek"})["fields"]["name"] == "Srijan Saha"
+
+
+def test_state_is_split_from_the_city_and_a_city_is_never_left_in_the_state():
+    from didac_app.places import tidy
+
+    assert tidy("Bangalore Karnataka") == ("Bangalore", "Karnataka", "")
+    assert tidy("Bengaluru \nKarnataka") == ("Bengaluru", "Karnataka", "")
+    assert tidy("Mumbai, Maharashtra") == ("Mumbai", "Maharashtra", "")
+    assert tidy("Gautam Buddha Nagar", "U.P.") == ("Gautam Buddha Nagar", "Uttar Pradesh", "")
+    assert tidy("", "Bengaluru") == ("Bengaluru", "", "")
+    assert tidy("Bengaluru", "Bengaluru Karnataka") == ("Bengaluru", "Karnataka", "")
+    assert tidy("Hyderabad", "Telengana") == ("Hyderabad", "Telangana", "")
+    assert tidy("Dhar - Indore") == ("Dhar - Indore", "", "")  # two cities stay as written
+    assert tidy("Old Goa") == ("Old Goa", "", "")  # not a state at the end
+    assert tidy("Delhi") == ("Delhi", "Delhi", "")
+
+
+def test_a_scanned_lead_gets_its_city_and_state_apart():
+    doc = flows.lead_fields({"name": "Madhu", "city": "Bengaluru\nKarnataka"})
+    assert (doc["fields"]["city"], doc["fields"]["state"]) == ("Bengaluru", "Karnataka")
+
+
+def test_form_fields_products_and_demo_are_kept_in_their_own_fields():
+    listed = ["SIA", "TiQer", "PlayLab", "Xperimentor", "Math Max"]
+    doc = flows.lead_fields({"name": "Asha Rao", "demo": "Yes, 2nd week of December", "workshop": "Yes", "students": "450", "remarks": "likes tiqer and robotics kits",
+                             "products": ["Tiqer", "math max"], "other_products": ["Robotics kit"]}, products=listed)["fields"]
+    assert doc["products"] == "TiQer; Math Max" and doc["demo_interest"] == "Yes, 2nd week of December" and doc["workshop"] == "Yes" and doc["students"] == "450"
+    assert doc["notes"] == "Remarks: likes tiqer and robotics kits; Other products: Robotics kit" and "interest" not in doc
+
+
+def test_the_product_list_is_seeded_and_admin_managed(store):
+    assert [row["label"] for row in store.list_products()] == ["SIA", "TiQer", "PlayLab", "Xperimentor", "Math Max"]
+    assert store.add_product("Robotics Kit") and not store.add_product("robotics kit".title()) and not store.add_product("SIA")
+    row = store.list_products()[-1]
+    assert store.rename_product(row["id"], "Robo Kit") and not store.rename_product(row["id"], "SIA")
+    store.delete_product(row["id"])
+    assert len(store.list_products()) == 5
+
+
+def test_a_product_named_in_the_remarks_is_listed_even_when_the_reader_missed_it():
+    doc = flows.lead_fields({"name": "Asha Rao", "remarks": "Wants SIA for grade 8", "products": []}, products=["SIA", "TiQer"])["fields"]
+    assert doc["products"] == "SIA"
