@@ -193,7 +193,7 @@ def register(app, get_store, get_config) -> None:
                 flash(f"That is already lead #{match[0].event_no}. Opened it instead.")
                 return redirect(url_for("lead_detail", lead_id=match[0].id))
             lead.updated_by = g.user["name"]
-            lead.review_reason = NOT_SCANNED if scans else f"possible duplicate of #{match[0].event_no}" if match else ""
+            lead.review_reason = NOT_SCANNED if scans and not typed else f"possible duplicate of #{match[0].event_no}" if match else ""  # typed details make it a lead already, even if the photo cannot be read
             lead = store.create_lead(lead)
             save_photos(store, lead.id, visitor, "visitor")
             save_photos(store, lead.id, scans)

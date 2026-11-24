@@ -111,3 +111,15 @@ def test_a_photo_added_in_the_app_names_whoever_added_it(store, monkeypatch):
     client = app.test_client()
     html = client.post(f"/leads/{lead.id}/photos", data={"csrf": csrf(client), "purpose": "visitor", "photo": (BytesIO(b"x"), "me.jpg", "image/jpeg")}, content_type="multipart/form-data", follow_redirects=True).data.decode()
     assert "Added by Test Admin" in html and "Added by Vijetha" not in html
+
+
+def test_a_lead_with_typed_details_is_not_marked_not_scanned_when_its_photo_cannot_be_read(store, monkeypatch):
+    monkeypatch.setattr(blobstore, "upload", lambda *args, **kwargs: None)
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): {"fields": {}, "check": ["could not read the photos"], "unclear": True})
+    client = app.test_client()
+    photo = lambda name: (BytesIO(b"x"), name, "image/jpeg")
+    saved = client.post("/leads/new", data={"csrf": csrf(client), "name": "Typed Person", "phone": "+919800000031", "scan_photo": photo("blank.jpg")}, content_type="multipart/form-data")
+    lead = store.list_leads()[0]
+    assert "reading=" in saved.headers["Location"] and lead.review_reason == ""
+    client.post(f"/leads/{lead.id}/read", data={"csrf": csrf(client), "twin": "1"})
+    assert store.get_lead(lead.id).review_reason == "" and store.get_lead(lead.id).name == "Typed Person"
