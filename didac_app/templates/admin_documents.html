@@ -11,7 +11,7 @@
     .row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--surf); }
     .row.off { background: var(--head); } .row.drag { box-shadow: 0 6px 16px rgba(42,32,48,.18); } .row.over { box-shadow: inset 0 3px 0 var(--acc); }
     .grip { color: #8d7f97; cursor: grab; display: flex; } .row.drag .grip { color: var(--acc); cursor: grabbing; }
-    .edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; } .edit input.t { height: 32px; width: 190px; } .edit input.link { width: 280px; }
+    .edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; } .edit input.t { height: 32px; width: 190px; } .edit input.link { width: 280px; } .edit input[name=hint] { flex: 1 1 240px; width: auto; }
     .edit label { font-size: 13px; display: inline-flex; gap: 4px; align-items: center; }
     .bro { padding: 12px 14px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
     .bro.off { background: var(--head); } .bro form { margin: 0; }

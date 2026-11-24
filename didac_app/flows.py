@@ -44,6 +44,9 @@ EVENT_PHOTOS, TEAM_BROCHURES = "Send event photos", "Brochures"
 BROCHURE, REQUIREMENT, DEMO, FEEDBACK = "Download brochure", "Share my requirement", "Schedule a demo", "Feedback / voice note"
 ONLINE, OFFLINE = "Online", "Offline"
 DATE_ASK = "Please type the date as DD/MM/YYYY. Example: 05/12/2026"
+AUTO_CONTEXT = "Sent without a menu choice"  # capture_context of a lead saved straight from photos nobody introduced
+PAIR_MINUTES = 10  # a form and its visiting card, sent one after the other, are one lead if they arrive this close together
+FORM_ONLY = ("curriculum", "students", "demo_interest", "workshop")  # answers that are on the printed form and never on a card
 NOT_SCANS = {"note", "choose", "requirement", "demo", "brochure", "feedback", "eventphotos"}  # session flows that are not a document scan
 NO_EVENT_TEAM = "Hi {first}. No event is live right now, so I cannot save leads or photos. Please ask an admin to start the next event."
 NO_PHOTOS = "This channel does not accept photos. Type menu to see what I can do for you."
@@ -369,10 +372,7 @@ class Chat:
             if any(ct.startswith("image/") for _, ct in media):
                 if not self.doc_types:
                     return self.say("No document types are switched on for this event. Please ask an admin.")
-                self.store.put_session(self.number, "choose", "kind", {"photos": []}, keep_existing=True)
-                if self.take_photos(media, text) == 1:  # photos of one batch arrive as parallel messages: only the first asks
-                    self.replies.append(self.ask_kind())
-                return
+                return self.auto_scan(media, text)
             if media:  # a voice note with no menu choice goes to the last lead, like Add a note
                 data = {"lead_id": self.recent_lead_id()}
                 self.store.put_session(self.number, "note", "collect", data)
@@ -562,8 +562,7 @@ class Chat:
             number, count = result["too_many"]
             self.store.put_session(self.number, flow, "photos", {"photos": []})
             return self.say(f"I can see {count} documents in photo {number}. Two at most per photo, please retake with 2 or fewer. Photos cleared, send them again.")
-        data |= {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], []), "photo_ids": result.get("photos", []),
-                 "more": [{"draft": doc["fields"], "check": doc["check"], "original": summary(doc["fields"], []), "photo_ids": doc["photos"]} for doc in result.get("more", [])]}
+        data |= scan_draft(result)
         self.store.put_session(self.number, flow, "confirm", data)
         self.confirm(data)
 
@@ -637,12 +636,16 @@ class Chat:
         self.say(text[:4000])
         self.replies.append(save_choices("Save this lead, edit it, retake the photos, or cancel?" if len(docs) == 1 else "Save these leads, edit them, retake the photos, or cancel?"))
 
-    def doc_lead(self, doc: dict, flow: str = "") -> Lead:
+    def doc_lead(self, doc: dict, flow: str = "", photos: list[dict] | None = None) -> Lead:
+        """The lead for one document; `photos` are the ones it is on, whose links are kept on the lead."""
         lead = Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow,
                     raw_message=doc["original"], review_reason="; ".join(doc["check"]))
         for name, value in doc["draft"].items():
             setattr(lead, name, value)
         normalize_contact_name(lead)
+        if photos is not None:
+            lead.media_urls = "; ".join(photo["url"] for photo in photos)
+            lead.media_local_paths = "; ".join(photo["key"] for photo in photos)
         return lead
 
     def duplicate_note(self, doc: dict) -> str:
@@ -655,14 +658,10 @@ class Chat:
         return f"\n\nAlready saved as {who}. Saving adds any new details to it." if certain else f"\n\nLooks like {who}, which is already saved. Saving keeps this as its own lead marked Check."
 
     def save_scan(self, flow: str, data: dict) -> None:
-        docs, every_photo = scan_docs(data), data["photos"]
-        saved_lines, outcomes = [], []
+        docs, outcomes = scan_docs(data), []
         for doc in docs:
-            lead = self.doc_lead(doc, flow)
-            photos = [every_photo[number - 1] for number in doc.get("photo_ids", []) if 1 <= number <= len(every_photo)] or every_photo  # unknown photo numbers: keep them all
-            lead.media_urls = "; ".join(photo["url"] for photo in photos)
-            lead.media_local_paths = "; ".join(photo["key"] for photo in photos)
-            saved, outcome = self.store_lead(lead, photos, doc["original"])
+            photos = photos_of(doc, data["photos"])
+            saved, outcome = self.store_lead(self.doc_lead(doc, flow, photos), photos, doc["original"])
             if data.get("visitor_photo"):
                 with_visitor = data["visitor_photo"]
                 self.store.add_media(saved.id, with_visitor["url"], with_visitor["ct"], with_visitor["key"], purpose="visitor")
@@ -670,20 +669,75 @@ class Chat:
         self.store.put_session(self.number, flow, "photos", {"photos": []})
         self.store.close_convo(self.number)
         followup.auto_send(self.store, self.config)
-        again = f"Send the next {item_noun(self.doc_types[flow])}, or type menu."
-        if len(docs) == 1:
-            saved, outcome = outcomes[0]
-            label = saved.org or saved.name or saved.phone or "Unnamed lead"
-            if outcome == "created":
-                badge = " It shows a Check badge on the dashboard." if saved.review_reason else ""
-                return self.say(f"Saved as #{saved.event_no}, {label}{f' ({saved.priority} priority)' if saved.priority else ''}.{badge}\n{again}")
-            added = "I added the new details to it." if outcome == "merged" else "There was nothing new to add."
-            return self.say(f"Already saved as #{saved.event_no}, {saved.name or label}. {added}\n{again}")
-        for saved, outcome in outcomes:
-            label = saved.org or saved.name or saved.phone or "Unnamed lead"
-            note = {"created": f" ({saved.priority} priority)" if saved.priority else "", "merged": ", already saved, new details added", "unchanged": ", already saved"}[outcome]
-            saved_lines.append(f"- #{saved.event_no}, {label}{note}")
-        self.say(f"Saved {len(docs)} documents:\n" + "\n".join(saved_lines) + f"\n{again}")
+        self.say(saved_text(outcomes) + f"\nSend the next {item_noun(self.doc_types[flow])}, or type menu.")
+
+    def auto_scan(self, media: list[tuple[str, str]], caption: str = "") -> None:
+        """Photos sent with no menu choice are read and saved with no questions, so a venue with no internet can just queue them to the number.
+        Nothing is lost when reading fails: the lead is kept with its photos as Not scanned."""
+        flow = next((row["key"] for row in self.doc_types.values() if row["reader"] == "form"), next(iter(self.doc_types), ""))
+        photos = []
+        for url, content_type in media:
+            if content_type.startswith("image/"):
+                key, _ = fetch_media(self.config, url, content_type, self.number)
+                photos.append({"key": key, "url": url, "ct": content_type, "caption": caption})
+        result = read_documents(self.config, photos, self.doc_types[flow]["reader"], [row["label"] for row in self.store.list_products()])
+        if result.get("failed"):
+            self.store.record_read_failure(result["reason"])
+        else:
+            self.store.record_read_ok(result.get("ms", 0))
+        if result.get("unclear") and (earlier := max(self.recent_autos(), key=lambda item: item.id, default=None)):  # nothing readable: the blank back of the card just sent
+            self.attach_photos(earlier.id, photos, "")
+            self.store.merge_into_lead(earlier.id, {}, {"media_urls": "; ".join(photo["url"] for photo in photos), "media_local_paths": "; ".join(photo["key"] for photo in photos)})
+            self.lead_ids.append(earlier.id)
+            return self.say(f"Added the photo to #{earlier.event_no}, {earlier.org or earlier.name or earlier.phone or 'Unnamed lead'}. Nothing could be read from it.")
+        if result.get("failed") or result.get("unclear"):
+            lead = self.store.create_lead(Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow, review_reason=NOT_SCANNED, capture_context=AUTO_CONTEXT,
+                                              media_urls="; ".join(photo["url"] for photo in photos), media_local_paths="; ".join(photo["key"] for photo in photos)))
+            self.attach_photos(lead.id, photos, "")
+            self.lead_ids.append(lead.id)
+            return self.say(f"Saved as #{lead.event_no}, but I could not read the photo. Open it under Leads, marked \"Not scanned\", to read it again or fill it in.")
+        tag_owner(self.store, result)
+        outcomes = []
+        for doc in scan_docs(scan_draft(result)):
+            doc_photos = photos_of(doc, photos)
+            lead = self.doc_lead(doc, flow, doc_photos)
+            lead.capture_context = AUTO_CONTEXT
+            saved, outcome = self.store_lead(lead, doc_photos, doc["original"])
+            outcomes.append(self.pair_up(saved) if outcome == "created" else (saved, outcome))
+        self.store.close_convo(self.number)
+        followup.auto_send(self.store, self.config)
+        self.say(saved_text(outcomes) + "\nPriority is not set yet.")
+
+    def recent_autos(self, skip_id: int = 0) -> list[Lead]:
+        """The leads this person's photos made in the last few minutes (photos sent one after another belong together).
+        ponytail: scans every live lead, like find_duplicate."""
+        return [item for item in self.store.list_leads() if item.id != skip_id and item.event_id == self.event["id"] and item.staff_number == self.number
+                and item.capture_context == AUTO_CONTEXT and (minutes_since(item.created_at) or 0) <= PAIR_MINUTES]
+
+    def pair_up(self, lead: Lead) -> tuple[Lead, str]:
+        """Join the lead to the one made just before it when they are the same visitor: a form with no contact details and a card with no form answers
+        (either order), or the back of a card (nothing on it that names a person) right after its front. Several possible partners, as when a burst of
+        photos arrives at once, are not guessed at: the lead is marked Check instead. A wrong guess is fixed by hand on the lead page."""
+        def has_contact(item: Lead) -> bool:
+            return bool(item.name or item.phone or item.email)
+        def has_form(item: Lead) -> bool:
+            return any(getattr(item, name) for name in FORM_ONLY)
+        others = self.recent_autos(lead.id)
+        partners = [other for other in others if (has_contact(other) and not has_form(other) and has_form(lead) and not has_contact(lead)) or (has_form(other) and not has_contact(other) and has_contact(lead) and not has_form(lead))]
+        if not partners and not has_contact(lead) and not has_form(lead):  # a back side
+            partners = [max(earlier, key=lambda item: item.id)] if (earlier := [other for other in others if other.id < lead.id]) else []
+        if len(partners) > 1:
+            self.store.update_lead_fields(lead.id, review_reason="; ".join(filter(None, [lead.review_reason, "may go with " + " or ".join(f"#{other.event_no}" for other in partners)])))
+            return self.store.get_lead(lead.id), "created"
+        if not partners:
+            return lead, "created"
+        keep, drop = sorted((partners[0], lead), key=lambda item: item.id)
+        filled = fill_blanks(keep, drop)
+        self.store.merge_into_lead(keep.id, {name: getattr(keep, name) for name in filled},
+                                   {name: getattr(drop, name) for name in ("media_urls", "media_local_paths", "review_reason") if getattr(drop, name)})
+        self.store.absorb_lead(keep.id, drop.id)
+        self.lead_ids = [number for number in self.lead_ids if number != drop.id] + [keep.id]
+        return self.store.get_lead(keep.id), "paired"
 
     def store_lead(self, lead: Lead, photos: list[dict], original_text: str = "") -> tuple[Lead, str]:
         """Create the lead, or merge into the matching one. Outcome is 'created', 'merged' (new details added) or 'unchanged'.
@@ -913,6 +967,37 @@ def lead_for_visitor(store: LeadStore, number: str) -> Lead | None:
     if not lead and phone:
         lead = next((item for item in store.list_leads() if auth.normalize_phone(item.phone) == phone), None)  # ponytail: scans every live lead, like find_duplicate
     return lead or store.latest_lead_for_number(number)
+
+
+def scan_draft(result: dict) -> dict:
+    """A read result as scan data: the first document's draft, check, original text and photo numbers, and the rest under "more"."""
+    return {"draft": result["fields"], "check": result["check"], "original": summary(result["fields"], []), "photo_ids": result.get("photos", []),
+            "more": [{"draft": doc["fields"], "check": doc["check"], "original": summary(doc["fields"], []), "photo_ids": doc["photos"]} for doc in result.get("more", [])]}
+
+
+def photos_of(doc: dict, every_photo: list[dict]) -> list[dict]:
+    """The photos a document is on; photo numbers the reader did not give mean all of them."""
+    return [every_photo[number - 1] for number in doc.get("photo_ids", []) if 1 <= number <= len(every_photo)] or every_photo
+
+
+def saved_text(outcomes: list[tuple[Lead, str]]) -> str:
+    """What staff are told after a save: one line for one lead, a list for several. Outcome is created, merged, unchanged or paired."""
+    if len(outcomes) == 1:
+        saved, outcome = outcomes[0]
+        label = saved.org or saved.name or saved.phone or "Unnamed lead"
+        if outcome == "created":
+            badge = " It shows a Check badge on the dashboard." if saved.review_reason else ""
+            return f"Saved as #{saved.event_no}, {label}{f' ({saved.priority} priority)' if saved.priority else ''}.{badge}"
+        if outcome == "paired":
+            return f"Added to #{saved.event_no}, {label}: joined with the photo you sent just before."
+        added = "I added the new details to it." if outcome == "merged" else "There was nothing new to add."
+        return f"Already saved as #{saved.event_no}, {saved.name or label}. {added}"
+    lines = []
+    for saved, outcome in outcomes:
+        label = saved.org or saved.name or saved.phone or "Unnamed lead"
+        note = {"created": f" ({saved.priority} priority)" if saved.priority else "", "merged": ", already saved, new details added", "unchanged": ", already saved", "paired": ", joined to the earlier photo"}[outcome]
+        lines.append(f"- #{saved.event_no}, {label}{note}")
+    return f"Saved {len(outcomes)} documents:\n" + "\n".join(lines)
 
 
 def scan_docs(data: dict) -> list[dict]:

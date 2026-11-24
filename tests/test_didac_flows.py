@@ -247,15 +247,65 @@ def test_repeat_scan_merges_and_name_org_match_is_flagged(store, sent, fake_io):
     assert store.list_leads()[0].review_reason.startswith("possible duplicate of #")
 
 
-def test_photo_without_a_choice_asks_once_then_follows_the_tap(store, sent, fake_io):
+def test_a_photo_with_no_menu_choice_is_read_and_saved_with_no_questions(store, sent, fake_io):
     say(STAFF, "", photo("one"))
-    say(STAFF, "", photo("two"))
-    asks = [m for m in sent if m[1].startswith("What kind of document")]
-    assert len(asks) == 1 and [label for label, _ in asks[0][2]] == ["Contact form", "Other docs", "Event badge / QR"]
-    say(STAFF, "Contact form")
-    assert "Got 2 photo(s)" in last(sent)[0]
-    say(STAFF, "DONE")
-    assert fake_io["calls"] == [(2, "form")]
+    lead = store.list_leads()[0]
+    assert (lead.name, lead.capture_context, lead.priority, lead.captured_by) == ("Asha Rao", flows.AUTO_CONTEXT, "", "Test Admin")
+    assert fake_io["calls"] == [(1, "form")] and [m for m in sent if "kind of document" in m[1]] == []
+    assert last(sent)[0].startswith(f"Saved as #{lead.event_no}, Sunrise School") and "Priority is not set yet." in last(sent)[0]
+    assert [row["local_path"] for row in store.list_media(lead.id)] == ["k/one"] and store.get_session(STAFF) is None
+
+
+def test_a_photo_that_cannot_be_read_is_kept_as_not_scanned(store, sent, fake_io):
+    fake_io["result"] = {"fields": {}, "check": ["could not read the photos"], "failed": "error", "reason": "boom"}
+    say(STAFF, "", photo("blur"))
+    lead = store.list_leads()[0]
+    assert lead.review_reason == flows.NOT_SCANNED and [row["local_path"] for row in store.list_media(lead.id)] == ["k/blur"]
+    assert "could not read the photo" in last(sent)[0] and "Not scanned" in last(sent)[0]
+
+
+FORM_ANSWERS = {"fields": {"curriculum": "CBSE", "students": "450", "demo_interest": "At school, December", "workshop": "Yes"}, "check": []}
+CARD_ONLY = {"fields": {"name": "Ravi Kumar", "org": "Test School", "phone": "9845022222", "email": "ravi@test.edu"}, "check": []}
+
+
+def test_a_form_and_its_card_queued_one_after_the_other_become_one_lead(store, sent, fake_io):
+    for order, name in ((0, "a"), (1, "b")):  # form first, then card; and the other way round
+        first, second = (FORM_ANSWERS, CARD_ONLY) if order == 0 else (CARD_ONLY, FORM_ANSWERS)
+        fake_io["result"] = first
+        say(STAFF, "", photo(f"{name}1"))
+        fake_io["result"] = second
+        say(STAFF, "", photo(f"{name}2"))
+        live = store.list_leads()
+        assert len(live) == 1 and (live[0].name, live[0].curriculum, live[0].students, live[0].demo_interest) == ("Ravi Kumar", "CBSE", "450", "At school, December")
+        assert sorted(row["local_path"] for row in store.list_media(live[0].id)) == [f"k/{name}1", f"k/{name}2"]
+        assert last(sent)[0].startswith(f"Added to #{live[0].event_no}") and "joined with the photo you sent just before" in last(sent)[0]
+        store.update_lead_fields(live[0].id, deleted_at="2026-01-01")  # clear the stage for the second order
+
+
+def test_the_back_of_a_card_joins_its_front_but_the_next_visitor_does_not(store, sent, fake_io):
+    fake_io["result"] = CARD_ONLY
+    say(STAFF, "", photo("front"))
+    fake_io["result"] = {"fields": {"website": "www.test.edu", "city": "Pune"}, "check": []}  # the back: nothing that names a person
+    say(STAFF, "", photo("back"))
+    fake_io["result"] = {"fields": {}, "check": ["could not read the photos"], "unclear": True}  # a blank second back
+    say(STAFF, "", photo("blank"))
+    (lead,) = store.list_leads()
+    assert (lead.name, lead.website, lead.city) == ("Ravi Kumar", "www.test.edu", "Pune") and len(store.list_media(lead.id)) == 3
+    assert "Added the photo to #" in last(sent)[0]
+    fake_io["result"] = {"fields": {"name": "Next Person", "phone": "9845033333"}, "check": []}
+    say(STAFF, "", photo("next"))
+    assert len(store.list_leads()) == 2
+
+
+def test_two_forms_or_two_cards_are_never_joined_and_a_crowd_is_flagged(store, sent, fake_io):
+    fake_io["result"] = FORM_ANSWERS
+    say(STAFF, "", photo("f1"))
+    say(STAFF, "", photo("f2"))
+    assert len(store.list_leads()) == 2  # a form with no contact details does not pair with another form
+    fake_io["result"] = CARD_ONLY
+    say(STAFF, "", photo("c1"))  # two forms are waiting for a card: not guessed
+    cards = [lead for lead in store.list_leads() if lead.name == "Ravi Kumar"]
+    assert len(store.list_leads()) == 3 and cards[0].review_reason.startswith("may go with #")
 
 
 def test_photo_limit_done_without_photos_and_menu_discards(store, sent):

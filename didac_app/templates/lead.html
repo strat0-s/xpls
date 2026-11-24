@@ -8,6 +8,7 @@
     .admin-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .admin-actions form { margin: 0; }
     .notice { padding: 10px 14px; border-radius: 8px; background: var(--warn); color: var(--warn-ink); border: 1px solid var(--warn-line); line-height: 1.5; }
     .cols { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .cols.one { grid-template-columns: minmax(0, 1fr); }
     @media (max-width: 900px) { .cols { grid-template-columns: minmax(0, 1fr); } }
     .main { display: flex; flex-direction: column; gap: 12px; }
     fieldset.sec { margin: 0; padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--surf); min-width: 0; }
@@ -52,12 +53,14 @@
     .strip img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .upload { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px dashed var(--line); border-radius: 8px; }
     .upload input[type=file] { width: 100%; font-size: 13px; }
+    .pick { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .pick input[type=file] { flex: 1 1 200px; min-width: 0; width: auto; } .pick .cam { cursor: pointer; flex: none; }
     .quote { line-height: 1.6; padding: 9px 12px; border-radius: 6px; background: var(--head); white-space: pre-wrap; }
     .quote.raw { border-left: 3px solid var(--line); }
     .hint { font-size: 12px; color: var(--mut); }
     details summary { cursor: pointer; font-size: 13px; color: var(--acc-text); font-weight: 600; }
 {% endblock %}
 {% block content %}
+{% macro pick(id, name, many=False, required=False, cls='') %}<div class="pick"><input{% if cls %} class="{{ cls }}"{% endif %} type="file" id="{{ id }}" name="{{ name }}" accept="image/*"{{ ' multiple' if many }}{{ ' required' if required }}><label class="btn ghost cam">Take photo<input type="file" accept="image/*" capture="environment" data-into="{{ id }}" hidden></label></div>{% endmacro %}
 <div class="head">
   <div>
     <a href="{{ url_for('gallery') }}" style="text-decoration:none">&larr; All leads</a>
@@ -94,13 +97,13 @@
   <form method="post" action="{{ url_for('lead_resolve', lead_id=lead.id) }}" style="margin-top:10px"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('lead_detail', lead_id=lead.id) }}"><button class="btn ghost">Mark as checked</button></form></div>
 {% endif %}
 
-<div class="cols">
+<div class="cols{{ ' one' if new }}">
   <form class="main" method="post"{% if new %} action="{{ url_for('lead_new', event=request.args.get('event')) }}" enctype="multipart/form-data" data-shrink{% endif %}>
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
     {% if new %}<fieldset class="sec"><legend>Photos</legend><div class="grid2">
-      <div class="wide"><label class="f" for="f-scan">Contact form or card (read to fill the details)</label><input class="t" id="f-scan" type="file" name="scan_photo" accept="image/*" multiple>
+      <div class="wide"><label class="f" for="f-scan">Contact form or card (read to fill the details)</label>{{ pick('f-scan', 'scan_photo', many=True, cls='t') }}
         </div>
-      <div class="wide"><label class="f" for="f-visitor">Photo with the visitor</label><input class="t" id="f-visitor" type="file" name="visitor_photo" accept="image/*">
+      <div class="wide"><label class="f" for="f-visitor">Photo with the visitor</label>{{ pick('f-visitor', 'visitor_photo', cls='t') }}
         </div>
     </div></fieldset>{% endif %}
     {% macro field(name, label, width) %}<div class="{{ 'wide' if width == 2 }}"><label class="f" for="f-{{ name }}" title="{{ label }}">{{ label }}</label><input class="t" id="f-{{ name }}" name="{{ name }}" value="{{ lead[name] }}"{% if name == 'email' %} type="email"{% elif name == 'pincode' %} inputmode="numeric" pattern="[0-9]{6}" maxlength="6"{% elif name == 'phone' %} type="tel"{% elif name == 'students' %} inputmode="numeric"{% elif name == 'workshop' %} list="yn"{% endif %}></div>{% endmacro %}
@@ -161,14 +164,14 @@
       <form class="upload" method="post" action="{{ url_for('lead_photos', lead_id=lead.id) }}" enctype="multipart/form-data" data-upload="Reading... a few seconds">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="purpose" value="scan">
         <b>Add photos to read</b><span class="hint">Only blank details are filled in.</span>
-        <input type="file" name="photo" accept="image/*" multiple required><button class="btn ghost">Add and read</button>
+        {{ pick('up-scan', 'photo', many=True, required=True) }}<button class="btn ghost">Add and read</button>
       </form>
       <h3 style="margin-top:6px">With the visitor</h3>
       {% for it in withv %}<figure style="margin:0"><img src="/media/{{ it.id }}" alt="Photo with the visitor" style="max-width:100%;max-height:360px;border-radius:6px;display:block" loading="lazy"><figcaption class="hint">Added by {{ it.by }} · {{ it.created_at|local_time('%d %b, %H:%M') }}</figcaption></figure>{% endfor %}
       <form class="upload" method="post" action="{{ url_for('lead_photos', lead_id=lead.id) }}" enctype="multipart/form-data" data-upload="Adding...">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="purpose" value="visitor">
         <b>{{ 'Add another photo' if withv else 'Add a photo with the visitor' }}</b>
-        <input type="file" name="photo" accept="image/*" required><button class="btn ghost">Add photo</button>
+        {{ pick('up-visitor', 'photo', required=True) }}<button class="btn ghost">Add photo</button>
       </form>
     </section>
     <section class="panel" role="tabpanel">
@@ -259,6 +262,16 @@
       form.addEventListener('input', function () { bar.hidden = false; }); form.addEventListener('change', function () { bar.hidden = false; });
       cancel.addEventListener('click', function () { form.reset(); bar.hidden = true; });
     })();
+
+    // Take photo: the camera's picture is added to the file box beside it (kept with what is already chosen when the box takes several).
+    document.querySelectorAll('input[data-into]').forEach(function (cam) {
+      cam.addEventListener('change', function () {
+        var main = document.getElementById(cam.dataset.into), dt = new DataTransfer();
+        if (main.multiple) Array.prototype.forEach.call(main.files, function (f) { dt.items.add(f); });
+        Array.prototype.forEach.call(cam.files, function (f) { dt.items.add(f); });
+        main.files = dt.files; cam.value = '';
+      });
+    });
 
     // The add-lead form carries several fields and photos: shrink the photos in place, then submit the form as usual.
     document.querySelectorAll('form[data-shrink]').forEach(function (form) {
