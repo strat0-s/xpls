@@ -83,6 +83,24 @@ def vision_read(images: list[tuple[str, str]], kind: str = "document", products:
     return response.output_text
 
 
+READER_HINTS = {"form": "a printed filled-in form, possibly with a visiting card pinned or stapled to it", "badge": "an event badge or ID card, usually with a QR code",
+                "document": "a visiting card, flyer, brochure or any other document"}
+
+
+def vision_classify(image: tuple[str, str], options: list[dict]) -> str:
+    """Which document type a photo is: the key of the one that fits best, "none" when none fits, "" when the reading service is off.
+    options = document-type rows (key, label, hint, reader). Raises when the call fails."""
+    if not openai_enabled():
+        return ""
+    from openai import OpenAI
+
+    lines = "\n".join(f"{row['key']}: {row['label']} ({READER_HINTS.get(row['reader'], 'a document')}{'; ' + row['hint'] if row['hint'] else ''})" for row in options)
+    text = f"What kind of document is in this photo? Answer with exactly one key from this list, or none if it fits none of them. Answer with the key only.\n{lines}"
+    content = [{"type": "input_text", "text": text}, {"type": "input_image", "image_url": image_data_url(*image)}]
+    client = OpenAI(timeout=float(os.getenv("OPENAI_CLASSIFY_TIMEOUT", "20")), max_retries=0)
+    return client.responses.create(model=os.getenv("OPENAI_VISION_MODEL", "gpt-5-mini"), input=[{"role": "user", "content": content}], reasoning={"effort": "minimal"}).output_text.strip().lower()
+
+
 REQUIREMENT_PROMPT = """A visitor at an education event typed ONE WhatsApp message giving their details and what they need. Return a single JSON object with the keys
 name, email, org, organisation_type, city, state, interest. interest is what they are looking for, in their own words. organisation_type must be exactly one of
 SCHOOL, SCHOOL_CHAIN, CSR, NGO, GOVERNMENT, DISTRIBUTOR, INSTITUTION, VENDOR, OTHER, or empty when unclear. Use empty strings for anything not written. Do not guess."""

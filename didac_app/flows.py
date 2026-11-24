@@ -22,7 +22,7 @@ from didac_app.config import DidacConfig
 from didac_app.dedupe import FILLABLE, fill_blanks, find_duplicate
 from didac_app.media import append_qr_details, extract_media_text, save_media, suffix_for
 from didac_app.models import NOT_SCANNED, Lead
-from didac_app.openai_services import classify_failure, lead_dict_to_text, parse_contacts, parse_json, requirement_read, vision_read
+from didac_app.openai_services import classify_failure, lead_dict_to_text, parse_contacts, parse_json, requirement_read, vision_classify, vision_read
 from didac_app.places import tidy
 from didac_app.products import match_products
 from didac_app.parser import FIELD_ALIASES, extract_schools_count, normalize_contact_name, normalize_key, parse_message, parse_structured_lead
@@ -190,6 +190,23 @@ def read_documents(config: DidacConfig, photos: list[dict], kind: str, products:
         number, count = per_photo.most_common(1)[0]
         result["too_many"] = (number, count)
     return result
+
+
+def classify_document(config: DidacConfig, photo: dict, types: list[dict]) -> str:
+    """Which of the event's document types this photo is: its key, "none" when none fits, "" when it could not be told (never raises)."""
+    path = ""
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix_for(photo["ct"], photo["key"])) as tmp:
+            tmp.write(blobstore.download(config, photo["key"]))
+        path = tmp.name
+        answer = vision_classify((path, photo["ct"]), types)
+        return answer if answer in {row["key"] for row in types} | {"none"} else ""
+    except Exception:
+        logger.exception("Telling what kind of document this is failed")
+        return ""
+    finally:
+        if path:
+            Path(path).unlink(missing_ok=True)
 
 
 def merge_org_backs(docs: list[dict]) -> list[dict]:
@@ -674,22 +691,20 @@ class Chat:
     def auto_scan(self, media: list[tuple[str, str]], caption: str = "") -> None:
         """Photos sent with no menu choice are read and saved with no questions, so a venue with no internet can just queue them to the number.
         Nothing is lost when reading fails: the lead is kept with its photos as Not scanned."""
-        flow = next((row["key"] for row in self.doc_types.values() if row["reader"] == "form"), next(iter(self.doc_types), ""))
+        flow = next((row["key"] for row in self.doc_types.values() if row["reader"] == "form"), next(iter(self.doc_types), ""))  # when the kind cannot be told: the contact form
         photos = []
         for url, content_type in media:
             if content_type.startswith("image/"):
                 key, _ = fetch_media(self.config, url, content_type, self.number)
                 photos.append({"key": key, "url": url, "ct": content_type, "caption": caption})
+        if len(self.doc_types) > 1:  # the first photo says what kind of document it is: a badge, a form with its card, or something else
+            kind = classify_document(self.config, photos[0], list(self.doc_types.values()))
+            flow = kind if kind in self.doc_types else "other" if kind == "none" and "other" in self.doc_types else flow
         result = read_documents(self.config, photos, self.doc_types[flow]["reader"], [row["label"] for row in self.store.list_products()])
         if result.get("failed"):
             self.store.record_read_failure(result["reason"])
         else:
             self.store.record_read_ok(result.get("ms", 0))
-        if result.get("unclear") and (earlier := max(self.recent_autos(), key=lambda item: item.id, default=None)):  # nothing readable: the blank back of the card just sent
-            self.attach_photos(earlier.id, photos, "")
-            self.store.merge_into_lead(earlier.id, {}, {"media_urls": "; ".join(photo["url"] for photo in photos), "media_local_paths": "; ".join(photo["key"] for photo in photos)})
-            self.lead_ids.append(earlier.id)
-            return self.say(f"Added the photo to #{earlier.event_no}, {earlier.org or earlier.name or earlier.phone or 'Unnamed lead'}. Nothing could be read from it.")
         if result.get("failed") or result.get("unclear"):
             lead = self.store.create_lead(Lead(from_number=self.number, staff_number=self.number, captured_by=self.user["name"], doc_type=flow, review_reason=NOT_SCANNED, capture_context=AUTO_CONTEXT,
                                               media_urls="; ".join(photo["url"] for photo in photos), media_local_paths="; ".join(photo["key"] for photo in photos)))

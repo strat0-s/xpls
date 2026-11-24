@@ -39,6 +39,7 @@ def isolated_store(store, monkeypatch):
 def no_reading_service(monkeypatch):
     """A visitor's details are read without the model unless a test supplies one."""
     monkeypatch.setattr("didac_app.flows.requirement_read", lambda text: "")
+    monkeypatch.setattr("didac_app.flows.classify_document", lambda config, photo, types: "")  # the kind of a photo is not asked of the model unless a test says so
 
 
 @pytest.fixture(autouse=True)

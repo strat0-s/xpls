@@ -256,6 +256,23 @@ def test_a_photo_with_no_menu_choice_is_read_and_saved_with_no_questions(store, 
     assert [row["local_path"] for row in store.list_media(lead.id)] == ["k/one"] and store.get_session(STAFF) is None
 
 
+def test_a_blurry_photo_is_its_own_not_scanned_lead_never_attached_to_another(store, sent, fake_io):
+    say(STAFF, "", photo("good"))
+    fake_io["result"] = {"fields": {}, "check": ["could not read the photos"], "unclear": True}
+    say(STAFF, "", photo("blur"))
+    leads = store.list_leads()
+    assert len(leads) == 2 and sorted(lead.review_reason == flows.NOT_SCANNED for lead in leads) == [False, True]
+
+
+def test_the_kind_of_a_photo_picks_the_reader_and_the_document_type(store, sent, fake_io, monkeypatch):
+    for answer, reader, doc_type in (("badge", "badge", "badge"), ("none", "document", "other"), ("form", "form", "form"), ("", "form", "form")):
+        fake_io["calls"].clear()
+        monkeypatch.setattr(flows, "classify_document", lambda config, photo, types, answer=answer: answer)  # "" = the model could not tell
+        fake_io["result"] = {"fields": {"name": f"Person {answer or 'unknown'}", "phone": "98450" + str(abs(hash(answer)))[:5]}, "check": []}
+        say(STAFF, "", photo(f"x{answer}"))
+        assert fake_io["calls"] == [(1, reader)] and store.list_leads()[0].doc_type == doc_type
+
+
 def test_a_photo_that_cannot_be_read_is_kept_as_not_scanned(store, sent, fake_io):
     fake_io["result"] = {"fields": {}, "check": ["could not read the photos"], "failed": "error", "reason": "boom"}
     say(STAFF, "", photo("blur"))
@@ -287,11 +304,8 @@ def test_the_back_of_a_card_joins_its_front_but_the_next_visitor_does_not(store,
     say(STAFF, "", photo("front"))
     fake_io["result"] = {"fields": {"website": "www.test.edu", "city": "Pune"}, "check": []}  # the back: nothing that names a person
     say(STAFF, "", photo("back"))
-    fake_io["result"] = {"fields": {}, "check": ["could not read the photos"], "unclear": True}  # a blank second back
-    say(STAFF, "", photo("blank"))
     (lead,) = store.list_leads()
-    assert (lead.name, lead.website, lead.city) == ("Ravi Kumar", "www.test.edu", "Pune") and len(store.list_media(lead.id)) == 3
-    assert "Added the photo to #" in last(sent)[0]
+    assert (lead.name, lead.website, lead.city) == ("Ravi Kumar", "www.test.edu", "Pune") and len(store.list_media(lead.id)) == 2
     fake_io["result"] = {"fields": {"name": "Next Person", "phone": "9845033333"}, "check": []}
     say(STAFF, "", photo("next"))
     assert len(store.list_leads()) == 2
@@ -884,3 +898,17 @@ def test_the_product_list_is_seeded_and_admin_managed(store):
 def test_a_product_named_in_the_remarks_is_listed_even_when_the_reader_missed_it():
     doc = flows.lead_fields({"name": "Asha Rao", "remarks": "Wants SIA for grade 8", "products": []}, products=["SIA", "TiQer"])["fields"]
     assert doc["products"] == "SIA"
+
+
+REAL_CLASSIFY = flows.classify_document  # conftest swaps the name for every test; this keeps the real one
+
+
+def test_classify_document_returns_only_a_known_key_and_never_raises(monkeypatch):
+    types = [{"key": "form", "label": "Contact form", "hint": "", "reader": "form"}, {"key": "badge", "label": "Badge", "hint": "", "reader": "badge"}]
+    monkeypatch.setattr(flows.blobstore, "download", lambda config, key: b"x")
+    photo_ = {"key": "k/a.jpg", "ct": "image/jpeg"}
+    for answer, expected in (("badge", "badge"), ("none", "none"), ("a brochure", "")):
+        monkeypatch.setattr(flows, "vision_classify", lambda image, options, answer=answer: answer)
+        assert REAL_CLASSIFY(None, photo_, types) == expected
+    monkeypatch.setattr(flows, "vision_classify", lambda image, options: (_ for _ in ()).throw(RuntimeError("down")))
+    assert REAL_CLASSIFY(None, photo_, types) == ""
