@@ -158,7 +158,7 @@ def register(app, get_store, get_config) -> None:
             cards = [card for card in cards if card["type"] == tab]
         page = paginate(cards, request.args.get("page", 1, type=int), request.args.get("per", 10, type=int))
         return render_template("gallery.html", pg=page, tabs=tabs, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, check=check, reply_only=reply_only, replies_waiting=replies_waiting, priorities=PRIORITIES,
-                               events=list(events.values()), event_id=event_id, needs_check=sum(1 for lead in leads if lead.review_reason))
+                               events=list(events.values()), event_id=event_id, needs_check=sum(1 for lead in leads if lead.review_reason), reading=request.args.get("reading", type=int))
 
     @app.route("/leads/<int:lead_id>", methods=["GET", "POST"])
     def lead_detail(lead_id: int):
@@ -193,20 +193,13 @@ def register(app, get_store, get_config) -> None:
                 flash(f"That is already lead #{match[0].event_no}. Opened it instead.")
                 return redirect(url_for("lead_detail", lead_id=match[0].id))
             lead.updated_by = g.user["name"]
-            lead.review_reason = f"possible duplicate of #{match[0].event_no}" if match else ""
+            lead.review_reason = NOT_SCANNED if scans else f"possible duplicate of #{match[0].event_no}" if match else ""
             lead = store.create_lead(lead)
             save_photos(store, lead.id, visitor, "visitor")
-            if scans:
-                save_photos(store, lead.id, scans)
-                read_lead_photos(store, lead)  # fills only what is blank, so typed details win
-                lead = store.get_lead(lead.id)
-                if (twin := find_duplicate(store, lead, lead.id)) and not lead.review_reason.startswith("possible duplicate"):
-                    reason = f"possible duplicate of #{twin[0].event_no}"
-                    store.update_lead_fields(lead.id, review_reason="; ".join(filter(None, (lead.review_reason, reason))))
-                    flash(f"This looks like lead #{twin[0].event_no}. It is saved as its own lead and marked Check.")
-            else:
-                flash("Lead added.")
-            return redirect(url_for("lead_detail", lead_id=lead.id))
+            save_photos(store, lead.id, scans)
+            flash("Lead added. Reading the photos..." if scans else "Lead added.")
+            # The read takes about 30s, so it runs from the leads page in its own request rather than holding this one past the platform limit.
+            return redirect(url_for("gallery", event=lead.event_id or None, reading=lead.id if scans else None))
         return render_lead(store, lead, new=True)
 
     def lead_form_values(store, lead) -> dict:
@@ -275,7 +268,12 @@ def register(app, get_store, get_config) -> None:
 
     @app.post("/leads/<int:lead_id>/read")
     def lead_read(lead_id: int):
-        read_lead_photos(get_store(), get_store().get_lead(lead_id) or abort(404))
+        store = get_store()
+        read_lead_photos(store, store.get_lead(lead_id) or abort(404))
+        lead = store.get_lead(lead_id)
+        if request.form.get("twin") and (twin := find_duplicate(store, lead, lead_id)):
+            store.update_lead_fields(lead_id, review_reason="; ".join(filter(None, (lead.review_reason, f"possible duplicate of #{twin[0].event_no}"))))
+            flash(f"This looks like lead #{twin[0].event_no}. It is saved as its own lead and marked Check.")
         return redirect(url_for("lead_detail", lead_id=lead_id))
 
     @app.post("/leads/<int:lead_id>/photos")
@@ -423,7 +421,11 @@ def register(app, get_store, get_config) -> None:
         event_id = chosen_event_id(store, {e["id"]: e for e in store.list_events()}, request.args)
         event = store.get_event(event_id) if event_id else None
         name = re.sub(r"[^a-z0-9]+", "-", (event["name"] if event else "all-events").lower()).strip("-")
-        return Response(store.export_everything(event_id), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        leads = store.list_leads("event_id = %s", (event_id,)) if event_id else store.list_leads()
+        members = members_by_phone(store)
+        keys = sorted({row["local_path"] for row in store.list_media() if row["local_path"] and row["lead_id"] in {lead.id for lead in leads}})
+        links = blobstore.signed_urls(get_config(), keys, EXPORT_LINK_DAYS * 86400) if keys else {}
+        return Response(store.export_everything(event_id, links, {lead.id: lead_chats(store, lead, members) for lead in leads}), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         headers={"Content-Disposition": f'attachment; filename="{name}-everything-{datetime.now(IST).date().isoformat()}.xlsx"'})
 
     @app.post("/team/<int:user_id>/active")
@@ -470,6 +472,7 @@ def register(app, get_store, get_config) -> None:
         return redirect(url_for("team"))
 
 
+EXPORT_LINK_DAYS = 90  # how long the photo links in the everything export keep working
 EXPORT_FILTERS = ("from", "to", "by", "type", "event", "doc", "skip")
 
 

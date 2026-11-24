@@ -107,7 +107,8 @@ def test_date_filter_uses_india_time(store):
     assert "<b>0</b> leads in the file" in client.get("/export?to=2026-11-01").data.decode()
 
 
-def test_export_everything_has_every_field_of_the_events_leads_with_notes_and_media(store):
+def test_export_everything_has_every_field_of_the_events_leads_with_notes_and_media(store, monkeypatch):
+    monkeypatch.setattr("didac_app.blobstore.signed_urls", lambda config, keys, expires: {key: f"https://bucket/signed/{key}" for key in keys})
     other = store.create_event("Other Expo")
     mine = make(store, org="Sunrise School", name="Asha", text_notes="Call Monday", lead_owner="Ravi")
     store.create_lead(Lead(from_number="x", org="Elsewhere", event_id=other))
@@ -123,10 +124,11 @@ def test_export_everything_has_every_field_of_the_events_leads_with_notes_and_me
     assert head[:2] == ("event", "id") and {"text_notes", "lead_owner", "event_no", "raw_message", "created_at"} <= set(head) and len(leads) == 2
     row = dict(zip(head, leads[1]))
     assert (row["org"], row["text_notes"], row["lead_owner"], row["event"]) == ("Sunrise School", "Call Monday", "Ravi", store.live_event()["name"])
-    assert [r[0] for r in book["Feedback"].iter_rows(values_only=True)][0] == "id" and "Loved the demo" in [c for r in book["Feedback"].iter_rows(values_only=True) for c in r]
-    assert "k/1.jpg" in [c for r in book["Media"].iter_rows(values_only=True) for c in r]
+    assert "Loved the demo" in [c for r in book["Notes"].iter_rows(values_only=True) for c in r]
+    assert "https://bucket/signed/k/1.jpg" in [c for r in book["Photos and voice notes"].iter_rows(values_only=True) for c in r] and row["document_photos"] == "https://bucket/signed/k/1.jpg"
+    assert {"WhatsApp chats", "Follow-ups"} <= set(book.sheetnames)
     assert len(list(load_workbook(io.BytesIO(client.get("/export/everything.xlsx?event=all").data))["Leads"].iter_rows())) == 3
-    assert "Download everything" in client.get("/export").data.decode()
+    assert "Complete export" in client.get("/export").data.decode()
 
 
 def test_export_needs_login(anon_client):

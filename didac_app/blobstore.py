@@ -45,6 +45,16 @@ def signed_url(config: DidacConfig, key: str, expires_in: int = 3600) -> str:
     return f"{_base(config)}{response.json()['signedURL']}"
 
 
+def signed_urls(config: DidacConfig, keys: list[str], expires_in: int) -> dict[str, str]:
+    """Links that open without a login, for many files in one call: {key: url}. A file the bucket does not have is left out."""
+    links = {}
+    for start in range(0, len(keys), 200):
+        response = requests.post(f"{_base(config)}/object/sign/{config.supabase_bucket}", headers=_headers(config), json={"expiresIn": expires_in, "paths": keys[start:start + 200]}, timeout=30)
+        response.raise_for_status()
+        links.update({row["path"]: f"{_base(config)}{row['signedURL']}" for row in response.json() if row.get("signedURL")})
+    return links
+
+
 def download(config: DidacConfig, key: str) -> bytes:
     response = requests.get(f"{_base(config)}/object/{config.supabase_bucket}/{quote(key)}", headers=_headers(config), timeout=30)
     response.raise_for_status()

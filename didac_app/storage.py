@@ -799,24 +799,47 @@ class LeadStore:
         wb.save(output_path)
         return output_path
 
-    def export_everything(self, event_id: int | None = None) -> bytes:
-        """Every stored field of the event's leads (all events when None) with their notes, feedback and media, as one workbook. Not the Orbit layout."""
+    def export_everything(self, event_id: int | None = None, links: dict[str, str] | None = None, chats: dict[int, list[dict]] | None = None) -> bytes:
+        """Every stored field of the event's leads (all events when None) as one workbook, not the Orbit layout: the leads with links to their
+        photos, then the photos, notes, WhatsApp chats and follow-ups. `links` maps a stored file to a link that opens without a login."""
+        links, chats = links or {}, chats or {}
         names = {event["id"]: event["name"] for event in self.list_events()}
         leads = list(reversed(self.list_leads("event_id = %s", (event_id,)) if event_id else self.list_leads()))
-        ids = {lead.id for lead in leads}
+        by_id = {lead.id: lead for lead in leads}
+        media = [row for row in reversed(self.list_media()) if row["lead_id"] in by_id]
+        link = lambda row: links.get(row["local_path"], "")
         wb = Workbook()
         ws = wb.active
         ws.title = "Leads"
-        ws.append(["event", *LEAD_FIELDS])
+        ws.append(["event", *LEAD_FIELDS, "document_photos", "visitor_photos"])
         for lead in leads:
             data = asdict(lead)
-            ws.append([names.get(lead.event_id, ""), *(data[name] for name in LEAD_FIELDS)])
-        for title, rows in (("Feedback", self.list_feedback()), ("Media", self.list_media())):
-            rows = [row for row in reversed(rows) if row["lead_id"] in ids]
-            sheet = wb.create_sheet(title)
-            sheet.append(list(rows[0]) if rows else ["lead_id"])
-            for row in rows:
-                sheet.append(list(row.values()))
+            mine = [row for row in media if row["lead_id"] == lead.id]
+            ws.append([names.get(lead.event_id, ""), *(data[name] for name in LEAD_FIELDS),
+                       "\n".join(link(row) for row in mine if not row["purpose"] and link(row)), "\n".join(link(row) for row in mine if row["purpose"] == "visitor" and link(row))])
+        sheet = wb.create_sheet("Photos and voice notes")
+        sheet.append(["lead_id", "event_no", "lead", "added", "kind", "added_by", "content_type", "link", "text_read"])
+        for row in media:
+            lead = by_id[row["lead_id"]]
+            kind = "With the visitor" if row["purpose"] == "visitor" else "Voice note" if (row["content_type"] or "").startswith("audio/") else "Document"
+            sheet.append([lead.id, lead.event_no, lead.name, row["created_at"], kind, row["added_by"], row["content_type"], link(row), row["extracted_text"]])
+        sheet = wb.create_sheet("Notes")
+        sheet.append(["lead_id", "event_no", "lead", "added", "from_number", "type", "text", "sentiment", "action_required", "link"])
+        media_by_id = {row["id"]: row for row in media}
+        for row in reversed(self.list_feedback()):
+            if lead := by_id.get(row["lead_id"]):
+                sheet.append([lead.id, lead.event_no, lead.name, row["created_at"], row["from_number"], row["feedback_type"], row["body"], row["sentiment"], row["action_required"], link(media_by_id[row["media_id"]]) if row["media_id"] in media_by_id else ""])
+        sheet = wb.create_sheet("WhatsApp chats")
+        sheet.append(["lead_id", "event_no", "lead", "chat", "time", "from", "text", "media_count"])
+        for lead in leads:
+            for chat in chats.get(lead.id, []):
+                for row in chat["rows"]:
+                    sheet.append([lead.id, lead.event_no, lead.name, chat["title"], row["created_at"], "Visitor or team member" if row["direction"] == "in" else "Footfall", row["body"], row["num_media"]])
+        sheet = wb.create_sheet("Follow-ups")
+        sheet.append(["lead_id", "event_no", "lead", "phone", "sent_at", "status", "reason"])
+        for row in self.list_followups(event_id=event_id):
+            if lead := by_id.get(row["lead_id"]):
+                sheet.append([lead.id, lead.event_no, lead.name, row["phone"], row["sent_at"], row["status"], row["reason"]])
         for sheet in wb.worksheets:
             format_sheet(sheet)
         out = BytesIO()

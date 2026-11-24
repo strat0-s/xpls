@@ -3,7 +3,7 @@ from io import BytesIO
 
 from conftest import csrf, get_or_create_user
 from didac_app import blobstore, flows
-from didac_app.models import Lead
+from didac_app.models import NOT_SCANNED, Lead
 from didac_app.server import app
 
 
@@ -22,7 +22,7 @@ def test_a_lead_can_be_added_by_hand(store):
     assert "Add lead" in client.get("/leads/new").data.decode()
     response = client.post("/leads/new", data={"csrf": csrf(client), "name": "Hand Typed", "phone": "+919800000022", "city": "Pune, Maharashtra", "products": ["PlayLab"], "priority": "High"})
     lead = store.list_leads()[0]
-    assert response.status_code == 302 and response.headers["Location"].endswith(f"/leads/{lead.id}")
+    assert response.status_code == 302 and "/leads/new" not in response.headers["Location"] and response.headers["Location"].startswith("/?")
     assert (lead.name, lead.city, lead.state, lead.products, lead.priority, lead.source_channel, lead.event_id) == ("Hand Typed", "Pune", "Maharashtra", "PlayLab", "High", "dashboard", store.live_event()["id"])
     assert lead.event_no == 1 and lead.captured_by == "Test Admin"
 
@@ -94,8 +94,12 @@ def test_adding_by_hand_with_photos_reads_the_form_and_keeps_the_visitor_photo(s
     monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): seen.update(n=len(photos)) or {"fields": {"name": "From Photo", "phone": "+919800000026", "city": "Pune"}, "check": [], "ms": 1})
     client = app.test_client()
     photo = lambda name: (BytesIO(b"x"), name, "image/jpeg")
-    client.post("/leads/new", data={"csrf": csrf(client), "city": "Mumbai", "scan_photo": [photo("a.jpg"), photo("b.jpg")], "visitor_photo": photo("me.jpg")}, content_type="multipart/form-data")
+    saved = client.post("/leads/new", data={"csrf": csrf(client), "city": "Mumbai", "scan_photo": [photo("a.jpg"), photo("b.jpg")], "visitor_photo": photo("me.jpg")}, content_type="multipart/form-data")
     lead = store.list_leads()[0]
+    assert "reading=" in saved.headers["Location"] and lead.review_reason == NOT_SCANNED and seen == {}  # saved first; the read is its own request
+    assert f"/leads/{lead.id}/read" in client.get(saved.headers["Location"]).data.decode()
+    client.post(f"/leads/{lead.id}/read", data={"csrf": csrf(client), "twin": "1"})
+    lead = store.get_lead(lead.id)
     assert (lead.name, lead.phone, lead.city) == ("From Photo", "+919800000026", "Mumbai")  # typed city wins, blanks come from the photo
     assert seen["n"] == 2 and sorted(row["purpose"] for row in store.list_media(lead.id)) == ["", "", "visitor"]
     assert {row["added_by"] for row in store.list_media(lead.id)} == {"Test Admin"}

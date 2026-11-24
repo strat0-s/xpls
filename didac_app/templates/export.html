@@ -9,6 +9,7 @@
     .sum b { font-size: 20px; }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; }
     .btn.off { opacity: .4; pointer-events: none; }
+    .sub { margin: 0 0 2px; font-size: 16px; font-weight: 700; }
     .hint { font-size: 13px; color: var(--mut); }
     .scroll { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
@@ -56,8 +57,8 @@
   </div>
 </section>
 <section class="card panel">
-  <div class="sum"><b>Everything for {{ events|selectattr('id', 'equalto', event_id)|map(attribute='name')|first if event_id else 'all events' }}</b>: every field of every lead, with notes, feedback and photo records. Not in the Orbit layout, and the filters above do not apply.</div>
-  <div class="actions"><a class="btn ghost" href="{{ url_for('export_everything', event=event_id or 'all') }}">Download everything (Excel)</a></div>
+  <div><h2 class="sub">Complete export</h2><div class="hint">All fields, photo links, notes, chats and follow-ups for {{ events|selectattr('id', 'equalto', event_id)|map(attribute='name')|first if event_id else 'all events' }}. The filters above do not apply.</div></div>
+  <div class="actions"><a class="btn" href="{{ url_for('export_everything', event=event_id or 'all') }}">Download Excel</a></div>
 </section>
 <script>
   // Unticked leads are remembered while you page through, and left out of the file.

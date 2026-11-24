@@ -105,4 +105,16 @@
 {% else %}<div class="empty">No leads match.</div>{% endif %}
 {% include "_pager.html" %}
 </section>
+{% if reading %}
+<script>
+  // Reads the photos of the lead just added, then reloads to show the result.
+  (function () {
+    var bar = document.createElement('div'); bar.className = 'flash'; bar.setAttribute('role', 'status'); bar.textContent = 'Reading the photos. This takes about 30 seconds, please stay on this page.';
+    document.querySelector('.card').before(bar);
+    var body = new FormData(); body.append('csrf', {{ csrf_token()|tojson }}); body.append('twin', '1');
+    var done = function () { location.replace({{ url_for('gallery', event=request.args.get('event') or None)|tojson }}); };
+    fetch({{ url_for('lead_read', lead_id=reading)|tojson }}, { method: 'POST', body: body }).then(done, done);
+  })();
+</script>
+{% endif %}
 {% endblock %}
