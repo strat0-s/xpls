@@ -183,16 +183,29 @@ def register(app, get_store, get_config) -> None:
             values = lead_form_values(store, lead)
             for name, value in values.items():
                 setattr(lead, name, value)
-            if not (lead.name or lead.org or lead.phone or lead.email):
-                flash("Add at least a name, organisation, phone or email.")
+            scans, visitor = image_files("scan_photo", flows.MAX_PHOTOS), image_files("visitor_photo", 1)
+            typed = bool(lead.name or lead.org or lead.phone or lead.email)
+            if not (typed or scans):
+                flash("Add at least a name, organisation, phone or email, or a photo of the form or card to read.")
                 return render_lead(store, lead, new=True)
-            if (match := find_duplicate(store, lead)) and match[1]:
+            match = find_duplicate(store, lead) if typed else None
+            if match and match[1]:
                 flash(f"That is already lead #{match[0].event_no}. Opened it instead.")
                 return redirect(url_for("lead_detail", lead_id=match[0].id))
             lead.updated_by = g.user["name"]
             lead.review_reason = f"possible duplicate of #{match[0].event_no}" if match else ""
             lead = store.create_lead(lead)
-            flash("Lead added. You can add photos below.")
+            save_photos(store, lead.id, visitor, "visitor")
+            if scans:
+                save_photos(store, lead.id, scans)
+                read_lead_photos(store, lead)  # fills only what is blank, so typed details win
+                lead = store.get_lead(lead.id)
+                if (twin := find_duplicate(store, lead, lead.id)) and not lead.review_reason.startswith("possible duplicate"):
+                    reason = f"possible duplicate of #{twin[0].event_no}"
+                    store.update_lead_fields(lead.id, review_reason="; ".join(filter(None, (lead.review_reason, reason))))
+                    flash(f"This looks like lead #{twin[0].event_no}. It is saved as its own lead and marked Check.")
+            else:
+                flash("Lead added.")
             return redirect(url_for("lead_detail", lead_id=lead.id))
         return render_lead(store, lead, new=True)
 
@@ -226,6 +239,16 @@ def register(app, get_store, get_config) -> None:
             products=listed + [item for item in have if item not in listed], have=have,
             priorities=PRIORITIES, owners=[u["name"] for u in store.list_users() if u["is_active"]] + [flows.NOT_LISTED], curricula=orbit.CURRICULUM_CHOICES, picked=orbit.curriculum_cell(lead.curriculum).split(", "),
         )
+    def image_files(field: str, limit: int) -> list:
+        return [file for file in request.files.getlist(field) if (file.mimetype or "").startswith("image/")][:limit]
+
+    def save_photos(store, lead_id: int, files: list, purpose: str = "") -> None:
+        """Store photos uploaded in the app, remembering who added them. purpose '' = a document to read, 'visitor' = with the visitor."""
+        for file in files:
+            key = f"uploads/{lead_id}/{secrets.token_hex(6)}{suffix_for(file.mimetype, file.filename or '')}"
+            blobstore.upload(get_config(), key, file.read(), file.mimetype)
+            store.add_media(lead_id, "", file.mimetype, key, purpose=purpose, added_by=g.user["name"])
+
     def read_lead_photos(store, lead) -> None:
         """Read the lead's document photos again and fill in only what is still blank; says what was filled."""
         photos = [{"key": row["local_path"], "ct": row["content_type"]} for row in store.list_media(lead.id)
@@ -261,14 +284,11 @@ def register(app, get_store, get_config) -> None:
         store = get_store()
         lead = store.get_lead(lead_id) or abort(404)
         visitor = request.form.get("purpose") == "visitor"
-        files = [file for file in request.files.getlist("photo") if (file.mimetype or "").startswith("image/")][: 1 if visitor else flows.MAX_PHOTOS]
+        files = image_files("photo", 1 if visitor else flows.MAX_PHOTOS)
         if not files:
             flash("Choose a photo first.")
             return redirect(url_for("lead_detail", lead_id=lead_id))
-        for file in files:
-            key = f"uploads/{lead_id}/{secrets.token_hex(6)}{suffix_for(file.mimetype, file.filename or '')}"
-            blobstore.upload(get_config(), key, file.read(), file.mimetype)
-            store.add_media(lead_id, "", file.mimetype, key, purpose="visitor" if visitor else "")
+        save_photos(store, lead_id, files, "visitor" if visitor else "")
         if visitor:
             flash("Photo added.")
         else:
@@ -624,7 +644,7 @@ def lead_items(lead, store, members: dict[str, str]) -> list[dict]:
     for row in media_rows:
         content_type = row["content_type"] or ""
         kind = "image" if content_type.startswith("image/") else "audio" if content_type.startswith("audio/") else "file"
-        items.append({"kind": kind, "id": row["id"], "purpose": row["purpose"], "rotation": row["rotation"], "text": row["extracted_text"], "by": by, "is_team": is_team, "created_at": row["created_at"]})
+        items.append({"kind": kind, "id": row["id"], "purpose": row["purpose"], "rotation": row["rotation"], "text": row["extracted_text"], "by": row["added_by"] or by, "is_team": bool(row["added_by"]) or is_team, "created_at": row["created_at"]})
     for row in store.list_feedback(lead.id):
         if row["feedback_type"] in DERIVED_FEEDBACK:
             continue

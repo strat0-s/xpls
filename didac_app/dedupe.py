@@ -23,7 +23,7 @@ def names_compatible(a: str, b: str) -> bool:
     return not ta or not tb or all(x.startswith(y) or y.startswith(x) for x, y in zip(ta, tb))
 
 
-def find_duplicate(store: LeadStore, new: Lead) -> tuple[Lead, bool] | None:
+def find_duplicate(store: LeadStore, new: Lead, skip_id: int = 0) -> tuple[Lead, bool] | None:
     """(existing lead, certain). Email or phone match is certain unless both names are present and disagree (an office
     phone or info@ address shared by colleagues); name+organisation alone, or a contact match with a different name, is only possible.
     ponytail: scans every live lead in Python (phones are stored un-normalised); index a normalised column if volume grows past a few thousand."""
@@ -31,6 +31,8 @@ def find_duplicate(store: LeadStore, new: Lead) -> tuple[Lead, bool] | None:
     name, org = new.name.strip().lower(), new.org.strip().lower()
     possible = None
     for lead in store.list_leads():
+        if lead.id == skip_id:
+            continue
         shared_contact = (email and normalize_email(lead.email) == email) or (phone and normalize_phone(lead.phone) == phone)
         if shared_contact and names_compatible(lead.name, new.name):
             return lead, True

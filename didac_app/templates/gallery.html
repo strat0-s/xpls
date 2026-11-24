@@ -4,6 +4,7 @@
 {% block css %}
     h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
     .bar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
+    .ttl { display: flex; align-items: center; gap: 12px; } .ttl h1 { margin: 0; }
     .grp { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     .seg { display: flex; gap: 6px; flex-wrap: wrap; }
     .seg a { padding: 5px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--surf); color: var(--mut); font-weight: 600; text-decoration: none; }
@@ -37,6 +38,7 @@
       .lead > :nth-child(5) { grid-column: 3; grid-row: 1; text-align: right; }
       .lead > :nth-child(4) { grid-column: 2; } .lead > :nth-child(7) { grid-column: 3; font-size: 12.5px; color: var(--mut); text-align: right; }
       .lead > :nth-child(3), .lead > :nth-child(6), .lead > :nth-child(8) { display: none; }
+      .ttl { width: 100%; justify-content: space-between; }
       .search input { width: 100%; } .search, .evsel { width: 100%; } .evsel select { flex: 1; }
     }
     .empty { padding: 40px 16px; text-align: center; color: var(--mut); }
@@ -45,9 +47,8 @@
 {% set keep = {'q': q or None, 'who': who or None, 'prio': prio or None, 'check': '1' if check else None, 'event': request.args.get('event') or None, 'per': request.args.get('per') or None} %}
 {% set active_filters = (1 if who else 0) + (1 if prio else 0) + (1 if check else 0) + (1 if reply_only else 0) %}
 <div class="bar">
-  <div><h1>Leads</h1></div>
+  <div class="ttl"><h1>Leads</h1><a class="btn" href="{{ url_for('lead_new', event=request.args.get('event') or None) }}">Add lead</a></div>
   <div class="grp">
-    <a class="btn" href="{{ url_for('lead_new', event=request.args.get('event') or None) }}">Add lead</a>
     <form class="evsel" method="get" action="{{ url_for('gallery') }}">
       {% for k, v in request.args.items() if k not in ('event', 'page', 'type') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
       <label for="event">Event</label>

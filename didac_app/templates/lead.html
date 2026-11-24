@@ -19,8 +19,9 @@
     .checks { display: flex; flex-wrap: wrap; gap: 8px; }
     .checks label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surf); font-size: 14px; cursor: pointer; }
     .checks label:has(input:checked) { border-color: var(--acc); background: var(--soft); color: var(--acc-text); font-weight: 600; }
-    .savebar { position: sticky; bottom: 0; display: flex; gap: 8px; padding: 10px 0; background: linear-gradient(transparent, var(--bg) 30%); }
-    .savebar .btn:first-child { flex: 1; }
+    .savebar { position: sticky; bottom: 10px; z-index: 5; display: flex; justify-content: flex-end; gap: 8px; padding: 10px 12px; background: var(--surf); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 20px rgba(0,0,0,.14); }
+    .savebar[hidden] { display: none; }
+    @media (max-width: 700px) { .savebar .btn { flex: 1; } }
     .aside { position: sticky; top: 12px; display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
     @media (max-width: 900px) { .aside { position: static; } }
     .tabs { display: none; border-bottom: 1px solid var(--line); background: var(--head); }
@@ -28,6 +29,7 @@
     .tabs button { flex: 1; height: 42px; border: 0; border-bottom: 3px solid transparent; background: none; font-weight: 600; color: var(--mut); cursor: pointer; }
     .tabs button[aria-selected="true"] { color: var(--acc-text); border-bottom-color: var(--acc); }
     .panel { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+    .panel[hidden] { display: none; }
     .panel h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); }
     .item { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; border: 1px solid var(--line); border-radius: 8px; }
     .item .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
@@ -60,7 +62,7 @@
   <div>
     <a href="{{ url_for('gallery') }}" style="text-decoration:none">&larr; All leads</a>
     <h1>{{ title }}{% if not new %} <small style="color:var(--mut);font-weight:600">#{{ lead.event_no }}</small>{% if lead.priority %}<span class="chip {{ lead.priority|lower }}">{{ lead.priority }}</span>{% endif %}{% endif %}</h1>
-    <div class="sub">{% if new %}Added by hand. You can add photos once it is saved.{% else %}{{ (doc_types|selectattr('key', 'equalto', lead.doc_type)|map(attribute='label')|first) or lead.doc_type or 'Document' }} · captured {{ lead.created_at|local_time('%d %b %Y, %H:%M') }}{% if lead.lead_owner %} · owner {{ lead.lead_owner }}{% endif %}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}{% endif %}</div>
+    <div class="sub">{% if new %}Added by hand{% else %}{{ (doc_types|selectattr('key', 'equalto', lead.doc_type)|map(attribute='label')|first) or lead.doc_type or 'Document' }} · captured {{ lead.created_at|local_time('%d %b %Y, %H:%M') }}{% if lead.lead_owner %} · owner {{ lead.lead_owner }}{% endif %}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}{% endif %}</div>
   </div>
   {% if not new %}
   <div class="admin-actions">
@@ -93,8 +95,14 @@
 {% endif %}
 
 <div class="cols">
-  <form class="main" method="post"{% if new %} action="{{ url_for('lead_new', event=request.args.get('event')) }}"{% endif %}>
+  <form class="main" method="post"{% if new %} action="{{ url_for('lead_new', event=request.args.get('event')) }}" enctype="multipart/form-data" data-shrink{% endif %}>
     <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    {% if new %}<fieldset class="sec"><legend>Photos</legend><div class="grid2">
+      <div class="wide"><label class="f" for="f-scan">Contact form or card (read to fill the details)</label><input class="t" id="f-scan" type="file" name="scan_photo" accept="image/*" multiple>
+        </div>
+      <div class="wide"><label class="f" for="f-visitor">Photo with the visitor</label><input class="t" id="f-visitor" type="file" name="visitor_photo" accept="image/*">
+        </div>
+    </div></fieldset>{% endif %}
     {% macro field(name, label, width) %}<div class="{{ 'wide' if width == 2 }}"><label class="f" for="f-{{ name }}" title="{{ label }}">{{ label }}</label><input class="t" id="f-{{ name }}" name="{{ name }}" value="{{ lead[name] }}"{% if name == 'email' %} type="email"{% elif name == 'pincode' %} inputmode="numeric" pattern="[0-9]{6}" maxlength="6"{% elif name == 'phone' %} type="tel"{% elif name == 'students' %} inputmode="numeric"{% elif name == 'workshop' %} list="yn"{% endif %}></div>{% endmacro %}
     <datalist id="yn"><option value="Yes"><option value="No"></datalist>
     {% for title, rows in sections if title == 'Contact' %}
@@ -126,7 +134,7 @@
         {% if lead.curriculum and lead.curriculum != picked|join(', ') %}<div class="hint">Scanned as: {{ lead.curriculum }}. Saving keeps only the ticked boards.</div>{% endif %}</div>
       {% for title, rows in sections if title == 'Organisation' %}{% for name, label, width in rows %}{{ field(name, label, width) }}{% endfor %}{% endfor %}
     </div><div class="hint" style="margin-top:6px">Medium of instruction: comma separated, for example English, Kannada.</div></fieldset>
-    <div class="savebar"><button class="btn">{{ 'Add lead' if new else 'Save changes' }}</button><a class="btn ghost" href="{{ url_for('gallery') }}">Cancel</a></div>
+    <div class="savebar">{% if new %}<a class="btn ghost" href="{{ url_for('gallery') }}">Cancel</a>{% else %}<button type="button" class="btn ghost" id="cancel-edit">Cancel</button>{% endif %}<button class="btn">{{ 'Add lead' if new else 'Save changes' }}</button></div>
   </form>
 
   {% if not new %}
@@ -152,14 +160,14 @@
       {% else %}<div class="hint">No document photos yet.</div>{% endif %}
       <form class="upload" method="post" action="{{ url_for('lead_photos', lead_id=lead.id) }}" enctype="multipart/form-data" data-upload="Reading... a few seconds">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="purpose" value="scan">
-        <b>Add photos to read</b><span class="hint">A better photo of the form or card, or the other side. The photos are read again and only blank details are filled in. Nothing already on the lead is changed.</span>
+        <b>Add photos to read</b><span class="hint">Only blank details are filled in.</span>
         <input type="file" name="photo" accept="image/*" multiple required><button class="btn ghost">Add and read</button>
       </form>
       <h3 style="margin-top:6px">With the visitor</h3>
       {% for it in withv %}<figure style="margin:0"><img src="/media/{{ it.id }}" alt="Photo with the visitor" style="max-width:100%;max-height:360px;border-radius:6px;display:block" loading="lazy"><figcaption class="hint">Added by {{ it.by }} · {{ it.created_at|local_time('%d %b, %H:%M') }}</figcaption></figure>{% endfor %}
       <form class="upload" method="post" action="{{ url_for('lead_photos', lead_id=lead.id) }}" enctype="multipart/form-data" data-upload="Adding...">
         <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="purpose" value="visitor">
-        <b>{{ 'Add another photo' if withv else 'Add a photo with the visitor' }}</b><span class="hint">A photo of you with the visitor, for personal follow-ups. It is not read.</span>
+        <b>{{ 'Add another photo' if withv else 'Add a photo with the visitor' }}</b>
         <input type="file" name="photo" accept="image/*" required><button class="btn ghost">Add photo</button>
       </form>
     </section>
@@ -170,7 +178,7 @@
         <div class="top"><div><div class="title">{{ {'audio': 'Voice note', 'text': 'Text message', 'file': 'File'}[it.kind] }}</div><div class="meta">{{ it.by }} · {{ it.created_at|local_time }}</div></div>
           <span class="chip {{ 'team' if it.is_team else 'visitor' }}">{{ 'Team' if it.is_team else 'Visitor' }}</span></div>
         {% if it.kind == 'audio' %}<audio controls preload="none" src="/media/{{ it.id }}"></audio>{% if it.text %}<div class="hint">Transcript</div><div class="quote">{{ it.text }}</div>{% endif %}
-        {% elif it.kind == 'text' %}<div class="quote raw">{{ it.text }}</div><div class="hint">Kept exactly as sent. Edits to the lead never change this original.</div>
+        {% elif it.kind == 'text' %}<div class="quote raw">{{ it.text }}</div>
         {% else %}<a href="/media/{{ it.id }}" target="_blank" rel="noopener">Open file</a>{% endif %}
       </article>
       {% else %}<div class="hint">No voice notes or messages are attached to this lead.</div>{% endfor %}
@@ -243,6 +251,26 @@
         }, function () { done(file); });
       });
     }
+    // Editing a saved lead: the Save and Cancel bar appears only once something is changed; Cancel puts everything back.
+    (function () {
+      var form = document.querySelector('form.main'), bar = form && form.querySelector('.savebar'), cancel = document.getElementById('cancel-edit');
+      if (!bar || !cancel) return;
+      bar.hidden = true;
+      form.addEventListener('input', function () { bar.hidden = false; }); form.addEventListener('change', function () { bar.hidden = false; });
+      cancel.addEventListener('click', function () { form.reset(); bar.hidden = true; });
+    })();
+
+    // The add-lead form carries several fields and photos: shrink the photos in place, then submit the form as usual.
+    document.querySelectorAll('form[data-shrink]').forEach(function (form) {
+      form.addEventListener('submit', function (e) {
+        var inputs = Array.prototype.filter.call(form.querySelectorAll('input[type=file]'), function (i) { return i.files.length; });
+        if (!inputs.length || !window.DataTransfer) return;
+        e.preventDefault(); form.querySelector('.savebar button:last-child').disabled = true;
+        Promise.all(inputs.map(function (input) {
+          return Promise.all(Array.prototype.map.call(input.files, shrink)).then(function (files) { var dt = new DataTransfer(); files.forEach(function (f) { dt.items.add(f); }); input.files = dt.files; });
+        })).then(function () { form.submit(); });
+      });
+    });
     document.querySelectorAll('form[data-upload]').forEach(function (form) {
       form.addEventListener('submit', function (e) {
         var input = form.querySelector('input[type=file]'), button = form.querySelector('button');

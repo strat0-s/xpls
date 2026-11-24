@@ -184,6 +184,7 @@ class LeadStore:
             # Leads left on the old text-status conversation steps go back to plain New.
             conn.execute("UPDATE leads SET status='New' WHERE status ~ '^(Menu|Intake|Brochure|Feedback|Badge):'")
             conn.execute("ALTER TABLE media ADD COLUMN IF NOT EXISTS rotation INTEGER NOT NULL DEFAULT 0")
+            conn.execute("ALTER TABLE media ADD COLUMN IF NOT EXISTS added_by TEXT NOT NULL DEFAULT ''")  # who uploaded it from the app; blank = came in over WhatsApp
             conn.execute("ALTER TABLE media ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT ''")  # '' = a photo of a document to read; 'visitor' = the team member with the visitor
             conn.execute("ALTER TABLE inbound_events ADD COLUMN IF NOT EXISTS message_id TEXT")
             for table in ("inbound_events", "outbound_messages"):
@@ -569,11 +570,11 @@ class LeadStore:
             rows = conn.execute(query, params).fetchall()
         return [row_to_lead(row) for row in rows]
 
-    def add_media(self, lead_id: int, url: str, content_type: str = "", local_path: str = "", extracted_text: str = "", purpose: str = "") -> int:
+    def add_media(self, lead_id: int, url: str, content_type: str = "", local_path: str = "", extracted_text: str = "", purpose: str = "", added_by: str = "") -> int:
         with self.connect() as conn:
             return conn.execute(
-                "INSERT INTO media (lead_id, url, content_type, local_path, extracted_text, purpose) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-                (lead_id, url, content_type, local_path, extracted_text, purpose),
+                "INSERT INTO media (lead_id, url, content_type, local_path, extracted_text, purpose, added_by) VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id",
+                (lead_id, url, content_type, local_path, extracted_text, purpose, added_by),
             ).fetchone()["id"]
 
     def add_feedback(

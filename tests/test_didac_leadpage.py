@@ -86,3 +86,24 @@ def test_the_phone_app_files_are_served_without_signing_in(anon_client):
         assert response.status_code == 200 and response.mimetype == kind, name
     assert client.get("/dashboard").status_code == 302  # the app itself still needs a login
     assert 'rel="manifest"' in app.test_client().get("/dashboard").data.decode()
+
+
+def test_adding_by_hand_with_photos_reads_the_form_and_keeps_the_visitor_photo(store, monkeypatch):
+    monkeypatch.setattr(blobstore, "upload", lambda *args, **kwargs: None)
+    seen = {}
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): seen.update(n=len(photos)) or {"fields": {"name": "From Photo", "phone": "+919800000026", "city": "Pune"}, "check": [], "ms": 1})
+    client = app.test_client()
+    photo = lambda name: (BytesIO(b"x"), name, "image/jpeg")
+    client.post("/leads/new", data={"csrf": csrf(client), "city": "Mumbai", "scan_photo": [photo("a.jpg"), photo("b.jpg")], "visitor_photo": photo("me.jpg")}, content_type="multipart/form-data")
+    lead = store.list_leads()[0]
+    assert (lead.name, lead.phone, lead.city) == ("From Photo", "+919800000026", "Mumbai")  # typed city wins, blanks come from the photo
+    assert seen["n"] == 2 and sorted(row["purpose"] for row in store.list_media(lead.id)) == ["", "", "visitor"]
+    assert {row["added_by"] for row in store.list_media(lead.id)} == {"Test Admin"}
+
+
+def test_a_photo_added_in_the_app_names_whoever_added_it(store, monkeypatch):
+    monkeypatch.setattr(blobstore, "upload", lambda *args, **kwargs: None)
+    lead = store.create_lead(Lead(name="Asha", phone="+919800000027", captured_by="Vijetha Kelamane"))
+    client = app.test_client()
+    html = client.post(f"/leads/{lead.id}/photos", data={"csrf": csrf(client), "purpose": "visitor", "photo": (BytesIO(b"x"), "me.jpg", "image/jpeg")}, content_type="multipart/form-data", follow_redirects=True).data.decode()
+    assert "Added by Test Admin" in html and "Added by Vijetha" not in html
