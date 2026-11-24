@@ -66,7 +66,7 @@ DEFAULT_WELCOME = (
     "Welcome to Xperimentor! 👋\nThank you for connecting with us at {event}.\n"
     "Explore our learning solutions, product catalogues and brochures below. Find the resources you're looking for and discover how we can transform learning in your school.\n\n"
     "📚 Explore our products\n🔬 Science in Action — Grades 6–10\n🧮 MathMax — Mathematics Learning Solutions\n🎨 PlayLab — Experiential Learning for Grades 1–5\n\n"
-    "Want to see how these work in your school? Type menu, choose Schedule a demo, and our team will connect with you!"
+    "Want to see how these work in your school?\nType menu at any time to see this again."
 )
 NOT_AVAILABLE = "That option is not available any more. Here is what is available now:"
 MENU_WORDS = {"menu", "hi", "hello", "hey", "start", "info", "brochure"}
