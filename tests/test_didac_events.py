@@ -112,7 +112,7 @@ def test_with_no_live_event_nothing_is_saved_and_everyone_is_told(store, sent):
 
 def test_the_welcome_text_is_per_event(store, sent):
     say(VISITOR, "hi")
-    assert last(sent)[0].startswith("Welcome to Xperimentor at DIDAC 2026.")
+    assert last(sent)[0].startswith("Welcome to Xperimentor! 👋\nThank you for connecting with us at DIDAC 2026.")
     store.update_event(store.live_event()["id"], welcome_text="Hello from the DIDAC stall!")
     say(VISITOR, "hi")
     assert last(sent)[0] == "Hello from the DIDAC stall!"

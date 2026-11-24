@@ -922,3 +922,11 @@ def test_classify_document_returns_only_a_known_key_and_never_raises(monkeypatch
         assert REAL_CLASSIFY(None, photo_, types) == expected
     monkeypatch.setattr(flows, "vision_classify", lambda image, options: (_ for _ in ()).throw(RuntimeError("down")))
     assert REAL_CLASSIFY(None, photo_, types) == ""
+
+
+def test_a_photo_captioned_visitor_meet_is_kept_with_the_event_photos_and_never_read(store, sent, fake_io):
+    say(STAFF, "Visitor Meet – DIDAC 2026\nName: Asha Rao\nSchool: Sunrise", photo("meet"))
+    assert store.list_leads() == [] and fake_io["calls"] == []
+    shots = store.list_event_photos(store.live_event()["id"])
+    assert len(shots) == 1 and shots[0]["caption"].startswith("Visitor Meet") and shots[0]["uploaded_by"] == "Test Admin"
+    assert last(sent)[0].endswith("saved to " + store.live_event()["name"] + ".")

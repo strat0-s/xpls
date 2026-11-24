@@ -31,7 +31,7 @@
 <section class="card">
   {% if pg.total %}<div class="grid">{% set ns = namespace(day='') %}{% for p in pg['items'] %}{% set when = p.created_at.astimezone(tz) %}{% set day = when.strftime('%A, %d %b %Y') %}
     {% if day != ns.day %}{% set ns.day = day %}<h2 class="day" style="font-size:15px">{{ day }}</h2>{% endif %}
-    <a class="ph" href="{{ url_for('event_photo', photo_id=p.id) }}" target="_blank" rel="noopener" data-who="{{ p.uploaded_by or 'Team' }}" data-when="{{ when.strftime('%d %b %Y, %H:%M') }}{{ ' · ' ~ p.event_name if not event_id }}"><img src="{{ url_for('event_photo', photo_id=p.id) }}" alt="Event photo {{ p.id }}" loading="lazy" decoding="async"><span>{{ p.uploaded_by or 'Team' }} · {{ when.strftime('%H:%M') }}</span></a>{% endfor %}</div>
+    <a class="ph" href="{{ url_for('event_photo', photo_id=p.id) }}" target="_blank" rel="noopener" data-who="{{ p.uploaded_by or 'Team' }}" data-when="{{ when.strftime('%d %b %Y, %H:%M') }}{{ ' · ' ~ p.event_name if not event_id }}{{ ' · ' ~ p.caption|replace('\n', ' · ') if p.caption }}"><img src="{{ url_for('event_photo', photo_id=p.id) }}" alt="Event photo {{ p.id }}" loading="lazy" decoding="async"><span>{{ p.uploaded_by or 'Team' }} · {{ when.strftime('%H:%M') }}</span></a>{% endfor %}</div>
   {% else %}<div class="empty">No event photos yet.</div>{% endif %}
   {% set nosize = true %}{% include "_pager.html" %}
 </section>

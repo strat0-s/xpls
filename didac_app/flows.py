@@ -62,7 +62,12 @@ PRIORITIES = ("High", "Medium", "Low")
 # The model sometimes lists every empty field as a doubt ("udise_code unknown"), and flags a QR code it cannot decode from pixels; the code decodes QRs itself.
 NOT_ON_DOCUMENT = re.compile(r"\bqr\b|\b(unknown|not (printed|present|provided|given|available|mentioned|visible|found)|missing|n/?a)\b", re.I)
 WHAT_IS_IT = "What kind of document is this?"
-DEFAULT_WELCOME = "Welcome to Xperimentor at {event}.\nPlease choose an option. Type menu at any time to see this again."
+DEFAULT_WELCOME = (
+    "Welcome to Xperimentor! 👋\nThank you for connecting with us at {event}.\n"
+    "Explore our learning solutions, product catalogues and brochures below. Find the resources you're looking for and discover how we can transform learning in your school.\n\n"
+    "📚 Explore our products\n🔬 Science in Action — Grades 6–10\n🧮 MathMax — Mathematics Learning Solutions\n🎨 PlayLab — Experiential Learning for Grades 1–5\n\n"
+    "Want to see how these work in your school? Type menu, choose Schedule a demo, and our team will connect with you!"
+)
 NOT_AVAILABLE = "That option is not available any more. Here is what is available now:"
 MENU_WORDS = {"menu", "hi", "hello", "hey", "start", "info", "brochure"}
 # (label shown in the list, Orbit type code, one-line description)
@@ -389,6 +394,8 @@ class Chat:
             if any(ct.startswith("image/") for _, ct in media):
                 if not self.doc_types:
                     return self.say("No document types are switched on for this event. Please ask an admin.")
+                if choice.startswith("visitor meet"):  # the team's photo with a visitor, captioned as the guidelines say: kept with the event photos, never read
+                    return self.event_photos_step(media, text)
                 return self.auto_scan(media, text)
             if media:  # a voice note with no menu choice goes to the last lead, like Add a note
                 data = {"lead_id": self.recent_lead_id()}
@@ -861,13 +868,13 @@ class Chat:
         self.lead_ids.append(lead.id)
         return lead
 
-    def event_photos_step(self, media: list[tuple[str, str]]) -> None:
+    def event_photos_step(self, media: list[tuple[str, str]], caption: str = "") -> None:
         images = [(url, content_type) for url, content_type in media if content_type.startswith("image/")]
         if not images:
             return self.say("Please send photos only. Type menu when you are done." if media else "Send photos, or type menu when you are done.")
         for url, content_type in images:
             key, _ = fetch_media(self.config, url, content_type, self.number)
-            self.store.add_event_photo(self.event["id"], self.number, self.user["name"], key, content_type, url)
+            self.store.add_event_photo(self.event["id"], self.number, self.user["name"], key, content_type, url, caption.strip())
         self.say(f"{len(images)} photo{'' if len(images) == 1 else 's'} saved to {self.event['name']}.")
 
     def brochure_step(self, text: str) -> None:
