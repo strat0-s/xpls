@@ -2,6 +2,7 @@ import pytest
 
 from bird_helpers import post_bird
 from didac_app import bird, flows
+from didac_app.models import Lead
 from didac_app.server import app
 
 real_read_documents = flows.read_documents  # the autouse fixture replaces it
@@ -271,6 +272,15 @@ def test_the_kind_of_a_photo_picks_the_reader_and_the_document_type(store, sent,
         fake_io["result"] = {"fields": {"name": f"Person {answer or 'unknown'}", "phone": "98450" + str(abs(hash(answer)))[:5]}, "check": []}
         say(STAFF, "", photo(f"x{answer}"))
         assert fake_io["calls"] == [(1, reader)] and store.list_leads()[0].doc_type == doc_type
+
+
+def test_someone_already_saved_at_another_event_is_a_new_lead_in_the_live_one(store, sent, fake_io):
+    old = store.create_event("Last year")
+    earlier = store.create_lead(Lead(name="Asha Rao", org="Sunrise School", phone="9845011111", email="asha@sunrise.edu", event_id=old))
+    say(STAFF, "", photo("again"))
+    fresh = [lead for lead in store.list_leads() if lead.id != earlier.id]
+    assert len(fresh) == 1 and fresh[0].event_id == store.live_event()["id"] and fresh[0].event_no == 1
+    assert last(sent)[0].startswith("Saved as #1") and store.get_lead(earlier.id).media_local_paths == ""
 
 
 def test_a_photo_that_cannot_be_read_is_kept_as_not_scanned(store, sent, fake_io):

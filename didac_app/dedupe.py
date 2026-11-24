@@ -30,7 +30,8 @@ def find_duplicate(store: LeadStore, new: Lead, skip_id: int = 0) -> tuple[Lead,
     email, phone = normalize_email(new.email), normalize_phone(new.phone)
     name, org = new.name.strip().lower(), new.org.strip().lower()
     possible = None
-    for lead in store.list_leads():
+    event = new.event_id or (store.live_event() or {}).get("id")  # leads are scoped by event: someone seen at last year's event is a new lead at this one
+    for lead in store.list_leads("event_id IS NOT DISTINCT FROM %s", (event,)):
         if lead.id == skip_id:
             continue
         shared_contact = (email and normalize_email(lead.email) == email) or (phone and normalize_phone(lead.phone) == phone)
