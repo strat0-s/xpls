@@ -47,6 +47,7 @@
 <div class="bar">
   <div><h1>Leads</h1></div>
   <div class="grp">
+    <a class="btn" href="{{ url_for('lead_new', event=request.args.get('event') or None) }}">Add lead</a>
     <form class="evsel" method="get" action="{{ url_for('gallery') }}">
       {% for k, v in request.args.items() if k not in ('event', 'page', 'type') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
       <label for="event">Event</label>
