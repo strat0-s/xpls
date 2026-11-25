@@ -52,3 +52,10 @@ def test_merge_into_lead_keeps_a_value_set_since_the_read(store):
     store.merge_into_lead(lead.id, {"city": "Delhi", "email": "a@b.com"}, {"tags": "Expo", "captured_by": "Ravi"})
     merged = store.get_lead(lead.id)
     assert (merged.city, merged.email, merged.tags, merged.captured_by) == ("Pune", "a@b.com", "Expo", "Ravi")
+
+
+def test_a_misread_letter_in_the_name_is_still_the_same_person_when_the_phone_matches(store):
+    first = store.create_lead(Lead(name="Dr Gangireeni Dhananjhay", phone="9391319721"))
+    match = find_duplicate(store, Lead(name="Dr. Gangineni Dhananjhay", phone="+91 9391319721", email="dean@college.in"))
+    assert match and match[0].id == first.id and match[1] is True
+    assert find_duplicate(store, Lead(name="Someone Else", phone="9391319721"))[1] is False  # a different name on the same number stays only possible

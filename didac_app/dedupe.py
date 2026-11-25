@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from difflib import SequenceMatcher
+
 from didac_app.auth import normalize_email, normalize_phone
 from didac_app.models import Lead
 from didac_app.storage import LeadStore
@@ -20,7 +22,7 @@ def names_compatible(a: str, b: str) -> bool:
     """True if either name is blank or the names agree token by token, allowing initials ("Kavya N" ~ "Kavya Nair")."""
     ta = [t for t in a.lower().replace(".", " ").split() if t not in TITLES]
     tb = [t for t in b.lower().replace(".", " ").split() if t not in TITLES]
-    return not ta or not tb or all(x.startswith(y) or y.startswith(x) for x, y in zip(ta, tb))
+    return not ta or not tb or all(x.startswith(y) or y.startswith(x) or SequenceMatcher(None, x, y).ratio() >= 0.8 for x, y in zip(ta, tb))  # a misread letter is still the same person
 
 
 def find_duplicate(store: LeadStore, new: Lead, skip_id: int = 0) -> tuple[Lead, bool] | None:
