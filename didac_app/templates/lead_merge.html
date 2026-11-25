@@ -11,6 +11,8 @@
     .cmp thead th { border-top: 0; background: var(--head); }
     .cmp tbody th { width: 150px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); font-weight: 600; }
     .cmp label { display: flex; gap: 8px; align-items: flex-start; font-weight: 600; cursor: pointer; } .cmp label small { display: block; font-weight: 400; color: var(--mut); }
+    .cmp td { min-width: 170px; overflow-wrap: anywhere; } .cmp thead th:first-child, .cmp tbody th { position: sticky; left: 0; background: var(--head); z-index: 1; }
+    @media (max-width: 700px) { .cmp tbody th { width: 104px; min-width: 104px; padding: 9px 10px; letter-spacing: .02em; overflow-wrap: normal; } .cmp thead th:first-child { width: 104px; } .cmp thead th { min-width: 170px; } .cmp thead th:first-child { min-width: 104px; } }
     .row { display: flex; gap: 10px; flex-wrap: wrap; }
 {% endblock %}
 {% block content %}

@@ -3,7 +3,7 @@
 {% block title %}Wiki · Footfall{% endblock %}
 {# The Footfall wiki for everyone who uses the app: how to use it, the rules, and answers. Keep it user-facing: no setup, keys, database or code. Every heading has an id and every in-page link points at one. #}
 {% block css %}
-    .wiki { max-width: 860px; margin: 0 auto; padding: 24px 28px; line-height: 1.6; }
+    .wiki { max-width: 860px; width: 100%; margin: 0 auto; padding: 24px 28px; line-height: 1.6; }
     .wiki h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.01em; }
     .wiki h2 { margin: 28px 0 8px; font-size: 19px; scroll-margin-top: 16px; }
     .wiki h3 { margin: 18px 0 6px; font-size: 15px; scroll-margin-top: 16px; }
@@ -14,7 +14,9 @@
     .wiki th, .wiki td { text-align: left; vertical-align: top; padding: 8px 10px; border-top: 1px solid var(--line); }
     .wiki th { background: var(--head); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); border-top: 0; }
     .wiki .note { background: var(--head); border-radius: 8px; padding: 10px 14px; }
-    .wiki a { text-decoration: underline; }
+    .wiki a { text-decoration: underline; } .wiki { min-width: 0; } .wiki p, .wiki li { overflow-wrap: break-word; } .wiki pre { overflow-x: auto; max-width: 100%; background: var(--head); padding: 10px 12px; border-radius: 8px; } .wiki pre code { background: none; padding: 0; white-space: pre; overflow-wrap: normal; }
+    main.page { min-width: 0; }
+    @media (max-width: 700px) { .wiki { padding: 18px 16px; } .wiki th, .wiki td { padding: 8px 6px; } .wiki td:first-child, .wiki th:first-child { min-width: 88px; } }
 {% endblock %}
 {% block content %}
 <article class="card wiki">
