@@ -938,3 +938,8 @@ def test_a_card_with_two_phone_numbers_keeps_the_first_mobile_and_notes_the_othe
     landline = flows.lead_fields({"name": "Asha Rao", "phone": "080 2860 3163 / 98450 11111"})["fields"]
     assert landline["phone"] == "98450 11111" and "Other phone: 080 2860 3163" in landline["notes"]
     assert flows.lead_fields({"name": "Asha Rao", "phone": "98450 11111"})["fields"]["phone"] == "98450 11111"
+
+
+def test_the_address_from_a_card_is_its_own_field_not_a_note():
+    out = flows.lead_fields({"name": "Rahul J", "phone": "98450 11111", "address": "Annapoorna Nivas, Plot No. 3682, Ramteerth Nagar", "city": "Belagavi", "state": "Karnataka", "pincode": "590016"})["fields"]
+    assert out["address"] == "Annapoorna Nivas, Plot No. 3682, Ramteerth Nagar" and out["city"] == "Belagavi" and "Annapoorna" not in out.get("notes", "")

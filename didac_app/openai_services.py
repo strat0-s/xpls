@@ -20,14 +20,14 @@ For event badges and handwritten forms, carefully read printed and handwritten t
 If a QR code or URL is visibly printed and readable, include it as qr_url. If badge/profile details are visible around the QR code, include them in notes.
 Each contact object should use these keys:
 first_name, last_name, name, designation, role, email, phone,
-org, organisation_type, curriculum, medium_of_instruction, state, city, district, pincode,
+org, organisation_type, curriculum, medium_of_instruction, address, state, city, district, pincode,
 website, google_maps_url, qr_url, qr_page_text, udise_code, parent_organisation_id,
 lead_type, interest, budget, timeline, schools_count, notes.
 organisation_type must be exactly one of SCHOOL, SCHOOL_CHAIN, CSR, NGO, GOVERNMENT, DISTRIBUTOR, INSTITUTION, VENDOR, OTHER.
 (DISTRIBUTOR = reseller or dealer; INSTITUTION = college, university or training centre; VENDOR = another edtech, hardware or content company; OTHER = individual, media, investor.)
 Leave organisation_type empty if the organisation is unclear.
 Use empty strings when unknown. Do not guess.
-city is the town or city only, state is the Indian state written out in full (Karnataka, not KA), and district is the district only when it is printed. Never put the state or the district inside city, and never put a city in state.
+address is the postal address printed or written on the document (building, plot or door number, street, area, landmark), without the city, state and pincode, which have their own keys; never leave the address in notes. city is the town or city only, state is the Indian state written out in full (Karnataka, not KA), and district is the district only when it is printed. Never put the state or the district inside city, and never put a city in state.
 """
 
 SINGLE_TEXT = """
@@ -234,6 +234,7 @@ def lead_dict_to_text(data: dict) -> str:
         "role": "Role",
         "curriculum": "Curriculum",
         "medium_of_instruction": "Medium of Instruction",
+        "address": "Address",
         "city": "City",
         "state": "State",
         "district": "District",

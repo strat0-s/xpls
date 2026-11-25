@@ -84,7 +84,7 @@ TYPES = [
 ]
 # Lead fields shown in the scan summary: (field, label). Name, Organisation, Phone and Email always show, even blank.
 SUMMARY = [("name", "Name"), ("org", "Organisation"), ("role", "Role"), ("phone", "Phone"), ("email", "Email"), ("organisation_type", "Type"), ("priority", "Priority"), ("lead_owner", "Lead owner"),
-           ("city", "City"), ("state", "State"), ("curriculum", "Curriculum"), ("products", "Products"), ("demo_interest", "Demo"), ("workshop", "Teacher workshop"), ("students", "Students"), ("interest", "Interest"), ("notes", "Notes"),
+           ("address", "Address"), ("city", "City"), ("state", "State"), ("curriculum", "Curriculum"), ("products", "Products"), ("demo_interest", "Demo"), ("workshop", "Teacher workshop"), ("students", "Students"), ("interest", "Interest"), ("notes", "Notes"),
            ("qr_url", "QR link"), ("qr_page_text", "QR text")]
 ALWAYS = {"name", "org", "phone", "email", "lead_owner"}
 

@@ -24,7 +24,7 @@ PRIORITIES = ("High", "Medium", "Low")
 # The lead page's text fields in the order they are shown: (title of the group, [(field, label, width)]); a width of 2 spans the row.
 LEAD_SECTIONS = [
     ("Contact", [("name", "Full name", 2), ("org", "Organisation", 2), ("designation", "Designation", 1), ("phone", "Phone", 1), ("email", "Email", 2)]),
-    ("Location", [("city", "City", 1), ("state", "State", 1), ("district", "District", 1), ("pincode", "Pincode (6 digits)", 1)]),
+    ("Location", [("address", "Address", 2), ("city", "City", 1), ("state", "State", 1), ("district", "District", 1), ("pincode", "Pincode (6 digits)", 1)]),
     ("Organisation", [("website", "Website", 2), ("google_maps_url", "Google Maps link", 2), ("udise_code", "UDISE code", 1), ("medium_of_instruction", "Medium of instruction", 1)]),
     ("Interest", [("demo_interest", "Demo (yes or no, and when)", 2), ("workshop", "Teacher workshop", 1), ("students", "Students", 1)]),
 ]

@@ -29,6 +29,7 @@ class Lead:
     city: str = ""
     district: str = ""
     pincode: str = ""
+    address: str = ""
     phone: str = ""
     email: str = ""
     website: str = ""

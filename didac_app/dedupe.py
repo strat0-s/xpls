@@ -7,7 +7,7 @@ from didac_app.storage import LeadStore
 # Fields a merge may fill when blank on the existing lead; everything else (ids, timestamps, sender, status, media, flags) is left alone.
 FILLABLE = [
     "first_name", "last_name", "name", "org", "organisation_type", "role", "designation", "curriculum",
-    "medium_of_instruction", "city", "district", "pincode", "phone", "email", "website", "google_maps_url",
+    "medium_of_instruction", "address", "city", "district", "pincode", "phone", "email", "website", "google_maps_url",
     "qr_url", "qr_page_text", "udise_code", "lead_type", "interest", "products", "demo_interest", "workshop", "students", "budget", "timeline", "schools_count",
     "grades", "state", "notes", "priority", "lead_owner",
 ]
