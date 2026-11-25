@@ -930,3 +930,11 @@ def test_a_photo_captioned_visitor_meet_is_kept_with_the_event_photos_and_never_
     shots = store.list_event_photos(store.live_event()["id"])
     assert len(shots) == 1 and shots[0]["caption"].startswith("Visitor Meet") and shots[0]["uploaded_by"] == "Test Admin"
     assert last(sent)[0].endswith("saved to " + store.live_event()["name"] + ".")
+
+
+def test_a_card_with_two_phone_numbers_keeps_the_first_mobile_and_notes_the_other():
+    fields = flows.lead_fields({"name": "Asha Rao", "phone": "+91 99440 04169, 94428 84169", "email": "a@b.in"})["fields"]
+    assert fields["phone"] == "+91 99440 04169" and "Other phone: 94428 84169" in fields["notes"]
+    landline = flows.lead_fields({"name": "Asha Rao", "phone": "080 2860 3163 / 98450 11111"})["fields"]
+    assert landline["phone"] == "98450 11111" and "Other phone: 080 2860 3163" in landline["notes"]
+    assert flows.lead_fields({"name": "Asha Rao", "phone": "98450 11111"})["fields"]["phone"] == "98450 11111"

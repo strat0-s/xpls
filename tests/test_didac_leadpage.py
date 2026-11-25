@@ -2,7 +2,7 @@
 from io import BytesIO
 
 from conftest import csrf, get_or_create_user
-from didac_app import blobstore, flows
+from didac_app import blobstore, flows, followup
 from didac_app.models import NOT_SCANNED, Lead
 from didac_app.server import app
 
@@ -123,3 +123,25 @@ def test_a_lead_with_typed_details_is_not_marked_not_scanned_when_its_photo_cann
     assert "reading=" in saved.headers["Location"] and lead.review_reason == ""
     client.post(f"/leads/{lead.id}/read", data={"csrf": csrf(client), "twin": "1"})
     assert store.get_lead(lead.id).review_reason == "" and store.get_lead(lead.id).name == "Typed Person"
+
+
+def test_photos_added_in_the_app_are_read_as_a_contact_form_even_when_the_lead_says_card(store, monkeypatch):
+    monkeypatch.setattr(blobstore, "upload", lambda *args, **kwargs: None)
+    kinds = []
+    monkeypatch.setattr(flows, "read_documents", lambda config, photos, kind, products=(): kinds.append(kind) or {"fields": {"demo_interest": "1 Dec 2026", "notes": "For partnership in TN"}, "check": [], "ms": 1})
+    card = next(row["key"] for row in store.list_doc_types(store.live_event()["id"]) if row["reader"] == "document")
+    lead = store.create_lead(Lead(name="Pinned Card", phone="+919800000032", doc_type=card))
+    client = app.test_client()
+    client.post(f"/leads/{lead.id}/photos", data={"csrf": csrf(client), "photo": (BytesIO(b"x"), "a.jpg", "image/jpeg")}, content_type="multipart/form-data")
+    assert kinds == ["form"] and store.get_lead(lead.id).demo_interest == "1 Dec 2026"
+
+
+def test_a_new_lead_starts_as_a_contact_form_and_follow_up_runs_after_a_save_with_a_number(store, monkeypatch):
+    sent = []
+    monkeypatch.setattr(followup, "auto_send", lambda store, config, now=None: sent.append(1))
+    client = app.test_client()
+    page = client.get("/leads/new").data.decode()
+    form = next(row["key"] for row in store.list_doc_types(store.live_event()["id"]) if row["reader"] == "form")
+    assert f'<option value="{form}" selected>' in page
+    client.post("/leads/new", data={"csrf": csrf(client), "name": "Has Number", "phone": "+919800000033"})
+    assert sent == [1]

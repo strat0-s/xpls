@@ -169,6 +169,7 @@ def register(app, get_store, get_config) -> None:
         if request.method == "POST":
             store.update_lead_fields(lead_id, **lead_form_values(store, lead), review_reason="", updated_by=g.user["name"], updated_at=datetime.now(UTC).isoformat(timespec="seconds"))
             flash("Saved.")
+            followup.auto_send(store, get_config())  # a number typed in now makes the lead eligible, like a lead saved over WhatsApp
             return redirect(url_for("lead_detail", lead_id=lead_id))
         return render_lead(store, lead)
 
@@ -179,6 +180,7 @@ def register(app, get_store, get_config) -> None:
         events = {e["id"]: e for e in store.list_events()}
         event_id = chosen_event_id(store, events, request.values)
         lead = Lead(source_channel="dashboard", captured_by=g.user["name"], from_number=g.user["phone"] or "", staff_number=g.user["phone"] or "", event_id=event_id)
+        lead.doc_type = next((row["key"] for row in store.list_doc_types(event_id) if row["reader"] == "form"), "") if event_id else ""  # the usual capture is a contact form with a card pinned to it
         if request.method == "POST":
             values = lead_form_values(store, lead)
             for name, value in values.items():
@@ -198,6 +200,8 @@ def register(app, get_store, get_config) -> None:
             save_photos(store, lead.id, visitor, "visitor")
             save_photos(store, lead.id, scans)
             flash("Lead added. Reading the photos..." if scans else "Lead added.")
+            if not scans:
+                followup.auto_send(store, get_config())
             # The read takes about 30s, so it runs from the leads page in its own request rather than holding this one past the platform limit.
             return redirect(url_for("gallery", event=lead.event_id or None, reading=lead.id if scans else None))
         return render_lead(store, lead, new=True)
@@ -248,7 +252,9 @@ def register(app, get_store, get_config) -> None:
                   if (row["content_type"] or "").startswith("image/") and row["local_path"] and not row["purpose"]][:flows.MAX_PHOTOS]
         if not photos:
             return flash("This lead has no document photos to read.")
-        reader = next((row["reader"] for row in store.list_doc_types(lead.event_id) if row["key"] == lead.doc_type), "document") if lead.event_id else "document"
+        types = store.list_doc_types(lead.event_id) if lead.event_id else []
+        # Photos added in the app are a contact form with a card pinned to it, so read the form answers too. Only a badge needs its own reader.
+        reader = "badge" if any(row["key"] == lead.doc_type and row["reader"] == "badge" for row in types) else "form"
         result = flows.read_documents(get_config(), photos, reader, [row["label"] for row in store.list_products()])
         if result.get("failed"):
             store.record_read_failure(result["reason"])
@@ -274,6 +280,7 @@ def register(app, get_store, get_config) -> None:
         if request.form.get("twin") and (twin := find_duplicate(store, lead, lead_id)):
             store.update_lead_fields(lead_id, review_reason="; ".join(filter(None, (lead.review_reason, f"possible duplicate of #{twin[0].event_no}"))))
             flash(f"This looks like lead #{twin[0].event_no}. It is saved as its own lead and marked Check.")
+        followup.auto_send(store, get_config())  # the read may have found the number
         return redirect(url_for("lead_detail", lead_id=lead_id))
 
     @app.post("/leads/<int:lead_id>/photos")
@@ -291,6 +298,7 @@ def register(app, get_store, get_config) -> None:
             flash("Photo added.")
         else:
             read_lead_photos(store, lead)
+            followup.auto_send(store, get_config())
         return redirect(url_for("lead_detail", lead_id=lead_id))
 
     @app.post("/leads/<int:lead_id>/resolve")

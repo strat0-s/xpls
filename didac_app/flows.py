@@ -263,9 +263,20 @@ def read_requirement(text: str) -> dict:
     return found if found.get("name") or found.get("interest") else {**found, "interest": text.strip()}
 
 
+def one_phone(value: str) -> tuple[str, list[str]]:
+    """A card with two numbers: the first mobile becomes the lead's phone (a follow-up needs exactly one), the rest are returned for the notes."""
+    parts = [part.strip() for part in re.split(r"[,;/\n]|\s&\s|\s(?:and|or)\s", value or "") if part.strip()]
+    if len(parts) < 2:
+        return value, []
+    valid = [part for part in parts if (phone := auth.normalize_phone(part))]
+    keep = next((part for part in valid if followup.is_mobile(auth.normalize_phone(part))), valid[0] if valid else parts[0])
+    return keep, [part for part in parts if part != keep]
+
+
 def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None, products: list[str] = ()) -> dict:
     """One document the reader found, as {"fields": lead fields, "check": doubts, "photos": the photo numbers it appears on}."""
     contact = dict(contact)
+    contact["phone"], spare = one_phone(str(contact.get("phone") or ""))
     photos = [number for number in (contact.pop("photos", None) or []) if isinstance(number, int)]
     check = [item for item in (str(item).strip() for item in contact.pop("check", None) or []) if item and not NOT_ON_DOCUMENT.search(item)] + (no_qr or [])
     owner = re.sub(r"^\s*(?:lead\s*owner\s*[:\-]*|l\.?\s*o\.?\s*[:\-]+)\s*", "", str(contact.pop("lead_owner", "") or ""), flags=re.I).strip()  # "Lead owner: Magesh" as written on the form
@@ -275,6 +286,8 @@ def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None
     other += match_products(contact.pop("other_products", None), [])[1]
     liked += [name for name in products if name not in liked and re.search(rf"\b{re.escape(name)}\b", remarks, re.I)]  # a product named in the remarks that the reader did not list
     notes = [f"Remarks: {remarks}"] if remarks else []
+    if spare:
+        notes.append("Other phone: " + ", ".join(spare))
     if other:
         notes.append("Other products: " + ", ".join(other))
     lead = parse_structured_lead("New lead\n" + lead_dict_to_text(contact) + ("\n" + qr_text if qr_text else ""))
