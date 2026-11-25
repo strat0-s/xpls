@@ -54,6 +54,13 @@ def register(app, get_store, get_config) -> None:
             return jsonify({"error": "login required"}), 401
         return redirect(url_for("login", next=request.full_path.rstrip("?")))
 
+    @app.after_request
+    def send_follow_ups(response):
+        """Automatic follow-up, however the lead got its number: any change made in the app, and opening the Leads page (which also catches up leads that waited out quiet hours)."""
+        if g.get("user") and response.status_code < 400 and (request.method == "POST" or request.endpoint == "gallery"):
+            followup.auto_send(get_store(), get_config())
+        return response
+
     @app.context_processor
     def inject_globals():
         return {"user": g.get("user"), "csrf_token": csrf_token, "reader": get_store().reader_status() if g.get("user") else None,  # drives the reading-problem banner
@@ -169,7 +176,6 @@ def register(app, get_store, get_config) -> None:
         if request.method == "POST":
             store.update_lead_fields(lead_id, **lead_form_values(store, lead), review_reason="", updated_by=g.user["name"], updated_at=datetime.now(UTC).isoformat(timespec="seconds"))
             flash("Saved.")
-            followup.auto_send(store, get_config())  # a number typed in now makes the lead eligible, like a lead saved over WhatsApp
             return redirect(url_for("lead_detail", lead_id=lead_id))
         return render_lead(store, lead)
 
@@ -200,8 +206,6 @@ def register(app, get_store, get_config) -> None:
             save_photos(store, lead.id, visitor, "visitor")
             save_photos(store, lead.id, scans)
             flash("Lead added. Reading the photos..." if scans else "Lead added.")
-            if not scans:
-                followup.auto_send(store, get_config())
             # The read takes about 30s, so it runs from the leads page in its own request rather than holding this one past the platform limit.
             return redirect(url_for("gallery", event=lead.event_id or None, reading=lead.id if scans else None))
         return render_lead(store, lead, new=True)
@@ -280,7 +284,6 @@ def register(app, get_store, get_config) -> None:
         if request.form.get("twin") and (twin := find_duplicate(store, lead, lead_id)):
             store.update_lead_fields(lead_id, review_reason="; ".join(filter(None, (lead.review_reason, f"possible duplicate of #{twin[0].event_no}"))))
             flash(f"This looks like lead #{twin[0].event_no}. It is saved as its own lead and marked Check.")
-        followup.auto_send(store, get_config())  # the read may have found the number
         return redirect(url_for("lead_detail", lead_id=lead_id))
 
     @app.post("/leads/<int:lead_id>/photos")
@@ -298,7 +301,6 @@ def register(app, get_store, get_config) -> None:
             flash("Photo added.")
         else:
             read_lead_photos(store, lead)
-            followup.auto_send(store, get_config())
         return redirect(url_for("lead_detail", lead_id=lead_id))
 
     @app.post("/leads/<int:lead_id>/resolve")

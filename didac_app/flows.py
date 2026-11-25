@@ -137,6 +137,7 @@ def staff_user(store: LeadStore, number: str) -> dict | None:
 def handle(store: LeadStore, config: DidacConfig, number: str, body: str, media: list[tuple[str, str]]) -> tuple[list[Reply], list[int]]:
     chat = Chat(store, config, number)
     chat.run(body.strip(), media)
+    followup.auto_send(store, config)  # whatever the message did (a scan, a note, a requirement), a lead with a new number gets the thank-you
     return chat.replies, chat.lead_ids
 
 
@@ -705,7 +706,6 @@ class Chat:
             outcomes.append((saved, outcome))
         self.store.put_session(self.number, flow, "photos", {"photos": []})
         self.store.close_convo(self.number)
-        followup.auto_send(self.store, self.config)
         self.say(saved_text(outcomes) + f"\nSend the next {item_noun(self.doc_types[flow])}, or type menu.")
 
     def auto_scan(self, media: list[tuple[str, str]], caption: str = "") -> None:
@@ -740,7 +740,6 @@ class Chat:
             saved, outcome = self.store_lead(lead, doc_photos, doc["original"])
             outcomes.append(self.pair_up(saved) if outcome == "created" else (saved, outcome))
         self.store.close_convo(self.number)
-        followup.auto_send(self.store, self.config)
         self.say(saved_text(outcomes) + "\nPriority is not set yet.")
 
     def recent_autos(self, skip_id: int = 0) -> list[Lead]:

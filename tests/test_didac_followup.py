@@ -181,3 +181,19 @@ def test_admin_can_switch_automatic_followup_on_and_off(store):
     assert store.get_setting(followup.AUTO_KEY) == since  # switching on again does not move the start
     client.post("/admin/messages/auto-followup", data={"on": "0", "csrf": csrf(client)})
     assert store.get_setting(followup.AUTO_KEY) == ""
+
+
+def test_follow_up_goes_out_however_the_lead_was_captured(store, templates, monkeypatch):
+    monkeypatch.setattr(followup, "blocked", lambda store, config, now: "")  # the app's config has no template; the send itself is faked
+    store.set_setting(followup.AUTO_KEY, "2026-06-01T00:00:00+00:00")
+    client = app.test_client()
+    post_bird(client, "whatsapp:+919800000001", "New lead\nName: Typed By Staff\nPhone: 98450 44444")  # a typed lead over WhatsApp
+    assert templates == ["+919845044444"]
+    client.post("/leads/new", data={"csrf": csrf(client), "name": "Added In App", "phone": "98450 55555"})  # added in the app
+    assert templates[-1] == "+919845055555"
+    waiting = store.create_lead(Lead(name="Waited", phone="98450 66666"))  # saved without any trigger, e.g. during quiet hours
+    client.post(f"/leads/{waiting.id}", data={"csrf": csrf(client), "name": "Waited", "phone": "98450 66666"})  # a lead edited in the app
+    assert templates[-1] == "+919845066666"
+    late = store.create_lead(Lead(name="Late", phone="98450 77777"))
+    client.get("/")  # opening the Leads page catches up anything left waiting
+    assert templates[-1] == "+919845077777" and len(templates) == 4 and late.id
