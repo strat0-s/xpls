@@ -82,6 +82,19 @@ WHEN = {  # skipped reason -> what makes the message go out
     "Team member": "Never: this is a team number.",
     "Replied STOP": "Never: they asked us to stop.",
 }
+MEANS = {  # what each state means, shown on hover in the admin report
+    "delivered": "WhatsApp confirmed the message reached the phone.",
+    "pending": "Handed to WhatsApp with no delivery receipt yet: the phone may be off or offline. It can still arrive.",
+    "failed": "WhatsApp refused the message after we sent it. The reason is in the detail and cannot be fixed here.",
+    "waiting": "A valid mobile number that has not been messaged yet. It goes out on the next send.",
+    "Not scanned": "The photo has not been read, so there is no number yet.",
+    "No phone number": "The lead has no phone number.",
+    "Number incomplete": "A number was read but it is not a full mobile number: too short, too long or partly unreadable.",
+    "Landline": "A landline cannot receive WhatsApp.",
+    "Team member": "The number belongs to a team member.",
+    "Replied STOP": "They replied STOP and are not messaged again.",
+    "Same number as another lead": "Another lead has this number and it is covered there.",
+}
 FAILURES = {"131026": "Number is not on WhatsApp", "131049": "WhatsApp declined it (limit on marketing messages to that person)", "130472": "Number is in a WhatsApp test group"}
 
 

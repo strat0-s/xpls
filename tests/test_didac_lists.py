@@ -129,7 +129,7 @@ def test_the_admin_follow_up_report_counts_what_went_out_and_what_was_held_back(
     store.claim_followup("+919845033333", sent.id)
     store.update_followup_status("+919845033333", "delivery_failed", "facebook: (code: 131049; title: not delivered)")
     page = app.test_client().get("/admin/followup").data.decode()
-    assert "Number incomplete" in page and "No phone number" in page and "WhatsApp declined it" in page and "Waiting to go · 1" in page and "Not sent · 2" in page
+    assert "Number incomplete" in page and "No phone number" in page and "WhatsApp declined it" in page and "Not sent, by reason · 2" in page
     assert "When the number is corrected" in page
 
 
@@ -143,5 +143,14 @@ def test_the_admin_follow_up_report_has_a_row_for_every_lead(store, admin):
     page = client.get("/admin/followup").data.decode()
     assert "Every lead" in page and "Number is not on WhatsApp" in page and "Waiting · 1" in page and "Failed · 1" in page
     only = client.get("/admin/followup?show=failed").data.decode()
-    table = only.split("Every lead")[1].split("Failed after")[0]
+    table = only.split('id="every"')[1].split("Failed after")[0]
     assert table.count('class="fr"') == 1 and "Refused" in table and "Captured" in table and "Sent " in table
+
+
+def test_the_admin_follow_up_report_explains_states_on_hover_and_says_when_the_cap_is_reached(store, admin, monkeypatch):
+    store.create_lead(flows.Lead(name="Half Number", phone="99024*****"))
+    client = app.test_client()
+    page = client.get("/admin/followup").data.decode()
+    assert 'title="A number was read but it is not a full mobile number' in page and "Daily cap reached" not in page
+    monkeypatch.setattr(store, "followups_last_day", lambda: 100)
+    assert "Daily cap reached: 100 of 100" in client.get("/admin/followup").data.decode()

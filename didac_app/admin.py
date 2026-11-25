@@ -234,6 +234,7 @@ def register(app, get_store, get_config) -> None:
         sent = store.list_followups(event_id=event_id)
         since, live = store.get_setting(followup.AUTO_KEY), (store.live_event() or {}).get("id")
         stopped = followup.blocked(store, config, None)
+        used = store.followups_last_day()
         for row in waiting:  # when each waiting number goes out
             lead = row["lead"]
             row["when"] = stopped or ("On the next save of any lead." if since and lead.event_id == live and max(lead.created_at, lead.updated_at) >= since else "Only from the Follow-up page: it was captured before automatic follow-up was switched on.")
@@ -261,10 +262,9 @@ def register(app, get_store, get_config) -> None:
             every.append({"lead": lead, "state": state, "label": label, "note": f"{made}. {note}"})
         show = request.args.get("show", "")
         counts = Counter(r["state"] for r in every)
-        return render_template("admin_followup.html", event=event, events=store.list_events(), auto_since=since, stopped=stopped, tz=followup.IST, now=datetime.now(followup.IST),
+        return render_template("admin_followup.html", event=event, events=store.list_events(), auto_since=since, stopped=stopped, used=used, cap=config.followup_daily_cap, means=followup.MEANS, tz=followup.IST, now=datetime.now(followup.IST),
                                leads=len(store.list_leads("event_id = %s", (event_id,))) if event_id else 0, sent=len(sent), status=status, failures=failures.most_common(),
                                reasons=Counter(r["why"] for r in skipped).most_common(), total_skipped=len(skipped), total_waiting=len(waiting),
-                               w=paginate(waiting, request.args.get("wpage", 1, type=int), 10), s=paginate(skipped, request.args.get("spage", 1, type=int), 10),
                                show=show, counts=counts, e=paginate([r for r in every if not show or r["state"] == show], request.args.get("epage", 1, type=int), 25))
 
     # ---- message wording -------------------------------------------------------------------------------------------------------
