@@ -943,3 +943,7 @@ def test_a_card_with_two_phone_numbers_keeps_the_first_mobile_and_notes_the_othe
 def test_the_address_from_a_card_is_its_own_field_not_a_note():
     out = flows.lead_fields({"name": "Rahul J", "phone": "98450 11111", "address": "Annapoorna Nivas, Plot No. 3682, Ramteerth Nagar", "city": "Belagavi", "state": "Karnataka", "pincode": "590016"})["fields"]
     assert out["address"] == "Annapoorna Nivas, Plot No. 3682, Ramteerth Nagar" and out["city"] == "Belagavi" and "Annapoorna" not in out.get("notes", "")
+
+
+def test_a_stray_quote_after_the_handwritten_student_count_is_dropped():
+    assert flows.lead_fields({"name": "Asha", "phone": "98450 11111", "students": "450'"})["fields"]["students"] == "450"

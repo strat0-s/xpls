@@ -51,13 +51,14 @@ Use the extra keys: demo (whatever is ticked or written at "Interested in demo":
 Put a role or curriculum that was only written in (not ticked) in role/curriculum as written and add it to "check". A crossed-out printed value is not an answer, and handwritten words that are scribbled out or struck through are not part of the remarks: leave them out. Only add a text to "check" when it really cannot be read; a clear printed address or phone number is never unreadable.
 Handwritten or doubtful values (student count, phone digits) go in "check".
 Add a key "lead_owner": the name handwritten at the top right of the form, just above the CONTACT FORM heading (written as "LO: Name", "Lead owner: Name" or just the name). LO means Lead Owner. It is the team member who met the visitor, never the visitor: do not use it for name, which comes from the card or the form's Name field. Return just the name; leave it empty when nothing is written there.
-The photos can also include the person's visiting card, stapled or sent with the form. It is the same person: the form wins, and the card fills anything the form leaves blank (designation, organisation, email, phone, website, address).
+If the handwriting on the form's Full Name line is clearly not a person's name (for example the organisation written there) or names someone else than the visiting card, use the person on the card and put what the form's Name line says in notes. The photos can also include the person's visiting card, stapled or sent with the form. It is the same person: the form wins, and the card fills anything the form leaves blank (designation, organisation, email, phone, website, address).
 """
 
 
 BADGE_PROMPT = DOCUMENT_PROMPT + """
 This is an event badge or ID card. Read the person's name, designation, organisation and city. Printed codes, stall or exhibitor numbers that are not a person's details go in notes.
 If a URL or ID is printed next to the QR code, put it in qr_url (a URL) or qr_page_text (an ID). Anything doubtful goes in "check".
+The coloured band or label at the top or bottom of a badge (for example CATALYST, VISITOR, EXHIBITOR, DELEGATE) is the visitor category, not a job title: write it in notes as "Visitor category: X" and never in role or designation. A city or venue printed in the event name or date box (for example "25 - 27 November, Bengaluru") is where the event is held, never the person's city; use city only for a place printed next to the person's own name or organisation.
 """
 
 

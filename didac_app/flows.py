@@ -282,6 +282,7 @@ def lead_fields(contact: dict, qr_text: str = "", no_qr: list[str] | None = None
     check = [item for item in (str(item).strip() for item in contact.pop("check", None) or []) if item and not NOT_ON_DOCUMENT.search(item)] + (no_qr or [])
     owner = re.sub(r"^\s*(?:lead\s*owner\s*[:\-]*|l\.?\s*o\.?\s*[:\-]+)\s*", "", str(contact.pop("lead_owner", "") or ""), flags=re.I).strip()  # "Lead owner: Magesh" as written on the form
     demo, workshop, students, remarks = (str(contact.pop(key, "") or "").strip() for key in ("demo", "workshop", "students", "remarks"))
+    students = students.strip(" '\"`.,")  # a stray tick or quote after a handwritten number is not part of it
     contact["city"], contact["state"], contact["district"] = tidy(*(str(contact.get(key) or "") for key in ("city", "state", "district")))  # before the text form, where a line break would split the value
     liked, other = match_products(contact.pop("products", None), list(products))
     other += match_products(contact.pop("other_products", None), [])[1]
