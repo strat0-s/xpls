@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set active = 'followup_report' %}
+{% block title %}Follow-up report · Footfall{% endblock %}
+{% block css %}
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    h2 { margin: 0; font-size: 16px; }
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; }
+    .hint { font-size: 13px; color: var(--mut); }
+    .tiles { display: flex; flex-wrap: wrap; gap: 12px; } .tile { flex: 1 1 140px; padding: 14px 16px; } .tile b { display: block; font-size: 24px; } .tile span { color: var(--mut); }
+    .scroll { overflow-x: auto; } .grid { min-width: 760px; }
+    .hd, .fr { display: grid; grid-template-columns: minmax(190px, 2fr) 150px minmax(120px, 1fr) 150px minmax(220px, 2fr); gap: 12px; align-items: center; padding: 10px 16px; }
+    .hd { background: var(--head); font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); font-weight: 600; padding-top: 8px; padding-bottom: 8px; }
+    .fr { border-top: 1px solid var(--line); } .fr b { display: block; } .fr small { color: var(--mut); font-size: 12.5px; }
+    .evsel { display: flex; align-items: center; gap: 8px; color: var(--mut); font-weight: 600; margin: 0; } .evsel select { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--ink); font-weight: 600; }
+    .sum { padding: 4px 16px 14px; } .sum div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--line); } .sum div:first-child { border-top: 0; }
+{% endblock %}
+{% block content %}
+<div class="stack">
+  <div class="bar">
+    <div><h1>Follow-up report</h1><div class="hint">Admins only. How many thank-you messages went out, what failed, and what has not been sent yet and why. Updated {{ now.strftime('%H:%M:%S') }}, refreshes by itself every 30 seconds.</div></div>
+    <form class="evsel" method="get" action="{{ url_for('admin_followup') }}"><label for="event">Event</label>
+      <select id="event" name="event" onchange="this.form.submit()">{% for e in events %}<option value="{{ e.id }}" {{ 'selected' if event and e.id == event.id }}>{{ e.name }}{{ ' (live)' if e.status == 'live' }}</option>{% endfor %}</select></form>
+  </div>
+  <div class="card" style="padding:14px 16px">
+    <b>Automatic follow-up: {{ 'on' if auto_since else 'off' }}</b>
+    <div class="hint">{% if stopped %}Held right now: {{ stopped }}{% elif auto_since %}Going out as leads are saved, 9:00 to 21:00 IST.{% else %}Switch it on under Messages. Until then nothing goes out by itself.{% endif %}</div>
+  </div>
+  <div class="tiles">
+    <div class="card tile"><b>{{ leads }}</b><span>leads</span></div>
+    <div class="card tile"><b>{{ sent }}</b><span>messaged</span></div>
+    <div class="card tile"><b>{{ status.delivered }}</b><span>delivered</span></div>
+    <div class="card tile"><b>{{ status.pending }}</b><span>on the way</span></div>
+    <div class="card tile"><b>{{ status.failed }}</b><span>failed</span></div>
+    <div class="card tile"><b>{{ total_waiting }}</b><span>waiting to go</span></div>
+    <div class="card tile"><b>{{ total_skipped }}</b><span>not sent</span></div>
+  </div>
+
+  <section class="card" id="every">
+    <div style="padding:14px 16px"><h2>Every lead</h2><div class="hint">One row per lead of this event and where its message stands.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">{% for key, name in [('', 'All'), ('delivered', 'Delivered'), ('pending', 'On the way'), ('failed', 'Failed'), ('waiting', 'Waiting'), ('notsent', 'Not sent')] %}<a class="chip {{ 'ok' if show == key else 'none' }}" href="{{ url_for('admin_followup', event=event.id if event, show=key or None) }}#every">{{ name }} · {{ leads if not key else counts[key] }}</a>{% endfor %}</div></div>
+    <div class="scroll"><div class="grid">
+      <div class="hd"><span>Lead</span><span>Number as read</span><span>Captured by</span><span>Status</span><span>Detail</span></div>
+      {% for r in e['items'] %}<a class="fr" href="{{ url_for('lead_detail', lead_id=r.lead.id) }}" style="color:inherit;text-decoration:none;font-weight:400">
+        <span><b>{{ r.lead.name or r.lead.org or ('Lead #' ~ r.lead.id) }}</b><small>{{ r.lead.org }}</small></span><span>{{ r.lead.phone or '—' }}</span><span>{{ r.lead.captured_by }}</span>
+        <span><span class="chip {{ {'delivered': 'ok', 'failed': 'off', 'pending': 'amber', 'waiting': 'team'}.get(r.state, 'none') }}">{{ r.label }}</span></span><span class="hint">{{ r.note }}</span></a>{% endfor %}
+    </div></div>
+    {% with pg = e, key = 'epage', nosize = true %}{% include "_pager.html" %}{% endwith %}
+  </section>
+
+  <section class="card">
+    <div style="padding:14px 16px 6px"><h2>Failed after sending · {{ status.failed }}</h2><div class="hint">Bird handed these to WhatsApp, which then refused. Nothing in the app can change that.</div></div>
+    <div class="sum">{% for label, n in failures %}<div><span>{{ label }}</span><b>{{ n }}</b></div>{% else %}<div><span class="hint">None.</span></div>{% endfor %}</div>
+  </section>
+
+  <section class="card">
+    <div style="padding:14px 16px 6px"><h2>Not sent, by reason · {{ total_skipped }}</h2><div class="hint">Fixing the lead and saving it sends the message by itself where the reason says so.</div></div>
+    <div class="sum">{% for label, n in reasons %}<div><span>{{ label }}</span><b>{{ n }}</b></div>{% else %}<div><span class="hint">None.</span></div>{% endfor %}</div>
+  </section>
+
+  <section class="card">
+    <div style="padding:14px 16px"><h2>Not sent · {{ s.total }}</h2><div class="hint">Open a lead, fix it and save.</div></div>
+    <div class="scroll"><div class="grid">
+      <div class="hd"><span>Lead</span><span>Number as read</span><span>Captured by</span><span>Reason</span><span>It goes out</span></div>
+      {% for r in s['items'] %}<a class="fr" href="{{ url_for('lead_detail', lead_id=r.lead.id) }}" style="color:inherit;text-decoration:none;font-weight:400">
+        <span><b>{{ r.lead.name or r.lead.org or ('Lead #' ~ r.lead.id) }}</b><small>{{ r.lead.org }}</small></span><span>{{ r.phone or '—' }}</span><span>{{ r.lead.captured_by }}</span>
+        <span><span class="chip none">{{ r.why }}</span></span><span class="hint">{{ r.when }}</span></a>{% endfor %}
+    </div></div>
+    {% with pg = s, key = 'spage', nosize = true %}{% include "_pager.html" %}{% endwith %}
+  </section>
+
+  <section class="card">
+    <div style="padding:14px 16px"><h2>Waiting to go · {{ w.total }}</h2><div class="hint">A valid mobile number, not messaged yet.</div></div>
+    <div class="scroll"><div class="grid">
+      <div class="hd"><span>Lead</span><span>Number</span><span>Captured by</span><span>Time</span><span>It goes out</span></div>
+      {% for r in w['items'] %}<a class="fr" href="{{ url_for('lead_detail', lead_id=r.lead.id) }}" style="color:inherit;text-decoration:none;font-weight:400">
+        <span><b>{{ r.lead.name or r.lead.org or ('Lead #' ~ r.lead.id) }}</b><small>{{ r.lead.org }}</small></span><span>{{ r.phone }}</span><span>{{ r.lead.captured_by }}</span><span>{{ r.lead.created_at|local_time }}</span>
+        <span class="hint">{{ r.when }}</span></a>{% endfor %}
+    </div></div>
+    {% with pg = w, key = 'wpage', nosize = true %}{% include "_pager.html" %}{% endwith %}
+  </section>
+</div>
+<script>setInterval(() => { if (!document.hidden) location.reload(); }, 30000);</script>
+{% endblock %}

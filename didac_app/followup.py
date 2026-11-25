@@ -57,7 +57,7 @@ def overview(store: LeadStore, config: DidacConfig, event_id: int | None = None)
         if lead.review_reason == NOT_SCANNED:
             why = "Not scanned"
         elif not phone:
-            why = "No phone number"
+            why = "Number incomplete" if lead.phone.strip() else "No phone number"
         elif phone in team:
             why = "Team member"
         elif phone in opted:
@@ -71,6 +71,22 @@ def overview(store: LeadStore, config: DidacConfig, event_id: int | None = None)
         seen.add(phone)
         skipped.append({"lead": lead, "phone": lead.phone, "why": why})
     return waiting, skipped
+
+
+WHEN = {  # skipped reason -> what makes the message go out
+    "Not scanned": "When the photo is read or the details are typed in and saved.",
+    "No phone number": "When a mobile number is added to the lead and saved.",
+    "Number incomplete": "When the number is corrected to a full mobile number and saved.",
+    "Landline": "When a mobile number replaces it and is saved.",
+    "Same number as another lead": "Never needed: that number is already covered by the other lead.",
+    "Team member": "Never: this is a team number.",
+    "Replied STOP": "Never: they asked us to stop.",
+}
+FAILURES = {"131026": "Number is not on WhatsApp", "131049": "WhatsApp declined it (limit on marketing messages to that person)", "130472": "Number is in a WhatsApp test group"}
+
+
+def failure_label(reason: str) -> str:
+    return next((text for code, text in FAILURES.items() if code in (reason or "")), "Not delivered, other reason")
 
 
 def blocked(store: LeadStore, config: DidacConfig, now: datetime | None) -> str:

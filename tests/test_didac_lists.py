@@ -119,3 +119,29 @@ def test_lead_owner_is_a_column_in_the_leads_list(store):
     store.create_lead(flows.Lead(name="Owned Person", lead_owner="Magesh Kumar AP"))
     page = app.test_client().get("/dashboard").data.decode()
     assert "<span>Lead owner</span>" in page and "<span>Magesh Kumar AP</span>" in page
+
+
+def test_the_admin_follow_up_report_counts_what_went_out_and_what_was_held_back(store, admin):
+    store.create_lead(flows.Lead(name="Gets It", phone="+919845011111"))
+    store.create_lead(flows.Lead(name="Half Number", phone="99024*****"))
+    store.create_lead(flows.Lead(name="No Phone"))
+    sent = store.create_lead(flows.Lead(name="Refused", phone="+919845033333"))
+    store.claim_followup("+919845033333", sent.id)
+    store.update_followup_status("+919845033333", "delivery_failed", "facebook: (code: 131049; title: not delivered)")
+    page = app.test_client().get("/admin/followup").data.decode()
+    assert "Number incomplete" in page and "No phone number" in page and "WhatsApp declined it" in page and "Waiting to go · 1" in page and "Not sent · 2" in page
+    assert "When the number is corrected" in page
+
+
+def test_the_admin_follow_up_report_has_a_row_for_every_lead(store, admin):
+    store.create_lead(flows.Lead(name="Gets It", phone="+919845011111"))
+    store.create_lead(flows.Lead(name="No Phone"))
+    sent = store.create_lead(flows.Lead(name="Refused", phone="+919845033333"))
+    store.claim_followup("+919845033333", sent.id)
+    store.update_followup_status("+919845033333", "delivery_failed", "facebook: (code: 131026; title: x)")
+    client = app.test_client()
+    page = client.get("/admin/followup").data.decode()
+    assert "Every lead" in page and "Number is not on WhatsApp" in page and "Waiting · 1" in page and "Failed · 1" in page
+    only = client.get("/admin/followup?show=failed").data.decode()
+    table = only.split("Every lead")[1].split("Failed after")[0]
+    assert table.count('class="fr"') == 1 and "Refused" in table and "Captured" in table and "Sent " in table

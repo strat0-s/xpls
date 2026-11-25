@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import re
 import secrets
+from collections import Counter
 from datetime import UTC, date, datetime
 
 from flask import abort, flash, g, redirect, render_template, request, url_for
 
 from didac_app import blobstore, followup
+from didac_app.auth import normalize_phone
 from didac_app.flows import DEFAULT_WELCOME
+from didac_app.pager import paginate
 
 READERS = {"document": "Other document (up to 2 per photo)", "form": "Form (one person, several pages)", "badge": "Badge with a QR code"}
 
@@ -219,6 +222,50 @@ def register(app, get_store, get_config) -> None:
         get_store().delete_product(product_id)
         flash("Removed. Leads keep the products they were saved with.")
         return redirect(url_for("admin_products"))
+
+    # ---- follow-up report ------------------------------------------------------------------------------------------------------
+    @app.get("/admin/followup")
+    def admin_followup():
+        store, config = get_store(), get_config()
+        followup.refresh_statuses(store, config, 30)
+        event = chosen_event(store)
+        event_id = event["id"] if event else None
+        waiting, skipped = followup.overview(store, config, event_id)
+        sent = store.list_followups(event_id=event_id)
+        since, live = store.get_setting(followup.AUTO_KEY), (store.live_event() or {}).get("id")
+        stopped = followup.blocked(store, config, None)
+        for row in waiting:  # when each waiting number goes out
+            lead = row["lead"]
+            row["when"] = stopped or ("On the next save of any lead." if since and lead.event_id == live and max(lead.created_at, lead.updated_at) >= since else "Only from the Follow-up page: it was captured before automatic follow-up was switched on.")
+        for row in skipped:
+            row["when"] = followup.WHEN.get(row["why"], "")
+        status = Counter("delivered" if r["status"] in ("delivered", "read") else "failed" if r["status"] in ("delivery_failed", "sending_failed") else "pending" for r in sent)
+        failures = Counter(followup.failure_label(r["reason"]) for r in sent if r["status"] in ("delivery_failed", "sending_failed"))
+        by_phone = {r["phone"]: r for r in sent}
+        waiting_by, skipped_by = {r["lead"].id: r for r in waiting}, {r["lead"].id: r for r in skipped}
+        every = []
+        for lead in sorted(store.list_leads("event_id = %s", (event_id,)) if event_id else [], key=lambda lead: -lead.id):
+            phone, done = normalize_phone(lead.phone), None
+            done = by_phone.get(phone) if phone else None
+            if done:
+                state = "delivered" if done["status"] in ("delivered", "read") else "failed" if done["status"] in ("delivery_failed", "sending_failed") else "pending"
+                label = {"delivered": "Delivered", "failed": "Failed", "pending": "On the way"}[state]
+                note = done["sent_at"].astimezone(followup.IST).strftime("Sent %d %b, %H:%M") + (f". {followup.failure_label(done['reason'])}." if state == "failed" else "") + ("" if done["lead_id"] == lead.id else " Sent through another lead with the same number.")
+            elif lead.id in waiting_by:
+                state, label, note = "waiting", "Waiting", waiting_by[lead.id]["when"]
+            elif lead.id in skipped_by:
+                state, label, note = "notsent", skipped_by[lead.id]["why"], skipped_by[lead.id]["when"]
+            else:
+                state, label, note = "notsent", "Same number as another lead", followup.WHEN["Same number as another lead"]
+            made = datetime.fromisoformat(lead.created_at).astimezone(followup.IST).strftime("Captured %d %b, %H:%M")
+            every.append({"lead": lead, "state": state, "label": label, "note": f"{made}. {note}"})
+        show = request.args.get("show", "")
+        counts = Counter(r["state"] for r in every)
+        return render_template("admin_followup.html", event=event, events=store.list_events(), auto_since=since, stopped=stopped, tz=followup.IST, now=datetime.now(followup.IST),
+                               leads=len(store.list_leads("event_id = %s", (event_id,))) if event_id else 0, sent=len(sent), status=status, failures=failures.most_common(),
+                               reasons=Counter(r["why"] for r in skipped).most_common(), total_skipped=len(skipped), total_waiting=len(waiting),
+                               w=paginate(waiting, request.args.get("wpage", 1, type=int), 10), s=paginate(skipped, request.args.get("spage", 1, type=int), 10),
+                               show=show, counts=counts, e=paginate([r for r in every if not show or r["state"] == show], request.args.get("epage", 1, type=int), 25))
 
     # ---- message wording -------------------------------------------------------------------------------------------------------
     @app.get("/admin/messages")
