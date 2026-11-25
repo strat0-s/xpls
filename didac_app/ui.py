@@ -10,7 +10,7 @@ from pathlib import Path
 from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
 from didac_app import auth, flows, followup, orbit
-from didac_app.dedupe import find_duplicate
+from didac_app.dedupe import FILLABLE, find_duplicate, fold
 from didac_app.media import suffix_for
 from didac_app.models import NOT_SCANNED, Lead
 from didac_app import blobstore
@@ -333,6 +333,36 @@ def register(app, get_store, get_config) -> None:
         lead = get_store().get_lead(lead_id) or abort(404)
         flash(followup.send_one(get_store(), get_config(), lead))
         return redirect(url_for("lead_detail", lead_id=lead_id))
+
+    def merge_pick(store, raw: str) -> list[Lead]:
+        """The leads to merge, from '3,7,9': two to six live leads of one event, or a 404/400."""
+        ids = list(dict.fromkeys(int(x) for x in raw.split(",") if x.strip().isdigit()))
+        leads = [lead for lead in (store.get_lead(i) for i in ids) if lead]
+        if len(leads) != len(ids) or not 2 <= len(leads) <= 6 or len({lead.event_id for lead in leads}) != 1:
+            abort(400)
+        return leads
+
+    @app.get("/leads/merge")
+    def lead_merge():
+        store = get_store()
+        leads = merge_pick(store, request.args.get("ids", ""))
+        filled = {lead.id: sum(bool(getattr(lead, name)) for name in FILLABLE) for lead in leads}
+        best = max(leads, key=lambda lead: (filled[lead.id], -lead.id))
+        rows = [(label, [getattr(lead, field) for lead in leads]) for field, label in EDITABLE_FIELDS]
+        return render_template("lead_merge.html", leads=leads, best=best.id, rows=[row for row in rows if any(row[1])], photos={lead.id: len(store.list_media(lead.id)) for lead in leads})
+
+    @app.post("/leads/merge")
+    def lead_merge_do():
+        store = get_store()
+        leads = merge_pick(store, request.form.get("ids", ""))
+        keep = next((lead for lead in leads if str(lead.id) == request.form.get("keep")), None) or abort(400)
+        for drop in (lead for lead in leads if lead.id != keep.id):
+            fold(keep, drop)
+            store.absorb_lead(keep.id, drop.id)
+        parts = [part for part in keep.review_reason.split("; ") if part and not part.startswith("possible duplicate") and not (part == NOT_SCANNED and (keep.name or keep.phone))]
+        store.update_lead_fields(keep.id, **{name: getattr(keep, name) for name in (*FILLABLE, "text_notes")}, review_reason="; ".join(parts), updated_by=g.user["name"], updated_at=datetime.now(UTC).isoformat(timespec="seconds"))
+        flash(f"Merged {len(leads)} leads into #{keep.event_no}.")
+        return redirect(url_for("lead_detail", lead_id=keep.id))
 
     @app.post("/leads/<int:lead_id>/delete")
     def lead_delete(lead_id: int):

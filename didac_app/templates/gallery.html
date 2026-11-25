@@ -41,13 +41,16 @@
       .ttl { width: 100%; justify-content: space-between; }
       .search input { width: 100%; } .search, .evsel { width: 100%; } .evsel select { flex: 1; }
     }
+    .sel { margin: auto 6px auto 0; pointer-events: none; } .selecting .lead { cursor: pointer; } .selecting .lead:has(.sel:checked) { background: var(--soft); }
+    #mergebar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: none; align-items: center; justify-content: center; gap: 12px; padding: 12px 16px; background: var(--surf); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0,0,0,.08); }
+    .selecting ~ #mergebar, #mergebar.on { display: flex; }
     .empty { padding: 40px 16px; text-align: center; color: var(--mut); }
 {% endblock %}
 {% block content %}
 {% set keep = {'q': q or None, 'who': who or None, 'prio': prio or None, 'check': '1' if check else None, 'event': request.args.get('event') or None, 'per': request.args.get('per') or None} %}
 {% set active_filters = (1 if who else 0) + (1 if prio else 0) + (1 if check else 0) + (1 if reply_only else 0) %}
 <div class="bar">
-  <div class="ttl"><h1>Leads</h1><a class="btn" href="{{ url_for('lead_new', event=request.args.get('event') or None) }}">Add lead</a></div>
+  <div class="ttl"><h1>Leads</h1><span style="display:flex;gap:8px"><button type="button" class="btn ghost" id="selbtn">Select to merge</button><a class="btn" href="{{ url_for('lead_new', event=request.args.get('event') or None) }}">Add lead</a></span></div>
   <div class="grp">
     <form class="evsel" method="get" action="{{ url_for('gallery') }}">
       {% for k, v in request.args.items() if k not in ('event', 'page', 'type') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
@@ -91,7 +94,7 @@
   <div class="hd"><span>Scan</span><span>Name</span><span>Event</span><span>Type</span><span>Priority</span><span>Captured by</span><span>Lead owner</span><span>Captured</span></div>
   {% for c in pg['items'] %}
   <a class="lead {{ 'chk' if c.review_reason or c.replied_at }}" href="{{ url_for('lead_detail', lead_id=c.id) }}">
-    <span class="th">{% if c.kind == 'image' %}<span class="ph"><img src="/media/{{ c.image_id }}" alt="" loading="lazy"></span>{% if c.photo_count > 1 %}<span class="ph">{{ c.photo_count }}</span>{% endif %}{% elif c.kind == 'audio' %}<span class="ph">{{ play|safe }}</span>{% else %}<span class="ph">{{ chat|safe }}</span>{% endif %}</span>
+    <span class="th"><input type="checkbox" class="sel" value="{{ c.id }}" aria-label="Select lead #{{ c.no }}" hidden>{% if c.kind == 'image' %}<span class="ph"><img src="/media/{{ c.image_id }}" alt="" loading="lazy"></span>{% if c.photo_count > 1 %}<span class="ph">{{ c.photo_count }}</span>{% endif %}{% elif c.kind == 'audio' %}<span class="ph">{{ play|safe }}</span>{% else %}<span class="ph">{{ chat|safe }}</span>{% endif %}</span>
     <span><b><span style="color:var(--mut);font-weight:600">#{{ c.no }}</span> {{ c.name }}</b><small>{{ c.org }}{{ ' · ' if c.org and c.phone }}{{ c.phone }}</small></span>
     <span>{% if c.event.name %}<b style="font-weight:600">{{ c.event.name }}</b><small>{{ c.event.when }}</small>{% endif %}</span>
     <span><span class="chip team">{{ c.type_label }}</span></span>
@@ -105,6 +108,25 @@
 {% else %}<div class="empty">No leads match.</div>{% endif %}
 {% include "_pager.html" %}
 </section>
+<form id="mergebar" method="get" action="{{ url_for('lead_merge') }}"><span id="selcount" class="hint">Tick two or more leads of the same person. Only this page's leads can be ticked: search for the name to bring them together.</span><input type="hidden" name="ids"><button class="btn" id="mergego" disabled>Merge</button><button type="button" class="btn ghost" id="selcancel">Cancel</button></form>
+<script>
+  (function () {
+    var card = document.querySelector('section.card'), bar = document.getElementById('mergebar'), boxes = function () { return Array.prototype.slice.call(document.querySelectorAll('.sel')); };
+    function state() {
+      var on = boxes().filter(function (b) { return b.checked; });
+      document.getElementById('mergego').disabled = on.length < 2 || on.length > 6;
+      bar.querySelector('[name=ids]').value = on.map(function (b) { return b.value; }).join(',');
+      document.getElementById('selcount').textContent = on.length + ' selected. Pick 2 to 6 leads of the same person.';
+    }
+    function mode(on) { card.classList.toggle('selecting', on); bar.classList.toggle('on', on); boxes().forEach(function (b) { b.hidden = !on; b.checked = false; }); state(); }
+    document.getElementById('selbtn').onclick = function () { mode(!card.classList.contains('selecting')); };
+    document.getElementById('selcancel').onclick = function () { mode(false); };
+    card.addEventListener('click', function (e) {
+      var row = e.target.closest('.lead'); if (!row || !card.classList.contains('selecting')) return;
+      e.preventDefault(); var b = row.querySelector('.sel'); b.checked = !b.checked; state();
+    });
+  })();
+</script>
 {% if reading %}
 <script>
   // Reads the photos of the lead just added, then reloads to show the result.

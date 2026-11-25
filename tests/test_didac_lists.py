@@ -154,3 +154,24 @@ def test_the_admin_follow_up_report_explains_states_on_hover_and_says_when_the_c
     assert 'title="A number was read but it is not a full mobile number' in page and "Daily cap reached" not in page
     monkeypatch.setattr(store, "followups_last_day", lambda: 100)
     assert "Daily cap reached: 100 of 100" in client.get("/admin/followup").data.decode()
+
+
+def test_leads_of_one_person_can_be_merged_into_one(store, admin):
+    from didac_app.models import Lead
+    first = store.create_lead(Lead(name="Gangineni Dhananjhay", phone="+919391319721", from_number="a", text_notes="Wants a demo"))
+    second = store.create_lead(Lead(name="Dr. Gangineni D", org="Narayana Group", email="deanmba@narayanagroup.com", designation="Dean", phone="+919999999999", from_number="a", review_reason="possible duplicate of #1"))
+    store.add_media(second.id, "http://u", "image/jpeg", "k/card.jpg", "")
+    store.add_feedback("a", "Loved it", second.id)
+    store.claim_followup("+919999999999", second.id)
+    client = app.test_client()
+    page = client.get(f"/leads/merge?ids={first.id},{second.id}").data.decode()
+    assert "Merge 2 leads into one" in page and "deanmba@narayanagroup.com" in page and f'value="{second.id}" checked' in page  # the fuller lead is the default
+    assert client.get(f"/leads/merge?ids={first.id}").status_code == 400 and client.get(f"/leads/merge?ids={first.id},999").status_code == 400
+    done = client.post("/leads/merge", data={"csrf": csrf(client), "ids": f"{first.id},{second.id}", "keep": str(first.id)})
+    assert done.status_code == 302
+    kept = store.get_lead(first.id)
+    assert store.get_lead(second.id) is None and kept.org == "Narayana Group" and kept.email == "deanmba@narayanagroup.com" and kept.phone == "+919391319721"
+    assert "Also on #" in kept.notes and "+919999999999" in kept.notes and kept.text_notes == "Wants a demo" and kept.review_reason == ""
+    assert len(store.list_media(first.id)) == 1 and [row["lead_id"] for row in store.list_followups() if row["phone"] == "+919999999999"] == [first.id]
+    gallery = client.get("/dashboard").data.decode()
+    assert "Select to merge" in gallery and 'class="sel"' in gallery

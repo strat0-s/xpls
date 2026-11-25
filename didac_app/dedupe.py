@@ -54,3 +54,17 @@ def fill_blanks(existing: Lead, new: Lead) -> list[str]:
             setattr(existing, name, getattr(new, name))
             filled.append(name)
     return filled
+
+
+def fold(keep: Lead, drop: Lead) -> None:
+    """Fold `drop` into `keep` in memory: blanks are filled, notes are joined, and a value that disagrees is kept in the notes ("Also on #7: phone ...") so nothing is lost."""
+    for name in ("notes", "text_notes"):
+        a, b = getattr(keep, name), getattr(drop, name)
+        if a and b and b not in a:
+            setattr(keep, name, f"{a}; {b}")
+    for name in FILLABLE:
+        a, b = getattr(keep, name), getattr(drop, name)
+        if name != "notes" and a and b and a.strip().lower() != b.strip().lower():
+            keep.notes = "; ".join(filter(None, [keep.notes, f"Also on #{drop.event_no}: {name.replace('_', ' ')} {b}"]))
+    fill_blanks(keep, drop)
+    keep.text_notes = keep.text_notes or drop.text_notes

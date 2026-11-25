@@ -471,10 +471,17 @@ class LeadStore:
             conn.execute(f"UPDATE leads SET {', '.join(sets)} WHERE id=%s", [*params, lead_id])
 
     def absorb_lead(self, keep_id: int, drop_id: int) -> None:
-        """Move a lead's photos and messages onto another lead, then delete it (the same soft delete as the Delete button)."""
+        """Move everything of a lead (photos, messages, chats, follow-up record, reply flag) onto another lead, then delete it (the same soft delete as the Delete button)."""
         with self.connect() as conn:
             for table in ("media", "feedback"):
                 conn.execute(f"UPDATE {table} SET lead_id=%s WHERE lead_id=%s", (keep_id, drop_id))
+            conn.execute("UPDATE followups SET lead_id=%s WHERE lead_id=%s", (keep_id, drop_id))
+            conn.execute("INSERT INTO reply_flags (lead_id, at) SELECT %s, at FROM reply_flags WHERE lead_id=%s ON CONFLICT DO NOTHING", (keep_id, drop_id))
+            conn.execute("DELETE FROM reply_flags WHERE lead_id=%s", (drop_id,))
+            for table in ("inbound_events", "outbound_messages"):  # the chats of a lead are found through the lead ids written on each message
+                for row in conn.execute(f"SELECT id, lead_ids FROM {table} WHERE %s = ANY(string_to_array(lead_ids, ','))", (str(drop_id),)).fetchall():
+                    ids = list(dict.fromkeys(str(keep_id) if item == str(drop_id) else item for item in row["lead_ids"].split(",")))
+                    conn.execute(f"UPDATE {table} SET lead_ids=%s WHERE id=%s", (",".join(ids), row["id"]))
             conn.execute("UPDATE leads SET deleted_at=%s WHERE id=%s", (datetime.now(UTC).isoformat(timespec="seconds"), drop_id))
 
     def latest_lead_for_number(self, from_number: str) -> Lead | None:

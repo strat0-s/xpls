@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% set active = 'leads' %}
+{% block title %}Merge leads · Footfall{% endblock %}
+{% block css %}
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .stack { display: flex; flex-direction: column; gap: 16px; }
+    .hint { font-size: 13px; color: var(--mut); }
+    .scroll { overflow-x: auto; }
+    table.cmp { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 14px; }
+    .cmp th, .cmp td { text-align: left; vertical-align: top; padding: 9px 14px; border-top: 1px solid var(--line); }
+    .cmp thead th { border-top: 0; background: var(--head); }
+    .cmp tbody th { width: 150px; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); font-weight: 600; }
+    .cmp label { display: flex; gap: 8px; align-items: flex-start; font-weight: 600; cursor: pointer; } .cmp label small { display: block; font-weight: 400; color: var(--mut); }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+{% endblock %}
+{% block content %}
+<form method="post" action="{{ url_for('lead_merge_do') }}" class="stack">
+  <input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="ids" value="{{ leads|map(attribute='id')|join(',') }}">
+  <div><h1>Merge {{ leads|length }} leads into one</h1>
+    <div class="hint">Pick the lead to keep. Its details stay as they are, its blank fields are filled from the others, and where they disagree the other value goes into its notes. Photos, notes, messages and chats move to it. The others are deleted.</div></div>
+  <section class="card scroll"><table class="cmp">
+    <thead><tr><th>Keep</th>{% for lead in leads %}<th><label><input type="radio" name="keep" value="{{ lead.id }}" {{ 'checked' if lead.id == best }}><span>#{{ lead.event_no }} {{ lead.name or lead.org or 'Unnamed' }}<small>{{ photos[lead.id] }} photo{{ '' if photos[lead.id] == 1 else 's' }} · {{ lead.captured_by }}</small></span></label></th>{% endfor %}</tr></thead>
+    <tbody>{% for label, values in rows %}<tr><th>{{ label }}</th>{% for value in values %}<td>{{ value or '—' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table></section>
+  <div class="row"><button class="btn">Merge</button><a class="btn ghost" href="{{ url_for('gallery') }}">Cancel</a></div>
+</form>
+{% endblock %}
