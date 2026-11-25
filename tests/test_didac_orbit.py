@@ -114,6 +114,7 @@ def test_export_everything_has_every_field_of_the_events_leads_with_notes_and_me
     store.create_lead(Lead(from_number="x", org="Elsewhere", event_id=other))
     store.add_feedback("x", "Loved the demo", mine.id)
     store.add_media(mine.id, "http://u", "image/jpeg", "k/1.jpg", "")
+    store.claim_followup("+919845011111", mine.id)  # its sent_at carries a timezone, which Excel cannot hold as it is
     client = app.test_client()
     event = store.live_event()["id"]
     download = client.get(f"/export/everything.xlsx?event={event}")

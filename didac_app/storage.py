@@ -8,6 +8,7 @@ import re
 import uuid
 from dataclasses import asdict, fields
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import psycopg
@@ -27,6 +28,11 @@ LEAD_FIELDS = [field.name for field in fields(Lead)]
 NOT_DELETED = "(deleted_at IS NULL OR deleted_at = '')"
 # For media/feedback joined to their lead; rows without a lead stay visible (LEFT JOIN gives NULL).
 LEAD_NOT_DELETED = "(l.deleted_at IS NULL OR l.deleted_at = '')"
+
+
+def local(value):
+    """A timestamp as Indian time without a zone: Excel cannot hold one that carries a timezone."""
+    return value.astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None) if isinstance(value, datetime) and value.tzinfo else value
 
 
 class LeadStore:
@@ -823,24 +829,24 @@ class LeadStore:
         for row in media:
             lead = by_id[row["lead_id"]]
             kind = "With the visitor" if row["purpose"] == "visitor" else "Voice note" if (row["content_type"] or "").startswith("audio/") else "Document"
-            sheet.append([lead.id, lead.event_no, lead.name, row["created_at"], kind, row["added_by"], row["content_type"], link(row), row["extracted_text"]])
+            sheet.append([lead.id, lead.event_no, lead.name, local(row["created_at"]), kind, row["added_by"], row["content_type"], link(row), row["extracted_text"]])
         sheet = wb.create_sheet("Notes")
         sheet.append(["lead_id", "event_no", "lead", "added", "from_number", "type", "text", "sentiment", "action_required", "link"])
         media_by_id = {row["id"]: row for row in media}
         for row in reversed(self.list_feedback()):
             if lead := by_id.get(row["lead_id"]):
-                sheet.append([lead.id, lead.event_no, lead.name, row["created_at"], row["from_number"], row["feedback_type"], row["body"], row["sentiment"], row["action_required"], link(media_by_id[row["media_id"]]) if row["media_id"] in media_by_id else ""])
+                sheet.append([lead.id, lead.event_no, lead.name, local(row["created_at"]), row["from_number"], row["feedback_type"], row["body"], row["sentiment"], row["action_required"], link(media_by_id[row["media_id"]]) if row["media_id"] in media_by_id else ""])
         sheet = wb.create_sheet("WhatsApp chats")
         sheet.append(["lead_id", "event_no", "lead", "chat", "time", "from", "text", "media_count"])
         for lead in leads:
             for chat in chats.get(lead.id, []):
                 for row in chat["rows"]:
-                    sheet.append([lead.id, lead.event_no, lead.name, chat["title"], row["created_at"], "Visitor or team member" if row["direction"] == "in" else "Footfall", row["body"], row["num_media"]])
+                    sheet.append([lead.id, lead.event_no, lead.name, chat["title"], local(row["created_at"]), "Visitor or team member" if row["direction"] == "in" else "Footfall", row["body"], row["num_media"]])
         sheet = wb.create_sheet("Follow-ups")
         sheet.append(["lead_id", "event_no", "lead", "phone", "sent_at", "status", "reason"])
         for row in self.list_followups(event_id=event_id):
             if lead := by_id.get(row["lead_id"]):
-                sheet.append([lead.id, lead.event_no, lead.name, row["phone"], row["sent_at"], row["status"], row["reason"]])
+                sheet.append([lead.id, lead.event_no, lead.name, row["phone"], local(row["sent_at"]), row["status"], row["reason"]])
         for sheet in wb.worksheets:
             format_sheet(sheet)
         out = BytesIO()
