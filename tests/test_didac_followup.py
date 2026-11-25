@@ -134,7 +134,7 @@ def test_staff_can_follow_up_but_not_delete(store, templates, monkeypatch, anon_
 def test_auto_followup_only_messages_leads_captured_since_it_was_switched_on(store, templates):
     before = lead(store, "98450 11111", "old")
     with store.connect() as conn:
-        conn.execute("UPDATE leads SET created_at = '2026-01-01T00:00:00+00:00' WHERE id = %s", (before.id,))
+        conn.execute("UPDATE leads SET created_at = '2026-01-01T00:00:00+00:00', updated_at = '2026-01-01T00:00:00+00:00' WHERE id = %s", (before.id,))
     lead(store, "98450 22222", "new")
     followup.auto_send(store, CONFIG, DAY)
     assert templates == []  # off: nothing goes out by itself
@@ -197,3 +197,33 @@ def test_follow_up_goes_out_however_the_lead_was_captured(store, templates, monk
     late = store.create_lead(Lead(name="Late", phone="98450 77777"))
     client.get("/")  # opening the Leads page catches up anything left waiting
     assert templates[-1] == "+919845077777" and len(templates) == 4 and late.id
+
+
+def test_a_corrected_phone_number_gets_its_own_follow_up(store, templates, monkeypatch):
+    monkeypatch.setattr(followup, "blocked", lambda store, config, now: "")
+    store.set_setting(followup.AUTO_KEY, "2026-06-01T00:00:00+00:00")
+    client = app.test_client()
+    wrong = lead(store, "98450 11111", "Misread")
+    client.post(f"/leads/{wrong.id}", data={"csrf": csrf(client), "name": "Misread", "phone": "98450 11111"})
+    assert templates == ["+919845011111"]
+    client.post(f"/leads/{wrong.id}", data={"csrf": csrf(client), "name": "Misread", "phone": "98450 22222"})  # a person fixes the number
+    assert templates == ["+919845011111", "+919845022222"]
+    client.post(f"/leads/{wrong.id}", data={"csrf": csrf(client), "name": "Misread Again", "phone": "98450 22222"})  # any other edit sends nothing more
+    assert len(templates) == 2
+
+
+def test_a_number_added_to_an_older_lead_of_the_live_event_is_messaged_but_not_one_of_an_ended_event(store, templates, monkeypatch):
+    monkeypatch.setattr(followup, "blocked", lambda store, config, now: "")
+    old_event = store.create_event("Old Expo")
+    store.set_setting(followup.AUTO_KEY, "2026-06-01T00:00:00+00:00")
+    with store.connect() as conn:
+        conn.execute("UPDATE leads SET created_at = '2026-01-01T00:00:00+00:00', updated_at = '2026-01-01T00:00:00+00:00'")
+    early = lead(store, "", "Badge only")
+    elsewhere = store.create_lead(Lead(name="Elsewhere", phone="", event_id=old_event))
+    with store.connect() as conn:
+        conn.execute("UPDATE leads SET created_at = '2026-01-01T00:00:00+00:00', updated_at = '2026-01-01T00:00:00+00:00'")
+    client = app.test_client()
+    client.post(f"/leads/{elsewhere.id}", data={"csrf": csrf(client), "name": "Elsewhere", "phone": "98450 33333"})
+    assert templates == []  # an ended event's lead is never messaged by the automatic follow-up
+    client.post(f"/leads/{early.id}", data={"csrf": csrf(client), "name": "Badge only", "phone": "98450 44444"})
+    assert templates == ["+919845044444"]

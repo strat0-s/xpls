@@ -27,10 +27,13 @@ def is_mobile(e164: str) -> bool:
 
 
 def eligible(store: LeadStore, since: str = "") -> list[tuple[str, int]]:
-    """(E.164 number, lead id) for each distinct mobile number not yet messaged, oldest lead first. With `since`, only leads captured after that moment."""
+    """(E.164 number, lead id) for each distinct mobile number not yet messaged, oldest lead first. With `since` (automatic follow-up), only leads of the live event captured or edited
+    after that moment: a number corrected on an existing lead is a new number and gets its own message."""
     skip = store.followup_phones() | {normalize_phone(user["phone"]) for user in store.list_users() if user["phone"]}
+    live = (store.live_event() or {}).get("id")
+    leads = [lead for lead in store.list_leads("(created_at >= %s OR updated_at >= %s)", (since, since)) if lead.event_id == live] if since else store.list_leads()
     out = {}
-    for lead in store.list_leads("created_at >= %s", (since,)) if since else store.list_leads():
+    for lead in leads:
         phone = normalize_phone(lead.phone)
         if phone and phone not in skip and phone not in out and is_mobile(phone):
             out[phone] = lead.id
