@@ -401,6 +401,10 @@ def register(app, get_store, get_config) -> None:
                                w=paginate(waiting, request.args.get("wpage", 1, type=int), 10), s=paginate(skipped, request.args.get("spage", 1, type=int), 10),
                                d=paginate(sent, request.args.get("dpage", 1, type=int), 10), total_sent=len(sent))
 
+    @app.get("/wiki")
+    def wiki():
+        return render_template("wiki.html")
+
     @app.get("/photos")
     def photos():
         store = get_store()

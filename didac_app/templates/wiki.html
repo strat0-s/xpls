@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% set active = 'wiki' %}
+{% block title %}Wiki · Footfall{% endblock %}
+{# The Footfall wiki for everyone who uses the app: how to use it, the rules, and answers. Keep it user-facing: no setup, keys, database or code. Every heading has an id and every in-page link points at one. #}
+{% block css %}
+    .wiki { max-width: 860px; margin: 0 auto; padding: 24px 28px; line-height: 1.6; }
+    .wiki h1 { margin: 0 0 6px; font-size: 26px; letter-spacing: -.01em; }
+    .wiki h2 { margin: 28px 0 8px; font-size: 19px; scroll-margin-top: 16px; }
+    .wiki h3 { margin: 18px 0 6px; font-size: 15px; scroll-margin-top: 16px; }
+    .wiki p, .wiki ul, .wiki ol { margin: 8px 0; } .wiki ul, .wiki ol { padding-left: 22px; } .wiki li { margin: 3px 0; }
+    .wiki hr { border: 0; border-top: 1px solid var(--line); margin: 22px 0; }
+    .wiki code { background: var(--head); padding: 1px 6px; border-radius: 4px; font-size: .92em; }
+    .wiki table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 14px; }
+    .wiki th, .wiki td { text-align: left; vertical-align: top; padding: 8px 10px; border-top: 1px solid var(--line); }
+    .wiki th { background: var(--head); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--mut); border-top: 0; }
+    .wiki .note { background: var(--head); border-radius: 8px; padding: 10px 14px; }
+    .wiki a { text-decoration: underline; }
+{% endblock %}
+{% block content %}
+<article class="card wiki">
+<h1 id="footfall-wiki">Footfall Wiki</h1>
+<p>How to use Footfall at an event: what to send on WhatsApp, what the screens do, the rules the app follows, and answers to common questions.</p>
+<p><strong>Last updated:</strong> 2026-11-25</p>
+
+<h2 id="contents">Contents</h2>
+<ol>
+<li><a href="#1-what-footfall-is">What Footfall is</a></li>
+<li><a href="#2-who-can-do-what">Who can do what</a></li>
+<li><a href="#3-capturing-leads-on-whatsapp">Capturing leads on WhatsApp</a></li>
+<li><a href="#4-what-a-visitor-sees">What a visitor sees</a></li>
+<li><a href="#5-the-leads-page">The Leads page</a></li>
+<li><a href="#6-the-follow-up-message">The follow-up message</a></li>
+<li><a href="#7-export">Export</a></li>
+<li><a href="#8-admin-pages">Admin pages</a></li>
+<li><a href="#9-questions-and-answers">Questions and answers</a></li>
+<li><a href="#10-known-limitations">Known limitations</a></li>
+</ol>
+<hr>
+
+<h2 id="1-what-footfall-is">1. What Footfall is</h2>
+<p>Footfall captures the people you meet at an event. You send a photo of a contact form, a visiting card or an event badge to our WhatsApp number. Footfall reads it, saves it as a lead, and sends the visitor a thank-you message.</p>
+<pre><code>Photo on WhatsApp ──► Lead (read and saved) ──► Thank-you message to the visitor ──► Export to Orbit</code></pre>
+<ul>
+<li>The WhatsApp number is <strong>+91 73381 48983</strong>.</li>
+<li>Only one event is <strong>live</strong> at a time. Every new lead goes into the live event. What you see in the WhatsApp menu, the brochures and the welcome message all belong to that event.</li>
+<li>Use the menu on the left of the website to move around. The <strong>Wiki</strong> link opens this page.</li>
+</ul>
+<hr>
+
+<h2 id="2-who-can-do-what">2. Who can do what</h2>
+<table><thead><tr><th>Role</th><th>What you can do</th></tr></thead><tbody>
+<tr><td><strong>Team member</strong></td><td>Capture on WhatsApp; see, add and edit leads; add photos; see event photos; run the exports; see who has been sent the thank-you message</td></tr>
+<tr><td><strong>Admin</strong></td><td>Everything a team member can do, plus event control, document types and brochures, products, message wording, the follow-up report, team access, and deleting a lead</td></tr>
+</tbody></table>
+<p>Log in at the website with your 10-digit phone number or your email and your password. If a page or button is missing for you, your role does not include it.</p>
+<hr>
+
+<h2 id="3-capturing-leads-on-whatsapp">3. Capturing leads on WhatsApp</h2>
+<p>Use the phone number that is registered to you. A number that is not on the team gets the visitor menu instead.</p>
+
+<h3 id="31-send-a-photo-straight-away">3.1 Send a photo straight away</h3>
+<p>This is the quickest way, and the one to use at a busy stall.</p>
+<ol>
+<li>Send a photo of the contact form with the visiting card pinned to it. <strong>One photo per lead.</strong> You do not need to say Hi first.</li>
+<li>Footfall works out what the photo is (a form, a visiting card or a badge), reads it and saves the lead.</li>
+<li>You get a short reply with what it saved.</li>
+</ol>
+<p>If your phone has no internet, take the photos anyway and send them later. They go through once the phone is back online.</p>
+<p class="note">Send the whole paper in <strong>one</strong> photo. Two photos sent at the same moment for the same person are handled separately and can end up as two leads.</p>
+
+<h3 id="32-use-the-menu">3.2 Use the menu</h3>
+<p>Type <code>Hi</code> or <code>menu</code> at any time. You get a list:</p>
+<ul>
+<li><strong>The document types of the event</strong>, such as Contact form, Visiting card, Event badge and Other docs. Pick one, send the photos, tap <strong>Done</strong>, and answer the short questions. All photos in one go are read together as one lead.</li>
+<li><strong>Event photos</strong>: photos of the event that are saved but not read.</li>
+<li><strong>Brochures</strong>: the team brochures and price lists.</li>
+<li><strong>Add a note</strong>: a voice or text note on a lead.</li>
+</ul>
+<p>Type <code>cancel</code> to stop what you are doing. A scan that is left half finished for a while times out and is not saved.</p>
+
+<h3 id="33-a-photo-with-the-visitor">3.3 A photo with the visitor</h3>
+<p>Send the photo with the caption <code>Visitor Meet</code>. It is saved under <strong>Event photos</strong> with your caption. Anything else you write as the caption is kept too.</p>
+
+<h3 id="34-voice-notes-and-text-notes">3.4 Voice notes and text notes</h3>
+<ul>
+<li>Pick <strong>Add a note</strong> in the menu, choose the lead, and send a voice note or text.</li>
+<li>A voice note sent with no menu choice goes onto the lead you captured in the last 30 minutes.</li>
+<li>Voice notes are written out as text and saved with the original audio.</li>
+</ul>
+
+<h3 id="35-what-the-reader-does">3.5 What the reader does</h3>
+<ul>
+<li>It reads the printed and handwritten details: name, organisation, designation, phone, email, address, city, state, pincode, and the answers on the form (demo, workshop, remarks).</li>
+<li>If a card shows <strong>two phone numbers</strong>, the first mobile number is the lead's phone and the other goes into the notes.</li>
+<li>Handwriting that is <strong>struck through</strong> is left out.</li>
+<li>On a badge, the visitor category (such as Visitor or Delegate) goes to the notes. The city printed on the badge is the event's city, not the person's.</li>
+<li>A badge QR code holds only an organiser ID. It does not carry a phone number, so a badge on its own has no number to message.</li>
+</ul>
+<p>The reader can be wrong, which is why every lead can be corrected on the website (section 5).</p>
+<hr>
+
+<h2 id="4-what-a-visitor-sees">4. What a visitor sees</h2>
+<p>A visitor who messages the number, for example after scanning the QR code, gets the event's welcome message and this menu:</p>
+<ul>
+<li><strong>Download brochure</strong>: the brochures meant for visitors.</li>
+<li><strong>Share my requirement</strong>: they tell us what they need.</li>
+<li><strong>Schedule a demo</strong>: online or in person.</li>
+<li><strong>Feedback / voice note</strong>: typed, spoken or a photo.</li>
+</ul>
+<p>Whatever they send is saved as a lead of the live event. A visitor can type <code>menu</code> at any time to see the list again, and <code>STOP</code> to never be messaged again.</p>
+<hr>
+
+<h2 id="5-the-leads-page">5. The Leads page</h2>
+<ul>
+<li>The list shows the leads of the event you pick at the top, newest first. A whole row opens the lead.</li>
+<li><strong>Add lead</strong> makes a lead by hand. Add photos and Footfall reads them (you see a "Reading the photos…" bar), or type the details yourself.</li>
+<li>On a lead you can edit every field, rotate and add photos, read the notes, and open the WhatsApp conversations: <strong>Team chat</strong> (you, when you scanned it) and <strong>Visitor chat</strong> (the visitor, including replies to the thank-you message).</li>
+<li>Saving a corrected lead is enough. You do not need to do anything else.</li>
+</ul>
+
+<h3 id="51-flags-on-a-lead">5.1 Flags on a lead</h3>
+<table><thead><tr><th>Flag</th><th>What it means</th><th>What to do</th></tr></thead><tbody>
+<tr><td><strong>Not scanned</strong></td><td>The photos could not be read, or the reader found nothing. The photos are kept.</td><td>Open the lead and use read again, or type the details and save.</td></tr>
+<tr><td><strong>Possible duplicate of #N</strong></td><td>Another lead looks like the same person.</td><td>Check both. If they are the same person, keep one. Then mark it as checked.</td></tr>
+<tr><td><strong>This visitor texted back</strong></td><td>The visitor replied to the thank-you message.</td><td>Reply to them from WhatsApp, then mark it as replied.</td></tr>
+</tbody></table>
+
+<h3 id="52-duplicates">5.2 Duplicates</h3>
+<p>If a card photo arrives after its form, or the same phone number is captured again, Footfall joins them into one lead and only fills in what was blank. It never overwrites what is already there. A name that differs by one misread letter is still treated as the same person when the phone matches.</p>
+<hr>
+
+<h2 id="6-the-follow-up-message">6. The follow-up message</h2>
+<p>Every lead with a mobile number gets one thank-you message on WhatsApp. It carries an image and four buttons: Download brochure, Share my requirement, Schedule a demo, and Feedback / voice note. Tapping a button works like the visitor menu.</p>
+
+<h3 id="61-the-rules">6.1 The rules</h3>
+<ul>
+<li>It goes out <strong>by itself, right after a lead is saved</strong>, however the lead was captured.</li>
+<li>It goes out between <strong>9:00 and 21:00 IST</strong>. A lead saved at night is sent in the morning.</li>
+<li>A day's limit of <strong>100 messages</strong> applies. Once it is reached, nothing more goes until older ones pass 24 hours.</li>
+<li><strong>One message per phone number, ever.</strong> The same number on another lead, or at another event, is not messaged again.</li>
+<li>Landlines, team numbers and anyone who replied <code>STOP</code> are never messaged.</li>
+</ul>
+
+<h3 id="62-correcting-a-number">6.2 Correcting a number</h3>
+<p>If the number was read wrongly, fix it on the lead and save. The corrected number is new, so it gets its own message straight away. The wrong number stays marked as messaged.</p>
+
+<h3 id="63-when-it-does-not-reach">6.3 When it does not reach</h3>
+<p>WhatsApp can refuse a message after accepting it. That is outside Footfall's control. The common reasons:</p>
+<table><thead><tr><th>Shown as</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>Number is not on WhatsApp</td><td>The number has no WhatsApp account, or is wrong. Check the number.</td></tr>
+<tr><td>WhatsApp declined it</td><td>WhatsApp limits marketing messages to a person. Nothing can be done.</td></tr>
+<tr><td>On the way</td><td>Handed to WhatsApp, no receipt yet. The phone may be off. It can still arrive.</td></tr>
+</tbody></table>
+<p>The <a href="{{ url_for('followup_page') }}">Follow-up page</a> shows who is waiting, who was skipped and why, and what has been sent.</p>
+<hr>
+
+<h2 id="7-export">7. Export</h2>
+<ul>
+<li><strong>Orbit import</strong>: a CSV or Excel file in the format Orbit's organisation import takes. Tick the leads to include. Organisations that cannot be imported are flagged with the reason.</li>
+<li><strong>Complete export</strong>: one Excel file with every field of every lead, plus photos and voice notes (as links that open without a login), notes, the WhatsApp chats and the follow-ups. The photo links last 90 days.</li>
+</ul>
+<hr>
+
+<h2 id="8-admin-pages">8. Admin pages</h2>
+<p>These are in the sidebar under <strong>Admin</strong> and only admins see them.</p>
+<table><thead><tr><th>Page</th><th>What it is for</th></tr></thead><tbody>
+<tr><td><strong>Event control</strong></td><td>Create an event, copy the setup of an earlier one, make it live, or stop it. Between events, nothing new is saved.</td></tr>
+<tr><td><strong>Documents and brochures</strong></td><td>Document types in the staff menu and the brochures. Drag to reorder, switch a type off to hide it from WhatsApp straight away. Switching a type off never deletes leads.</td></tr>
+<tr><td><strong>Products</strong></td><td>The list of products a lead can be tagged with.</td></tr>
+<tr><td><strong>Follow-up report</strong></td><td>How many messages went out, what failed and why, what is not sent, and the state of every lead. It refreshes itself every 30 seconds.</td></tr>
+<tr><td><strong>Messages</strong></td><td>The welcome text visitors see, and the switch for automatic follow-up.</td></tr>
+<tr><td><strong>Team access</strong></td><td>Add people, switch them on or off, make someone an admin, change a password.</td></tr>
+</tbody></table>
+<hr>
+
+<h2 id="9-questions-and-answers">9. Questions and answers</h2>
+<h3 id="q-no-reply">I sent a photo and got no reply.</h3>
+<p>Wait a minute: reading takes about half a minute. If nothing comes, send it again. The photo is not lost if the reader is down: the lead is kept as <strong>Not scanned</strong> and can be read again from its page.</p>
+<h3 id="q-wrong-details">The reader got the details wrong.</h3>
+<p>Open the lead on the website, correct it and save.</p>
+<h3 id="q-two-leads">One person appears as two leads.</h3>
+<p>This usually means two photos were sent at the same moment. Open both and check. Send the whole paper as one photo next time, or use the menu so photos stay together.</p>
+<h3 id="q-no-followup">A lead did not get the thank-you message.</h3>
+<p>The common reasons: no phone number, a number that is too short or partly unreadable, a landline, the same number was already messaged, or it is outside 9:00 to 21:00 IST. Fix the number and save, and it is sent.</p>
+<h3 id="q-visitor-no-menu">A visitor says the buttons do nothing.</h3>
+<p>Ask them to type <code>menu</code>. The list comes back and they can pick from it.</p>
+<h3 id="q-badge">A badge lead has no phone number.</h3>
+<p>Badges carry an organiser ID, not a phone number. Ask the visitor for a card or a form, or type the number into the lead.</p>
+<hr>
+
+<h2 id="10-known-limitations">10. Known limitations</h2>
+<ul>
+<li>Photos sent at the same moment are processed separately and can create two leads for one person.</li>
+<li>A badge on its own has no phone number, so no thank-you message can go to it.</li>
+<li>WhatsApp can refuse a message to a person after accepting it. The report shows this, but it cannot be fixed from Footfall.</li>
+<li>Each phone number is messaged once. A second message to the same number needs a decision from an admin.</li>
+</ul>
+</article>
+{% endblock %}

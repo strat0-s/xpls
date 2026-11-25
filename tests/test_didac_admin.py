@@ -128,3 +128,16 @@ def test_the_welcome_message_is_per_event_and_the_default_is_not_stored(store, s
     assert store.get_event(event["id"])["welcome_text"] == ""
     assert client.post("/admin/messages/followup", data={"csrf": csrf(client), "text": "x"}).status_code == 404  # the thank-you wording is not editable here
     assert "Follow-up message" not in client.get("/admin/messages").data.decode()
+
+
+def test_the_wiki_is_for_every_signed_in_user_and_its_links_all_land(store, anon_client):
+    import re
+    assert anon_client.get("/wiki").status_code == 302  # signed out: to the login page
+    member = get_or_create_user(store, "Plain Member", "+919800000078", "member2@example.com", "long-enough-pw")
+    with anon_client.session_transaction() as sess:
+        sess["uid"], sess["sv"] = member["id"], member["session_version"]
+    page = anon_client.get("/wiki")
+    html = page.data.decode()
+    assert page.status_code == 200 and "Footfall Wiki" in html and ">Wiki<" in html
+    ids = set(re.findall(r'id="([^"]+)"', html))
+    assert [name for name in re.findall(r'href="#([^"]+)"', html) if name not in ids] == []  # every in-page link points at a heading

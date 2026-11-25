@@ -140,6 +140,7 @@
     <a href="{{ url_for('photos') }}" class="{{ 'on' if active == 'photos' }}">{{ ico('photos') }}Event photos</a>
     <a href="{{ url_for('followup_page') }}" class="{{ 'on' if active == 'followup' }}">{{ ico('followup') }}Follow-up</a>
     <a href="{{ url_for('export_page') }}" class="{{ 'on' if active == 'export' }}">{{ ico('export') }}Export</a>
+    <a href="{{ url_for('wiki') }}" class="{{ 'on' if active == 'wiki' }}">{{ ico('documents') }}Wiki</a>
   </nav>
   {% if user.is_admin %}<nav aria-label="Admin"><div class="gl">Admin</div>
     <a href="{{ url_for('admin_event') }}" class="{{ 'on' if active == 'event' }}">{{ ico('event') }}Event control</a>
