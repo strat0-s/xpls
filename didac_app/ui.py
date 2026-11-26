@@ -136,6 +136,9 @@ def register(app, get_store, get_config) -> None:
             cards.append(card)
         who = request.args.get("who") if request.args.get("who") in ("team", "visitors") else ""
         prio = request.args.get("prio") if request.args.get("prio") in (*PRIORITIES, "none") else ""
+        creators, owners = sorted({card["by"] for card in cards if card["by"]}, key=str.lower), sorted({card["lead_owner"] for card in cards if card["lead_owner"]}, key=str.lower)
+        by = request.args.get("by") if request.args.get("by") in creators else ""
+        owner = request.args.get("owner") if request.args.get("owner") in (*owners, "none") else ""
         check = request.args.get("check") == "1"
         reply_only = request.args.get("reply") == "1"
         replies_waiting = sum(1 for card in cards if card["replied_at"])
@@ -144,6 +147,10 @@ def register(app, get_store, get_config) -> None:
             cards = [card for card in cards if card["is_team"] == (who == "team")]
         if prio:
             cards = [card for card in cards if card["priority"] == ("" if prio == "none" else prio)]
+        if by:
+            cards = [card for card in cards if card["by"] == by]
+        if owner:
+            cards = [card for card in cards if card["lead_owner"] == ("" if owner == "none" else owner)]
         if check:
             cards = [card for card in cards if card["review_reason"]]
         if reply_only:
@@ -164,7 +171,7 @@ def register(app, get_store, get_config) -> None:
         if tab != "all":
             cards = [card for card in cards if card["type"] == tab]
         page = paginate(cards, request.args.get("page", 1, type=int), request.args.get("per", 10, type=int))
-        return render_template("gallery.html", pg=page, tabs=tabs, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, check=check, reply_only=reply_only, replies_waiting=replies_waiting, priorities=PRIORITIES,
+        return render_template("gallery.html", pg=page, tabs=tabs, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, by=by, owner=owner, creators=creators, owners=owners, check=check, reply_only=reply_only, replies_waiting=replies_waiting, priorities=PRIORITIES,
                                events=list(events.values()), event_id=event_id, needs_check=sum(1 for lead in leads if lead.review_reason), reading=request.args.get("reading", type=int))
 
     @app.route("/leads/<int:lead_id>", methods=["GET", "POST"])

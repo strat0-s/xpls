@@ -12,6 +12,7 @@
     .filter { position: relative; } .filter summary { list-style: none; cursor: pointer; height: 34px; gap: 6px; } .filter summary::-webkit-details-marker { display: none; }
     .filter form { position: absolute; z-index: 5; top: 40px; right: 0; width: 280px; padding: 14px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 8px 24px rgba(42,32,48,.18); }
     .filter .row { display: flex; gap: 8px; }
+    @media (max-width: 700px) { .filter { width: 100%; } .filter form { position: static; width: 100%; margin-top: 8px; max-height: none; } .filter summary { width: 100%; justify-content: center; } }
     .needs { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; background: var(--warn); color: var(--warn-ink); font-weight: 600; font-size: 13px; }
     .needs input { width: 18px; height: 18px; accent-color: var(--acc); }
     .search input, .evsel select { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); }
@@ -47,8 +48,8 @@
     .empty { padding: 40px 16px; text-align: center; color: var(--mut); }
 {% endblock %}
 {% block content %}
-{% set keep = {'q': q or None, 'who': who or None, 'prio': prio or None, 'check': '1' if check else None, 'event': request.args.get('event') or None, 'per': request.args.get('per') or None} %}
-{% set active_filters = (1 if who else 0) + (1 if prio else 0) + (1 if check else 0) + (1 if reply_only else 0) %}
+{% set keep = {'q': q or None, 'who': who or None, 'prio': prio or None, 'by': by or None, 'owner': owner or None, 'check': '1' if check else None, 'event': request.args.get('event') or None, 'per': request.args.get('per') or None} %}
+{% set active_filters = (1 if who else 0) + (1 if prio else 0) + (1 if by else 0) + (1 if owner else 0) + (1 if check else 0) + (1 if reply_only else 0) %}
 <div class="bar">
   <div class="ttl"><h1>Leads</h1><span style="display:flex;gap:8px"><button type="button" class="btn ghost" id="selbtn">Select to merge</button><a class="btn" href="{{ url_for('lead_new', event=request.args.get('event') or None) }}">Add lead</a></span></div>
   <div class="grp">
@@ -72,10 +73,14 @@
     <summary class="btn ghost">Filters{% if active_filters %} · {{ active_filters }} active{% endif %}</summary>
     <form class="card" method="get" action="{{ url_for('gallery') }}">
       {% for k, v in request.args.items() if k in ('type', 'q', 'event', 'per') %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
-      <div><label class="f" for="fl-who">Captured by</label>
+      <div><label class="f" for="fl-who">Source</label>
         <select class="t" id="fl-who" name="who"><option value="">Everyone</option><option value="team" {{ 'selected' if who == 'team' }}>Team</option><option value="visitors" {{ 'selected' if who == 'visitors' }}>Visitors</option></select></div>
       <div><label class="f" for="fl-prio">Priority</label>
         <select class="t" id="fl-prio" name="prio"><option value="">Any priority</option>{% for p in priorities %}<option {{ 'selected' if prio == p }}>{{ p }}</option>{% endfor %}<option value="none" {{ 'selected' if prio == 'none' }}>Not set</option></select></div>
+      <div><label class="f" for="fl-by">Lead creator</label>
+        <select class="t" id="fl-by" name="by"><option value="">Anyone</option>{% for name in creators %}<option {{ 'selected' if by == name }}>{{ name }}</option>{% endfor %}</select></div>
+      <div><label class="f" for="fl-owner">Lead owner</label>
+        <select class="t" id="fl-owner" name="owner"><option value="">Anyone</option>{% for name in owners %}<option {{ 'selected' if owner == name }}>{{ name }}</option>{% endfor %}<option value="none" {{ 'selected' if owner == 'none' }}>Not set</option></select></div>
       <label class="needs"><input type="checkbox" name="reply" value="1" {{ 'checked' if reply_only }}>Only leads that texted back ({{ replies_waiting }})</label>
       <label class="needs"><input type="checkbox" name="check" value="1" {{ 'checked' if check }}>Only leads that need checking ({{ needs_check }})</label>
       <div class="row"><button class="btn">Apply</button><a class="btn ghost" href="{{ url_for('gallery', type=tab if tab != 'all' else None, q=q or None, event=request.args.get('event') or None) }}">Clear</a></div>

@@ -175,3 +175,18 @@ def test_leads_of_one_person_can_be_merged_into_one(store, admin):
     assert len(store.list_media(first.id)) == 1 and [row["lead_id"] for row in store.list_followups() if row["phone"] == "+919999999999"] == [first.id]
     gallery = client.get("/dashboard").data.decode()
     assert "Select to merge" in gallery and 'class="sel"' in gallery
+
+
+def test_the_leads_list_filters_by_who_created_the_lead_and_who_owns_it(store, admin):
+    store.create_lead(flows.Lead(name="Made By Asha", captured_by="Asha", lead_owner="Ravi", from_number="a"))
+    store.create_lead(flows.Lead(name="Made By Bina", captured_by="Bina", lead_owner="Ravi", from_number="b"))
+    store.create_lead(flows.Lead(name="Nobody Owns", captured_by="Asha", from_number="a"))
+    client = app.test_client()
+    page = client.get("/dashboard").data.decode()
+    assert 'id="fl-by"' in page and 'id="fl-owner"' in page and ">Ravi</option>" in page
+    names = lambda html: [n for n in ("Made By Asha", "Made By Bina", "Nobody Owns") if n in html.split('class="grid"')[1]]
+    assert names(client.get("/dashboard?by=Asha").data.decode()) == ["Made By Asha", "Nobody Owns"]
+    assert names(client.get("/dashboard?owner=Ravi").data.decode()) == ["Made By Asha", "Made By Bina"]
+    assert names(client.get("/dashboard?owner=none").data.decode()) == ["Nobody Owns"]
+    assert names(client.get("/dashboard?by=Asha&owner=Ravi").data.decode()) == ["Made By Asha"]
+    assert len(names(client.get("/dashboard?by=Nobody+Real").data.decode())) == 3  # an unknown name is ignored, not an empty list
