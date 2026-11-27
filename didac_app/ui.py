@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
-from didac_app import auth, flows, followup, orbit
+from didac_app import auth, dupes, flows, followup, orbit
 from didac_app.dedupe import FILLABLE, find_duplicate, fold
 from didac_app.media import suffix_for
 from didac_app.models import NOT_SCANNED, Lead
@@ -64,7 +64,8 @@ def register(app, get_store, get_config) -> None:
     @app.context_processor
     def inject_globals():
         return {"user": g.get("user"), "csrf_token": csrf_token, "reader": get_store().reader_status() if g.get("user") else None,  # drives the reading-problem banner
-                "live_event": get_store().live_event() if g.get("user") else None}  # shown at the top of the sidebar
+                "live_event": get_store().live_event() if g.get("user") else None,  # shown at the top of the sidebar
+                "dup_reviewers": dupes.reviewers(get_store()) if g.get("user") else set()}  # staff who were given the Duplicate review page
 
     @app.template_global()
     def page_url(number: int, key: str = "page") -> str:

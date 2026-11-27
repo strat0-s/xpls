@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% set active = 'dupes' %}
+{% block title %}Duplicate review · Footfall{% endblock %}
+{% block css %}
+    h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+    .stack { display: flex; flex-direction: column; gap: 14px; }
+    .hint { font-size: 13px; color: var(--mut); line-height: 1.5; }
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; } .tabs a { display: inline-flex; align-items: center; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surf); color: var(--ink); text-decoration: none; font-weight: 600; font-size: 13px; }
+    .tabs a.on { background: var(--acc); color: var(--acc-ink); border-color: var(--acc); }
+    .case { padding: 14px; display: flex; flex-direction: column; gap: 12px; scroll-margin-top: 12px; }
+    .case.done { border-left: 4px solid var(--acc); }
+    .head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: space-between; }
+    .col { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .col.orig { background: var(--head); } .col.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc); }
+    .col h3 { margin: 0; font-size: 15px; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; } .col h3 small { font-weight: 400; color: var(--mut); }
+    .why { font-size: 12.5px; font-weight: 600; color: var(--acc-text); }
+    .ph { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+    .shot { flex: 0 0 82%; max-width: 360px; } .shot .rot { display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; background: var(--soft); } .shot img { width: 100%; display: block; }
+    .shot .row { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12.5px; } .shot button { border: 0; background: none; color: var(--acc-text); font: inherit; font-weight: 600; padding: 4px 2px; cursor: pointer; }
+    .none { color: var(--mut); padding: 18px; text-align: center; border: 1px dashed var(--line); border-radius: 6px; }
+    table.f { width: 100%; border-collapse: collapse; font-size: 14px; } .f th { text-align: left; width: 98px; color: var(--mut); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; padding: 4px 0; vertical-align: top; } .f td { padding: 4px 6px; overflow-wrap: anywhere; }
+    .f tr.same td { background: rgba(46,160,90,.2); } .f tr.diff td { background: rgba(230,170,40,.24); }
+    .acts { display: flex; flex-wrap: wrap; gap: 8px; } .acts form { margin: 0; } .acts .btn { height: 42px; } .acts form.grow { flex: 1 1 100%; } .acts form.grow .btn { width: 100%; }
+    .btn.sm { height: 38px; padding: 0 14px; }
+    .add { display: flex; gap: 8px; } .add input { flex: 1; min-width: 0; height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--ink); font: inherit; }
+    .verdict { display: flex; flex-direction: column; gap: 8px; } .verdict input.t { height: 42px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surf); color: var(--ink); font: inherit; width: 100%; box-sizing: border-box; }
+    .verdict .acts .btn { flex: 1 1 120px; }
+    .k-clear { background: var(--bad); color: var(--bad-ink); } .k-check { background: var(--warn); color: var(--warn-ink); } .k-new { background: var(--ok); color: var(--ok-ink); }
+    @media (min-width: 900px) { .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; } .cols > .col { margin: 0; } .shot { flex-basis: 70%; } }
+    .cols { display: flex; flex-direction: column; gap: 10px; }
+    @media (max-width: 700px) { .acts .btn { flex: 1 1 140px; } }
+{% endblock %}
+{% block content %}
+<div class="stack">
+  <div>
+    <h1>Duplicate review</h1>
+    <div class="hint">{{ who }}'s leads from the second pass, each shown next to the leads it may repeat. For every one, say whether it is the same person as an original or a new lead. Your answers are kept on their own: no lead is changed, merged or deleted here.{% if event %} Event: {{ event.name }}.{% endif %}</div>
+  </div>
+  <div class="card" style="padding:12px 14px">
+    <b>{{ counts.done }} of {{ counts.all }} reviewed</b>
+    <div class="hint">{{ verdicts.duplicate }} duplicate · {{ verdicts.new }} new · {{ verdicts.unsure }} not sure{% if user.is_admin %} · <a href="{{ url_for('dupes_export') }}">Download the list (CSV)</a>{% endif %}</div>
+  </div>
+  <nav class="tabs" aria-label="Show">
+    <a class="{{ 'on' if show == 'todo' }}" href="{{ url_for('dupes', show='todo', kind=kind or None) }}">To do ({{ counts.todo }})</a>
+    <a class="{{ 'on' if show == 'done' }}" href="{{ url_for('dupes', show='done', kind=kind or None) }}">Done ({{ counts.done }})</a>
+    <a class="{{ 'on' if show == 'all' }}" href="{{ url_for('dupes', show='all', kind=kind or None) }}">All ({{ counts.all }})</a>
+  </nav>
+  <nav class="tabs" aria-label="Kind">
+    <a class="{{ 'on' if not kind }}" href="{{ url_for('dupes', show=show) }}">Any match</a>
+    {% for level, (name, label) in kinds.items() %}<a class="{{ 'on' if kind == name }}" href="{{ url_for('dupes', show=show, kind=name) }}">{{ label }} ({{ by_kind[name] }})</a>{% endfor %}
+  </nav>
+
+  {% for case in pg["items"] %}{% set lead = case.lead %}
+  <section class="card case {{ 'done' if case.verdict }}" id="c{{ lead.id }}">
+    <div class="head"><span class="chip k-{{ case.kind[0] }}">{{ case.kind[1] }}</span>
+      {% if case.verdict == 'duplicate' %}<span class="chip ok">Duplicate of {% for n in case.match_nos %}#{{ n }}{{ ', ' if not loop.last }}{% endfor %}</span>
+      {% elif case.verdict == 'new' %}<span class="chip ok">New lead</span>{% elif case.verdict == 'unsure' %}<span class="chip amber">Not sure</span>{% else %}<span class="hint">Not reviewed yet</span>{% endif %}</div>
+
+    <div class="col">
+      <h3><span>#{{ lead.event_no }} {{ lead.name or lead.org or 'Unnamed' }}</span><small>{{ who }} · {{ lead.created_at|local_time('%d %b, %H:%M') }}</small></h3>
+      {% with photos = case.photos[lead.id] %}{% include "_dupe_photos.html" %}{% endwith %}
+      {% with a = lead, b = case.found[0].lead if case.found else none %}{% include "_dupe_fields.html" %}{% endwith %}
+      <a href="{{ url_for('lead_detail', lead_id=lead.id) }}" target="_blank" rel="noopener">Open this lead</a>
+    </div>
+
+    <div class="cols">
+      {% for c in case.found %}{% set other = c.lead %}{% set on = other.id in case.matches %}
+      <div class="col orig {{ 'on' if on }}">
+        <h3><span>#{{ other.event_no }} {{ other.name or other.org or 'Unnamed' }}</span><small>{{ other.captured_by }} · {{ other.created_at|local_time('%d %b, %H:%M') }}</small></h3>
+        <div class="why">{{ c.why or 'no clear match' }}</div>
+        {% with photos = case.photos[other.id] %}{% include "_dupe_photos.html" %}{% endwith %}
+        {% with a = other, b = lead %}{% include "_dupe_fields.html" %}{% endwith %}
+        <div class="acts">
+          <form method="post" action="{{ url_for('dupes_save', lead_id=lead.id) }}" class="grow"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="back" value="{{ request.full_path|trim('?') }}#c{{ lead.id }}"><input type="hidden" name="other" value="{{ other.id }}"><input type="hidden" name="act" value="{{ 'unmatch' if on else 'match' }}"><button class="btn {{ 'ghost' if on }}">{{ 'Not the same person after all' if on else 'Same person as #' ~ other.event_no }}</button></form>
+          <a href="{{ url_for('lead_detail', lead_id=other.id) }}" target="_blank" rel="noopener">Open this lead</a>
+        </div>
+      </div>
+      {% else %}<div class="none">No lead with a matching phone, email, or name and organisation.</div>{% endfor %}
+    </div>
+
+    <form method="post" action="{{ url_for('dupes_save', lead_id=lead.id) }}" class="add"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="back" value="{{ request.full_path|trim('?') }}#c{{ lead.id }}"><input type="hidden" name="act" value="add">
+      <input name="number" inputmode="numeric" pattern="[0-9]*" placeholder="Another lead's number, e.g. 42" aria-label="Another lead's number" required><button class="btn ghost sm">Add it</button></form>
+
+    <form method="post" action="{{ url_for('dupes_save', lead_id=lead.id) }}" class="verdict"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="back" value="{{ request.full_path|trim('?') }}#c{{ lead.id }}">
+      <input class="t" name="note" value="{{ case.note }}" placeholder="Note (optional)" aria-label="Note" maxlength="500">
+      <div class="acts"><button class="btn" name="act" value="new">It's a new lead</button><button class="btn ghost" name="act" value="unsure">Not sure</button>{% if case.verdict or case.note %}<button class="btn ghost" name="act" value="clear">Clear</button>{% endif %}</div>
+    </form>
+  </section>
+  {% else %}<div class="card" style="padding:24px;text-align:center;color:var(--mut)">{{ 'Everything here is reviewed.' if show == 'todo' else 'Nothing to show.' }}</div>{% endfor %}
+  <div class="card">{% with pg = pg, nosize = true %}{% include "_pager.html" %}{% endwith %}</div>
+</div>
+<script>
+  // Rotating here only turns the picture on this page; the saved photo is not changed.
+  (function () {
+    function show(box) {
+      var img = box.querySelector('img'), deg = parseInt(box.dataset.rot, 10) || 0;
+      if (!img.complete || !img.naturalWidth) return;
+      img.style.transform = ''; box.style.height = '';
+      if (deg % 180) { var w = img.offsetWidth, h = img.offsetHeight, fit = Math.min(1, box.clientWidth / h); box.style.height = Math.round(w * fit) + 'px'; img.style.transform = 'rotate(' + deg + 'deg) scale(' + fit + ')'; }
+      else if (deg) { img.style.transform = 'rotate(' + deg + 'deg)'; }
+    }
+    document.querySelectorAll('.shot .rot').forEach(function (box) { var img = box.querySelector('img'); img.addEventListener('load', function () { show(box); }); show(box); });
+    document.querySelectorAll('.shot [data-turn]').forEach(function (button) {
+      button.addEventListener('click', function () { var box = button.closest('.shot').querySelector('.rot'); box.dataset.rot = ((parseInt(box.dataset.rot, 10) || 0) + 90) % 360; show(box); });
+    });
+  })();
+</script>
+{% endblock %}

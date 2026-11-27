@@ -154,6 +154,7 @@ class LeadStore:
                 f"CREATE TABLE IF NOT EXISTS outbound_messages (id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY, created_at TEXT DEFAULT {now}, "
                 "to_number TEXT NOT NULL, body TEXT NOT NULL DEFAULT '', lead_ids TEXT NOT NULL DEFAULT '')"
             )
+            conn.execute(f"CREATE TABLE IF NOT EXISTS dup_reviews (lead_id BIGINT PRIMARY KEY, verdict TEXT NOT NULL DEFAULT '', matches TEXT NOT NULL DEFAULT '', note TEXT NOT NULL DEFAULT '', reviewed_by TEXT NOT NULL DEFAULT '', at TEXT NOT NULL DEFAULT {now})")  # the duplicate-review page's answers; deliberately no link to leads, so nothing here can change one
             conn.execute(f"CREATE TABLE IF NOT EXISTS reply_flags (lead_id BIGINT PRIMARY KEY, at TEXT NOT NULL DEFAULT {now})")  # a visitor texted this lead and nobody has answered yet
             conn.execute(
                 f"""
@@ -251,7 +252,7 @@ class LeadStore:
 
     def clear(self) -> None:
         with self.connect() as conn:
-            conn.execute("TRUNCATE inbound_events, outbound_messages, reply_flags, feedback, media, leads, sessions, event_photos RESTART IDENTITY")
+            conn.execute("TRUNCATE inbound_events, outbound_messages, reply_flags, dup_reviews, feedback, media, leads, sessions, event_photos RESTART IDENTITY")
             conn.execute("UPDATE reader_status SET failures=0, last_ms=0, last_ok_at=NULL, last_failure_at=NULL, down_since=NULL, last_reason=''")
 
     # ---- events: one is live at a time and every lead captured over WhatsApp goes into it -----------------------------
@@ -691,6 +692,18 @@ class LeadStore:
     def flag_reply(self, lead_id: int) -> None:
         with self.connect() as conn:
             conn.execute("INSERT INTO reply_flags (lead_id) VALUES (%s) ON CONFLICT (lead_id) DO UPDATE SET at = to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')", (lead_id,))
+
+    def dup_reviews(self) -> dict[int, dict]:
+        with self.connect() as conn:
+            return {row["lead_id"]: row for row in conn.execute("SELECT * FROM dup_reviews")}
+
+    def save_dup_review(self, lead_id: int, verdict: str, matches: list[int], note: str, by: str) -> None:
+        with self.connect() as conn:
+            if not (verdict or matches or note):
+                conn.execute("DELETE FROM dup_reviews WHERE lead_id = %s", (lead_id,))
+                return
+            conn.execute(f"INSERT INTO dup_reviews (lead_id, verdict, matches, note, reviewed_by) VALUES (%s, %s, %s, %s, %s) ON CONFLICT (lead_id) DO UPDATE SET verdict = EXCLUDED.verdict, matches = EXCLUDED.matches, note = EXCLUDED.note, reviewed_by = EXCLUDED.reviewed_by, at = to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS')",
+                         (lead_id, verdict, ",".join(str(i) for i in matches), note, by))
 
     def clear_reply(self, lead_id: int) -> None:
         with self.connect() as conn:

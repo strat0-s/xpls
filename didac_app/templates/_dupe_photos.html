@@ -1,0 +1,4 @@
+{# Photos of one lead for the duplicate-review page; needs `photos` (media rows). Rotating only turns the picture here. #}
+{% if photos %}<div class="ph">{% for p in photos %}<figure class="shot" style="margin:0"><div class="rot" data-rot="{{ p.rotation }}"><img src="/media/{{ p.id }}" alt="Photo {{ loop.index }}" loading="lazy"></div>
+  <div class="row"><button type="button" data-turn aria-label="Turn photo {{ loop.index }}">&#8635; Turn</button><a href="/media/{{ p.id }}" target="_blank" rel="noopener">Full size</a></div></figure>{% endfor %}</div>
+{% else %}<div class="none">No photo</div>{% endif %}

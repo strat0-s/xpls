@@ -1,7 +1,7 @@
 """The long lists: pages with numbers, the event filter, whole-row links, event photos, who the follow-up is going to."""
 import re
 
-from conftest import csrf
+from conftest import csrf, get_or_create_user
 from didac_app import blobstore, flows, followup
 from didac_app.models import NOT_SCANNED
 from didac_app.pager import paginate
@@ -190,3 +190,43 @@ def test_the_leads_list_filters_by_who_created_the_lead_and_who_owns_it(store, a
     assert names(client.get("/dashboard?owner=none").data.decode()) == ["Nobody Owns"]
     assert names(client.get("/dashboard?by=Asha&owner=Ravi").data.decode()) == ["Made By Asha"]
     assert len(names(client.get("/dashboard?by=Nobody+Real").data.decode())) == 3  # an unknown name is ignored, not an empty list
+
+
+def test_duplicate_review_stores_verdicts_apart_and_leaves_the_leads_alone(store, admin):
+    first = store.create_lead(flows.Lead(name="Asha Rao", org="Zenith School", phone="+919845011111", captured_by="Rahul"))
+    second = store.create_lead(flows.Lead(name="Asha Rao", org="Zenith School", phone="+919845011111", captured_by="Sahana"))
+    lone = store.create_lead(flows.Lead(name="Zed Quill", org="Nowhere Ltd", phone="+919000000001", captured_by="Sahana"))
+    before = [(lead.id, lead.name, lead.notes, lead.phone) for lead in store.list_leads()]
+    client = app.test_client()
+    page = client.get("/dupes").data.decode()
+    assert "0 of 2 reviewed" in page and "Clear duplicate" in page and "Same person as #1" in page
+    save = lambda lead, **data: client.post(f"/dupes/{lead.id}", data={"csrf": csrf(client), **data})
+    assert save(second, act="match", other=first.id).status_code == 302
+    assert store.dup_reviews()[second.id]["verdict"] == "duplicate" and store.dup_reviews()[second.id]["matches"] == str(first.id)
+    assert "Duplicate of #1" in client.get("/dupes?show=done").data.decode()
+    save(second, act="add", number="3")  # a lead typed in by number is added as a match
+    assert store.dup_reviews()[second.id]["matches"] == f"{first.id},{lone.id}"
+    save(second, act="unmatch", other=first.id)
+    save(second, act="unmatch", other=lone.id)
+    assert second.id not in store.dup_reviews()
+    save(lone, act="new", note="walked in alone")
+    assert store.dup_reviews()[lone.id]["verdict"] == "new" and store.dup_reviews()[lone.id]["note"] == "walked in alone"
+    exported = client.get("/dupes/export.csv").data.decode()
+    assert "Zed Quill,new" in exported and "walked in alone" in exported and "Asha" not in exported
+    assert [(lead.id, lead.name, lead.notes, lead.phone) for lead in store.list_leads()] == before
+
+
+def test_duplicate_review_is_for_admins_and_staff_an_admin_picks(store, admin):
+    staff = get_or_create_user(store, name="Staffer", phone="+919845022222", email="", password="a-long-password", is_admin=False)
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["uid"], sess["sv"] = staff["id"], staff["session_version"]
+    assert client.get("/dupes").status_code == 403
+    assert "Duplicate review" not in client.get("/dashboard").data.decode()
+    admin_client = app.test_client()
+    assert admin_client.post(f"/team/{staff['id']}/dupes", data={"csrf": csrf(admin_client)}).status_code == 302
+    assert client.get("/dupes").status_code == 200 and "Duplicate review" in client.get("/dashboard").data.decode()
+    assert client.get("/dupes/export.csv").status_code == 403  # the list is for admins
+    assert client.post(f"/team/{staff['id']}/dupes", data={"csrf": csrf(client)}).status_code == 403
+    admin_client.post(f"/team/{staff['id']}/dupes", data={"csrf": csrf(admin_client)})
+    assert client.get("/dupes").status_code == 403

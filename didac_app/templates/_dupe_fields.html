@@ -1,0 +1,3 @@
+{# Details of lead `a`; green where `b` has the same value, amber where it differs. #}
+<table class="f">{% for key, label in fields %}{% set v = a[key] or '' %}{% set o = (b[key] or '') if b else '' %}
+  <tr class="{{ 'same' if v and o and v|lower|trim == o|lower|trim else 'diff' if v and o }}"><th>{{ label }}</th><td>{{ v or '—' }}</td></tr>{% endfor %}</table>
