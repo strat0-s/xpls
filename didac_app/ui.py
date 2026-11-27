@@ -9,7 +9,7 @@ from pathlib import Path
 
 from flask import Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, session, url_for
 
-from didac_app import auth, dupes, flows, followup, orbit
+from didac_app import auth, campaign, dupes, flows, followup, orbit
 from didac_app.dedupe import FILLABLE, find_duplicate, fold
 from didac_app.media import suffix_for
 from didac_app.models import NOT_SCANNED, Lead
@@ -419,8 +419,9 @@ def register(app, get_store, get_config) -> None:
         for e in events:
             for t in store.list_doc_types(e["id"]):
                 doc_types.setdefault(t["key"], t["label"])
+        campaign_rows, campaign_counts = campaign.campaign_rows(store, chosen_event_id(store, {e["id"]: e for e in events}))
         return render_template(
-            "export.html", rows=rows, ids=ids, columns=orbit.COLUMNS, labels=orbit.LABELS, pg=paginate(list(zip(ids, rows)), request.args.get("page", 1, type=int), request.args.get("per", 10, type=int)), events=events,
+            "export.html", campaign_counts=campaign_counts, rows=rows, ids=ids, columns=orbit.COLUMNS, labels=orbit.LABELS, pg=paginate(list(zip(ids, rows)), request.args.get("page", 1, type=int), request.args.get("per", 10, type=int)), events=events,
             event_id=chosen_event_id(store, {e["id"]: e for e in events}), doc_types=doc_types, people=people, warnings=warnings, org_types=orbit.ORG_TYPES, query=query,
             orgs=orbit.org_count(rows), max_orgs=orbit.MAX_ORGS, args=request.args,
         )
@@ -469,6 +470,15 @@ def register(app, get_store, get_config) -> None:
             orbit.to_xlsx(rows), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         filename = f"orbit-import-{datetime.now(IST).date().isoformat()}.{fmt}"
         return Response(body, mimetype=mimetype, headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+    @app.get("/export/campaign.csv")
+    def export_campaign():
+        store = get_store()
+        event_id = chosen_event_id(store, {e["id"]: e for e in store.list_events()}, request.args)
+        rows, _counts = campaign.campaign_rows(store, event_id)
+        if not rows:
+            abort(400)
+        return Response(campaign.to_csv(rows), mimetype="text/csv", headers={"Content-Disposition": f'attachment; filename="bird-campaign-contacts-{datetime.now(IST).date().isoformat()}.csv"'})
 
     @app.get("/export/everything.xlsx")
     def export_everything():

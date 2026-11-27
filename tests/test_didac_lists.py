@@ -257,3 +257,20 @@ def test_checked_for_export_turns_the_row_green_and_nothing_in_specific_is_a_pro
     assert re.search(r'class="lead\s+exp"[^>]*href="/leads/%d"' % lead.id, client.get("/dashboard").data.decode())
     client.post(f"/leads/{lead.id}", data={"csrf": csrf(client), "name": "Greenable Person"})  # unticked
     assert store.get_lead(lead.id).export_checked == ""
+
+
+def test_export_for_campaign_has_only_checked_leads_one_row_per_mobile_number(store):
+    def lead(name, phone, **kw):
+        return store.create_lead(flows.Lead(name=name, phone=phone, export_checked="Yes", **kw))
+
+    lead("Asha Rao", "+919845011111", email="Asha@Example.com")
+    lead("", "+919845022222")  # no name: blank first name, the template falls back to its default
+    lead("Same Phone Again", "+919845011111")
+    lead("No Mobile", "")
+    store.create_lead(flows.Lead(name="Not Checked", phone="+919845033333"))
+    client = app.test_client()
+    page = client.get("/export").data.decode()
+    assert "<b>2</b> in the file, from 4 checked of 5 leads." in page and "1 no mobile number" in page and "1 same number as an earlier lead" in page
+    body = client.get("/export/campaign.csv")
+    assert body.headers["Content-Disposition"].startswith("attachment; filename=\"bird-campaign-contacts-")
+    assert body.data.decode().splitlines() == ["display name,first name,last name,phone,email", "Asha Rao,Asha Rao,,+919845011111,asha@example.com", "Educator,,,+919845022222,"]

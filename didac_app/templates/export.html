@@ -57,6 +57,12 @@
   </div>
 </section>
 <section class="card panel">
+  <div><h2 class="sub">Export for campaign</h2>
+    <div class="hint">A contact list ready to import into Bird (display name, first name, phone, email) for {{ events|selectattr('id', 'equalto', event_id)|map(attribute='name')|first if event_id else 'all events' }}. Only leads ticked <b>Checked for export</b> on their lead page are included, one row per mobile number. A lead with no name gets a blank first name, so the template shows its fallback. The filters above do not apply.</div>
+    <div class="hint" style="margin-top:6px"><b>{{ campaign_counts.included }}</b> in the file, from {{ campaign_counts.checked }} checked of {{ campaign_counts.leads }} leads.{% for why in ('no mobile number', 'team number', 'replied STOP', 'same number as an earlier lead') if campaign_counts[why] %} Left out: {{ campaign_counts[why] }} {{ why }}.{% endfor %}</div></div>
+  <div class="actions"><a class="btn {{ '' if campaign_counts.included else 'off' }}" href="{{ url_for('export_campaign', event=event_id or 'all') }}">Download campaign CSV</a></div>
+</section>
+<section class="card panel">
   <div><h2 class="sub">Complete export</h2><div class="hint">All fields, photo links, notes, chats and follow-ups for {{ events|selectattr('id', 'equalto', event_id)|map(attribute='name')|first if event_id else 'all events' }}. The filters above do not apply.</div></div>
   <div class="actions"><a class="btn" href="{{ url_for('export_everything', event=event_id or 'all') }}">Download Excel</a></div>
 </section>
