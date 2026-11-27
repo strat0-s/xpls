@@ -63,7 +63,7 @@
 {% macro pick(id, name, many=False, required=False, cls='') %}<div class="pick"><input{% if cls %} class="{{ cls }}"{% endif %} type="file" id="{{ id }}" name="{{ name }}" accept="image/*"{{ ' multiple' if many }}{{ ' required' if required }}><label class="btn ghost cam">Take photo<input type="file" accept="image/*" capture="environment" data-into="{{ id }}" hidden></label></div>{% endmacro %}
 <div class="head">
   <div>
-    <a href="{{ list_url or url_for('gallery') }}" style="text-decoration:none">&larr; All leads</a>
+    <a href="{{ (list_url ~ '#l' ~ lead.id) if list_url and not new else url_for('gallery') }}" style="text-decoration:none">&larr; All leads</a>
     <h1>{{ title }}{% if not new %} <small style="color:var(--mut);font-weight:600">#{{ lead.event_no }}</small>{% if lead.priority %}<span class="chip {{ lead.priority|lower }}">{{ lead.priority }}</span>{% endif %}{% endif %}</h1>
     <div class="sub">{% if new %}Added by hand{% else %}{{ (doc_types|selectattr('key', 'equalto', lead.doc_type)|map(attribute='label')|first) or lead.doc_type or 'Document' }} · captured {{ lead.created_at|local_time('%d %b %Y, %H:%M') }}{% if lead.lead_owner %} · owner {{ lead.lead_owner }}{% endif %}{% if lead.updated_by %} · last edited by {{ lead.updated_by }}{% endif %}{% endif %}</div>
   </div>

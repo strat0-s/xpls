@@ -31,7 +31,7 @@ def test_the_leads_list_shows_every_lead_a_page_at_a_time(store):
 def test_a_whole_row_is_one_link_to_the_lead(store):
     lead = store.create_lead(flows.Lead(name="Clickable Person", org="Some School"))
     html = app.test_client().get("/dashboard").data.decode()
-    row = re.search(r'<a class="lead[^"]*" href="/leads/%d">(.*?)</a>' % lead.id, html, re.S)
+    row = re.search(r'<a id="l%d" class="lead[^"]*" href="/leads/%d">(.*?)</a>' % (lead.id, lead.id), html, re.S)
     assert row and "Clickable Person" in row.group(1) and "Some School" in row.group(1) and "DIDAC 2026" in row.group(1)
 
 
@@ -238,9 +238,10 @@ def test_a_lead_page_returns_to_the_same_page_number_page_size_and_filters(store
     client = app.test_client()
     client.get("/dashboard?page=3&per=10&q=person")
     page = client.get("/leads/1").data.decode()
-    assert 'href="/dashboard?page=3&amp;per=10&amp;q=person"' in page and "All leads" in page
+    assert 'href="/dashboard?page=3&amp;per=10&amp;q=person#l1"' in page and "All leads" in page  # and the row it left from is the landing spot
+    assert 'id="l1"' in client.get("/dashboard?page=3&per=10&q=person").data.decode()
     assert client.post("/leads/1", data={"csrf": csrf(client), "name": "Person Edited", "export_checked": "Yes"}).status_code == 302
-    assert 'href="/dashboard?page=3&amp;per=10&amp;q=person"' in client.get("/leads/1").data.decode()  # saving does not lose the place
+    assert 'href="/dashboard?page=3&amp;per=10&amp;q=person#l1"' in client.get("/leads/1").data.decode()  # saving does not lose the place
     assert client.post("/leads/1/delete", data={"csrf": csrf(client)}).headers["Location"].endswith("/dashboard?page=3&per=10&q=person")
 
 
