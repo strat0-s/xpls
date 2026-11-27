@@ -65,7 +65,8 @@ def register(app, get_store, get_config) -> None:
     def inject_globals():
         return {"user": g.get("user"), "csrf_token": csrf_token, "reader": get_store().reader_status() if g.get("user") else None,  # drives the reading-problem banner
                 "live_event": get_store().live_event() if g.get("user") else None,  # shown at the top of the sidebar
-                "dup_reviewers": dupes.reviewers(get_store()) if g.get("user") else set()}  # staff who were given the Duplicate review page
+                "dup_reviewers": dupes.reviewers(get_store()) if g.get("user") else set(),
+                "list_url": session["list"] if session.get("list", "").startswith(("/dashboard", "/?")) or session.get("list") == "/" else ""}  # staff who were given the Duplicate review page
 
     @app.template_global()
     def page_url(number: int, key: str = "page") -> str:
@@ -172,6 +173,7 @@ def register(app, get_store, get_config) -> None:
         if tab != "all":
             cards = [card for card in cards if card["type"] == tab]
         page = paginate(cards, request.args.get("page", 1, type=int), request.args.get("per", 10, type=int))
+        session["list"] = request.full_path.rstrip("?")  # where "All leads" on a lead page returns to: same page number, page size and filters
         return render_template("gallery.html", pg=page, tabs=tabs, tab=tab, q=request.args.get("q", ""), who=who, prio=prio, by=by, owner=owner, creators=creators, owners=owners, check=check, reply_only=reply_only, replies_waiting=replies_waiting, priorities=PRIORITIES,
                                events=list(events.values()), event_id=event_id, needs_check=sum(1 for lead in leads if lead.review_reason), reading=request.args.get("reading", type=int))
 
@@ -231,6 +233,7 @@ def register(app, get_store, get_config) -> None:
             "notes": request.form.get("notes", "").strip(),
             "organisation_type": org_type if (org_type := request.form.get("organisation_type", "")) in orbit.ORG_TYPES else "",
             "interest": request.form.get("interest", "").strip(),
+            "export_checked": "Yes" if request.form.get("export_checked") else "",
             "priority": request.form.get("priority") if request.form.get("priority") in PRIORITIES else "",
             "lead_owner": owner if (owner := request.form.get("lead_owner", "")) in {u["name"] for u in store.list_users()} | {flows.NOT_LISTED} else "",
             "doc_type": kind if (kind := request.form.get("doc_type")) in {row["key"] for row in (store.list_doc_types(lead.event_id) if lead.event_id else [])} else lead.doc_type,
@@ -381,7 +384,7 @@ def register(app, get_store, get_config) -> None:
             abort(404)
         store.update_lead_fields(lead_id, deleted_at=datetime.now(UTC).isoformat(timespec="seconds"), updated_by=g.user["name"])
         flash("Lead deleted.")
-        return redirect(url_for("gallery", event=lead.event_id or None))  # back to the event the lead was on, not the live one
+        return redirect(session.get("list") if session.get("list", "").startswith("/dashboard") else url_for("gallery", event=lead.event_id or None))  # back to the list it was opened from, else the event the lead was on
 
     @app.route("/team", methods=["GET", "POST"])
     def team():
@@ -645,6 +648,7 @@ def lead_card(lead, media: list[dict], members: dict[str, str]) -> dict:
         "photo_count": len(images),
         "note": note,
         "review_reason": lead.review_reason,
+        "export_checked": bool(lead.export_checked),
         "unscanned": lead.review_reason == NOT_SCANNED,
         "priority": lead.priority,
         "by": by,

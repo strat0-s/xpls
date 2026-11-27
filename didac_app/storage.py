@@ -23,7 +23,7 @@ from didac_app.models import NOT_SCANNED, Lead
 
 DOWN_AFTER = 5  # failed reads in a row before reading counts as paused
 SLOW_MS = 20_000  # a read longer than this makes the next ones show the "a little slower" line
-DEFAULT_PRODUCTS = ["SIA", "TiQer", "PlayLab", "Xperimentor", "Math Max"]
+DEFAULT_PRODUCTS = ["SIA", "TiQer", "PlayLab", "Xperimentor", "Math Max", "Nothing in specific"]
 LEAD_FIELDS = [field.name for field in fields(Lead)]
 NOT_DELETED = "(deleted_at IS NULL OR deleted_at = '')"
 # For media/feedback joined to their lead; rows without a lead stay visible (LEFT JOIN gives NULL).

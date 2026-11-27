@@ -230,3 +230,29 @@ def test_duplicate_review_is_for_admins_and_staff_an_admin_picks(store, admin):
     assert client.post(f"/team/{staff['id']}/dupes", data={"csrf": csrf(client)}).status_code == 403
     admin_client.post(f"/team/{staff['id']}/dupes", data={"csrf": csrf(admin_client)})
     assert client.get("/dupes").status_code == 403
+
+
+def test_a_lead_page_returns_to_the_same_page_number_page_size_and_filters(store):
+    for i in range(30):
+        store.create_lead(flows.Lead(name=f"Person {i:02d}"))
+    client = app.test_client()
+    client.get("/dashboard?page=3&per=10&q=person")
+    page = client.get("/leads/1").data.decode()
+    assert 'href="/dashboard?page=3&amp;per=10&amp;q=person"' in page and "All leads" in page
+    assert client.post("/leads/1", data={"csrf": csrf(client), "name": "Person Edited", "export_checked": "Yes"}).status_code == 302
+    assert 'href="/dashboard?page=3&amp;per=10&amp;q=person"' in client.get("/leads/1").data.decode()  # saving does not lose the place
+    assert client.post("/leads/1/delete", data={"csrf": csrf(client)}).headers["Location"].endswith("/dashboard?page=3&per=10&q=person")
+
+
+def test_checked_for_export_turns_the_row_green_and_nothing_in_specific_is_a_product(store):
+    lead = store.create_lead(flows.Lead(name="Greenable Person"))
+    client = app.test_client()
+    from didac_app.storage import DEFAULT_PRODUCTS
+
+    assert "Nothing in specific" in DEFAULT_PRODUCTS  # a new install starts with it; an existing one gets the row added once
+    client.post(f"/leads/{lead.id}", data={"csrf": csrf(client), "name": "Greenable Person", "export_checked": "Yes", "products": "Nothing in specific"})
+    saved = store.get_lead(lead.id)
+    assert saved.export_checked == "Yes" and saved.products == "Nothing in specific"
+    assert re.search(r'class="lead\s+exp"[^>]*href="/leads/%d"' % lead.id, client.get("/dashboard").data.decode())
+    client.post(f"/leads/{lead.id}", data={"csrf": csrf(client), "name": "Greenable Person"})  # unticked
+    assert store.get_lead(lead.id).export_checked == ""

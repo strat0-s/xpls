@@ -62,6 +62,7 @@ class Lead:
     raw_message: str = ""
     doc_type: str = ""
     review_reason: str = ""
+    export_checked: str = ""  # "Yes" once someone has gone through the lead and found it fine to export
     updated_by: str = ""
     deleted_at: str = ""
     event_id: int | None = None  # the event that was live when the lead was captured
